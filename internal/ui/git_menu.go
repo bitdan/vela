@@ -7,6 +7,7 @@ import (
 
 const (
 	initializeRepository commandID = "workspace.initialize-repository"
+	openLocalRepository  commandID = "workspace.open-local-repository"
 	updateProject        commandID = "git.update-project"
 	showWorktrees        commandID = "git.show-worktrees"
 	openRemoteRepository commandID = "remote.open-repository"
@@ -52,6 +53,9 @@ func (a *Workspace) mainGitMenu(m *ui.Menu) {
 	}
 	a.menuGroup(m, target, manageRemotes, cloneRepo)
 	a.menu(m, initializeRepository, target)
+	if a.ReadRepository != nil && a.PickRepositoryDirectory != nil {
+		a.menu(m, openLocalRepository, target)
+	}
 }
 
 func (a *Workspace) remoteProviderMenu(m *ui.Menu, provider string) {

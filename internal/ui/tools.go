@@ -101,6 +101,9 @@ func (a *Workspace) changeTools(c *ui.Context, p tokens) {
 }
 
 func projectFiles(repo domain.Repository) []domain.File {
+	if repo.Root != "" {
+		return repo.Project
+	}
 	files := make(map[string]domain.File)
 	for _, file := range repo.Staged {
 		files[file.Path] = file
@@ -116,18 +119,24 @@ func projectFiles(repo domain.Repository) []domain.File {
 	return result
 }
 
-func (a *Workspace) projectPanel(c *ui.Context, p tokens) {
-	r, repo := a.repo(), a.Model.Active().Repository
-	files := projectFiles(repo)
+type projectTreeData struct {
+	children map[string][]string
+	byPath   map[string]domain.File
+}
+
+func buildProjectTree(files []domain.File) projectTreeData {
 	children := make(map[string][]string)
 	byPath := make(map[string]domain.File, len(files))
+	seen := make(map[string]bool)
 	for _, file := range files {
 		byPath[file.Path] = file
 		for item := file.Path; item != "."; {
-			parent := path.Dir(item)
-			if !slices.Contains(children[parent], item) {
-				children[parent] = append(children[parent], item)
+			if seen[item] {
+				break
 			}
+			seen[item] = true
+			parent := path.Dir(item)
+			children[parent] = append(children[parent], item)
 			item = parent
 		}
 	}
@@ -143,12 +152,22 @@ func (a *Workspace) projectPanel(c *ui.Context, p tokens) {
 			}
 		})
 	}
+	return projectTreeData{children: children, byPath: byPath}
+}
+
+func (a *Workspace) projectPanel(c *ui.Context, p tokens) {
+	r, repo := a.repo(), a.Model.Active().Repository
+	tree := r.projectTree
+	if repo.Root == "" {
+		tree = buildProjectTree(projectFiles(repo))
+	}
+	children, byPath := tree.children, tree.byPath
 	canLocate := false
 	if entry := a.activeDocument(); entry != nil {
 		_, canLocate = byPath[entry.path]
 	}
 	a.projectToolbar(c, p, children, canLocate)
-	if len(files) == 0 {
+	if len(byPath) == 0 {
 		r.projectFocus = false
 		ui.Text(c, "No project files").Padding(inset).TextColor(p.theme.TextMuted)
 		return
@@ -160,8 +179,12 @@ func (a *Workspace) projectPanel(c *ui.Context, p tokens) {
 		}
 	}
 	if !r.projectReady {
-		for folder := range children {
-			r.project.Open.Add(folder)
+		if repo.Root != "" {
+			r.project.Open.Add(".")
+		} else {
+			for folder := range children {
+				r.project.Open.Add(folder)
+			}
 		}
 		r.projectReady = true
 	}

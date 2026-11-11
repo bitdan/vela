@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -40,6 +39,7 @@ type repoView struct {
 	consoleOpen                                       bool
 	toolPage                                          string
 	project                                           ui.OutlineState[string]
+	projectTree                                       projectTreeData
 	shelf                                             ui.ListState
 	projectIndex, shelfIndex                          int
 	projectReady, projectShowPaths                    bool
@@ -53,8 +53,10 @@ type repoView struct {
 	hideDeletedShelf                                  bool
 	children                                          [][]int
 	graphRows                                         []graphRow
+	graphWidth                                        float32
 	logScroll                                         bool
 	logAuthor, logRef, logPath                        string
+	logHistoryPath                                    string
 	logDate                                           logDateRange
 	datePicker                                        logDatePicker
 	logPathsOpen, logSearchFocus, logHideRoot         bool
@@ -105,46 +107,77 @@ type Workspace struct {
 	repositoryInit            *repositoryInitDialog
 	InitializeRepository      func(context.Context, string, string, func(string, error))
 	PickRepositoryDirectory   func(func(string, error))
+	ReadRepository            func(context.Context, string, func(domain.Repository, error))
+	ReadRepositoryFile        func(context.Context, string, string, domain.File, func(domain.File, error))
+	repositoryRead            *readRequest
+	repositoryFileRead        *readRequest
+	pickingRepository         bool
+	repositoryWrite           string
+	indexConfirmation         *indexChange
+	commitConfirmation        *commitChange
+	UpdateRepositoryIndex     func(domain.Repository, bool, []domain.File, func(domain.Repository, error, error))
+	CommitRepository          func(domain.Repository, string, bool, func(domain.Repository, error, error))
+	OperateRepository         func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error))
+	repositoryOperation       *repositoryOperationDialog
 }
 
 func New(model *application.App, layout application.Layout) *Workspace {
 	a := &Workspace{Model: model, Layout: layout, repos: make([]repoView, len(model.Sessions)), status: "Ready"}
 	for i := range a.repos {
-		r := &a.repos[i]
-		r.workingIndex, r.stagedIndex, r.fileIndex = -1, -1, -1
-		r.branchIndex = -1
-		r.branchResultIndex = -1
-		r.detailsBranches.index = -1
-		r.projectIndex, r.shelfIndex = -1, -1
-		r.shelfExpanded = make(map[int]bool)
-		applyLogSettings(r, layout.VersionControl.Log)
-		history := model.Sessions[i].Repository.History
-		r.children = make([][]int, len(history))
-		r.graphRows = buildGraph(history)
-		r.logFirstParentRows = firstParentRows(history, model.Sessions[i].Repository.CurrentBranch)
-		for child, commit := range history {
-			if commit.Author != "" && !slices.Contains(r.logAuthors, commit.Author) {
-				r.logAuthors = append(r.logAuthors, commit.Author)
-			}
-			for _, file := range commit.Files {
-				r.logFilePaths = addLogValue(r.logFilePaths, file.Path)
-			}
-			for _, ref := range commit.Refs {
-				if !slices.Contains(r.logRefs, ref) {
-					r.logRefs = append(r.logRefs, ref)
-				}
-			}
-			for _, parent := range commit.Parents {
-				r.children[parent] = append(r.children[parent], child)
-			}
-		}
+		a.repos[i] = newRepoView(model.Sessions[i].Repository, layout)
 	}
-	if files := model.Active().Repository.Working; len(files) > 0 {
+	if files := model.Active().Repository.Working; len(files) > 0 && model.Active().Repository.Root == "" {
 		model.Active().Working = files[0].Path
 		a.repo().workingIndex = 0
 		a.openDiff("working", files[0])
 	}
 	return a
+}
+
+func newRepoView(repo domain.Repository, layout application.Layout) repoView {
+	r := &repoView{}
+	r.workingIndex, r.stagedIndex, r.fileIndex = -1, -1, -1
+	r.branchIndex = -1
+	r.branchResultIndex = -1
+	r.detailsBranches.index = -1
+	r.projectIndex, r.shelfIndex = -1, -1
+	r.shelfExpanded = make(map[int]bool)
+	applyLogSettings(r, layout.VersionControl.Log)
+	history := repo.History
+	r.logTopo = repo.Root != ""
+	if repo.Root != "" {
+		r.projectTree = buildProjectTree(repo.Project)
+	}
+	r.children = make([][]int, len(history))
+	r.graphRows = buildGraph(history)
+	r.graphWidth = graphWidth
+	r.logFirstParentRows = firstParentRows(history, repo.CurrentBranch)
+	paths := make(map[string]bool)
+	authors := make(map[string]bool)
+	refs := make(map[string]bool)
+	for child, commit := range history {
+		r.graphWidth = max(r.graphWidth, float32(graphStart+min(commit.Lane, lastGraphLane)*graphStep+graphStart))
+		if commit.Author != "" && !authors[commit.Author] {
+			authors[commit.Author] = true
+			r.logAuthors = append(r.logAuthors, commit.Author)
+		}
+		for _, file := range commit.Files {
+			if !paths[file.Path] {
+				paths[file.Path] = true
+				r.logFilePaths = append(r.logFilePaths, file.Path)
+			}
+		}
+		for _, ref := range commit.Refs {
+			if !refs[ref] {
+				refs[ref] = true
+				r.logRefs = append(r.logRefs, ref)
+			}
+		}
+		for _, parent := range commit.Parents {
+			r.children[parent] = append(r.children[parent], child)
+		}
+	}
+	return *r
 }
 
 func (a *Workspace) repo() *repoView { return &a.repos[a.Model.Index] }
@@ -222,9 +255,19 @@ func (a *Workspace) View(c *ui.Context) {
 	if a.repositoryInit != nil {
 		a.repositoryInitView(c, p)
 	}
+	if a.indexConfirmation != nil {
+		a.confirmIndexChange(c)
+	}
+	if a.commitConfirmation != nil {
+		a.confirmAmend(c)
+	}
+	if a.repositoryOperation != nil {
+		a.repositoryOperationView(c, p)
+	}
 	if a.search.open {
 		a.searchDialog(c, p)
-	} else if !a.settingsOpen && !a.remotes.open && a.repositoryInit == nil && a.repo().preview != nil && c.Shortcut(0, ui.KeyEscape) {
+	} else if !a.settingsOpen && !a.remotes.open && a.repositoryInit == nil &&
+		(a.repo().preview != nil || a.repositoryFileRead != nil) && c.Shortcut(0, ui.KeyEscape) {
 		a.run(closePreview, commandTarget{})
 	}
 	if a.confirmExit {
@@ -252,6 +295,17 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyK) {
 		a.run(showCommit, commandTarget{})
+	}
+	if a.Model.Active().Repository.Root != "" {
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyK) {
+			a.run(push, commandTarget{})
+		}
+		if c.Shortcut(ui.Cmd, ui.KeyT) {
+			a.run(updateProject, commandTarget{})
+		}
+		if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyN) {
+			a.run(newBranch, commandTarget{})
+		}
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN) {
 		a.run(goToFile, commandTarget{})
@@ -302,9 +356,16 @@ func (a *Workspace) toolbar(c *ui.Context, p tokens) {
 				menu.Background(p.theme.SurfaceHover)
 			}
 			flatToolMenu(c, p, "Switch repository", s.Repository.Name, nil, func(m *ui.Menu) {
+				if a.PickRepositoryDirectory != nil && a.ReadRepository != nil {
+					a.menu(m, openLocalRepository, commandTarget{})
+					m.Separator()
+				}
 				for i, session := range a.Model.Sessions {
 					name := session.Repository.Name
-					if m.Item(name).ID(name).Radio(i == a.Model.Index).Chosen() {
+					if root := session.Repository.Root; root != "" {
+						name += " · " + root
+					}
+					if m.Item(name).ID(fmt.Sprint(i)).Radio(i == a.Model.Index).Chosen() {
 						a.pending = func() { a.run(selectRepo, commandTarget{index: i}) }
 					}
 				}

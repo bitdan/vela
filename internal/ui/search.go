@@ -116,7 +116,7 @@ func (a *Workspace) searchDocuments(recent bool) []searchDocument {
 	seen := make(map[string]bool)
 	r := a.repo()
 	addTab := func(entry tab) {
-		if entry.code == nil || entry.code.ReadOnly || seen[entry.path] {
+		if entry.code == nil || strings.HasPrefix(entry.source, "revision:") || seen[entry.path] {
 			return
 		}
 		file := entry.file
@@ -161,6 +161,9 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 						detail = a.Model.Active().Repository.Name
 					}
 					results = append(results, searchResult{title: path.Base(doc.file.Path), detail: detail, kind: searchFiles, document: doc})
+					if len(results) == searchLimit {
+						break
+					}
 				}
 			}
 		}
@@ -189,7 +192,7 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 	if category == searchActions || (category == searchAll && query != "") {
 		for _, id := range []commandID{switchRepo, toggleCommit, toggleGit, toggleBranches, toggleDetails, toggleTheme,
 			closeTab, openProject, openShelf, toggleConsole, showLog, refreshLog, showSettings, showLoading, showError, retryHistory,
-			goToFile, showRecentFiles, focusProject, manageRemotes} {
+			goToFile, showRecentFiles, focusProject, manageRemotes, openLocalRepository, newBranch, fetch, pull, push, updateProject} {
 			label := commandLabel(id)
 			if match(label) && a.disabledFor(id, commandTarget{}) == "" {
 				results = append(results, searchResult{title: label, detail: "Action", kind: searchActions, action: id})
@@ -200,7 +203,7 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 }
 
 func searchDeclarations(results []searchResult, doc searchDocument, category searchCategory, match func(string) bool) []searchResult {
-	if path.Ext(doc.file.Path) != ".go" || len(results) >= searchLimit {
+	if doc.file.New == "" || path.Ext(doc.file.Path) != ".go" || len(results) >= searchLimit {
 		return results
 	}
 	fset := token.NewFileSet()
@@ -270,6 +273,9 @@ func (a *Workspace) chooseSearchResult(result searchResult, split bool) {
 			return
 		}
 		a.run(openCode, target)
+		if a.Model.Active().Repository.Root != "" {
+			return
+		}
 	}
 	r.preview = nil
 	if result.kind != searchFiles {

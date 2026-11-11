@@ -7,6 +7,7 @@ import (
 
 type File struct {
 	Path, Status, Old, New string
+	OldPath                string
 }
 
 type Commit struct {
@@ -28,6 +29,14 @@ type Shelf struct {
 
 type Repository struct {
 	Name, CurrentBranch string
+	Root                string
+	Head, IndexVersion  string
+	HeadMessage         string
+	Project             []File
+	RemoteBranches      map[string]bool
+	Refs                map[string]string
+	Upstreams           map[string]Upstream
+	RemoteVersion       string
 	Branches            []string
 	Remotes             []Remote
 	Working, Staged     []File
@@ -36,10 +45,10 @@ type Repository struct {
 }
 
 func MockRepositories() []Repository {
-	main := File{"cmd/vela/main.go", "M", "package main\n\nfunc main() {\n\tprintln(\"Starting application\")\n}\n", "package main\n\nimport \"vela/internal/bootstrap\"\n\nfunc main() {\n\tbootstrap.Run()\n}\n"}
-	notes := File{"README.md", "M", "# vela\n\nGit client.\n", "# vela\n\nA native Git workspace.\n"}
-	mod := File{"go.mod", "M", "module vela\n\ngo 1.27.3\n", "module vela\n\ngo 1.27.3\n\nrequire github.com/egoist/mygo v0.8.3\n"}
-	theme := File{"internal/ui/theme.go", "A", "", "package ui\n\n// Colors are shared by all workspace panels.\n"}
+	main := File{Path: "cmd/vela/main.go", Status: "M", Old: "package main\n\nfunc main() {\n\tprintln(\"Starting application\")\n}\n", New: "package main\n\nimport \"vela/internal/bootstrap\"\n\nfunc main() {\n\tbootstrap.Run()\n}\n"}
+	notes := File{Path: "README.md", Status: "M", Old: "# vela\n\nGit client.\n", New: "# vela\n\nA native Git workspace.\n"}
+	mod := File{Path: "go.mod", Status: "M", Old: "module vela\n\ngo 1.27.3\n", New: "module vela\n\ngo 1.27.3\n\nrequire github.com/egoist/mygo v0.8.3\n"}
+	theme := File{Path: "internal/ui/theme.go", Status: "A", New: "package ui\n\n// Colors are shared by all workspace panels.\n"}
 	subjects := []string{
 		"feat(ui): wire up the native workspace", "test(ui): cover keyboard focus and panel toggles",
 		"Merge branch 'feature/native-ui' into main", "feat(editor): preserve the active diff tab",

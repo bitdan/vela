@@ -25,12 +25,16 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 			working, &r.working, &r.workingIndex, &s.Working, &r.workingChosen)
 		a.fileList(c.Key("staged"), p, "Staged Changes", "staged", "No staged changes",
 			s.Repository.Staged, &r.staged, &r.stagedIndex, &s.Staged, &r.stagedChosen)
-		divider(c, p)
-		ui.Column(c).FillWidth().Padding(gap, inset).Gap(gap).Children(func() {
-			ui.Checkbox(c, &s.Amend, "Amend last commit")
-			ui.TextArea(c, &s.Message).Label("Commit message").Placeholder("Commit message").Height(66).FillWidth()
-			a.button(c, commitMock, "Preview Commit")
-		})
+		if s.Repository.Root == "" {
+			divider(c, p)
+			ui.Column(c).FillWidth().Padding(gap, inset).Gap(gap).Children(func() {
+				ui.Checkbox(c, &s.Amend, "Amend last commit")
+				ui.TextArea(c, &s.Message).Label("Commit message").Placeholder("Commit message").Height(66).FillWidth()
+				a.button(c, commitMock, "Preview Commit")
+			})
+		} else {
+			a.commitForm(c, p)
+		}
 	})
 }
 
@@ -141,6 +145,9 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 		if state.Shortcut(c, ui.Cmd, ui.KeyD) {
 			a.run(previewDiff, target)
 		}
+		if source == "working" && state.Shortcut(c, ui.Ctrl|ui.Alt, ui.KeyA) {
+			a.run(stageChanges, target)
+		}
 		if working && state.Shortcut(c, ui.Ctrl|ui.Alt, ui.KeyP) {
 			a.run(groupDirectory, commandTarget{})
 		}
@@ -203,13 +210,25 @@ func (a *Workspace) git(c *ui.Context, p tokens) {
 	})
 }
 
-func displayBranch(name string) string { return strings.TrimPrefix(name, "refs/tags/") }
+func displayBranch(name string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(name, "refs/tags/"), "refs/remotes/")
+}
 
 func branchGroup(name string) string {
 	if strings.HasPrefix(name, "refs/tags/") {
 		return "Tags"
 	}
 	if strings.HasPrefix(name, "origin/") {
+		return "Remote"
+	}
+	return "Local"
+}
+
+func repoBranchGroup(repo domain.Repository, name string) string {
+	if repo.Root == "" || strings.HasPrefix(name, "refs/tags/") {
+		return branchGroup(name)
+	}
+	if repo.RemoteBranches[name] {
 		return "Remote"
 	}
 	return "Local"
@@ -239,7 +258,7 @@ func (a *Workspace) branchRows(c *ui.Context, p tokens) {
 		tree := newFolderTree()
 		for _, group := range []string{"Local", "Remote", "Tags"} {
 			for _, name := range s.Repository.Branches {
-				if branchGroup(name) != group || !strings.Contains(strings.ToLower(displayBranch(name)), query) {
+				if repoBranchGroup(s.Repository, name) != group || !strings.Contains(strings.ToLower(displayBranch(name)), query) {
 					continue
 				}
 				parent := tree.folder("", group, folderNode)
@@ -328,8 +347,18 @@ func (a *Workspace) commitLog(c *ui.Context, p tokens) {
 		}
 		query := strings.ToLower(strings.TrimSpace(r.logQuery))
 		pathQuery := strings.ToLower(strings.TrimSpace(r.logPath))
-		key := fmt.Sprintf("%q:%q:%q:%q:%q:%t:%t:%t:%t:%t:%v", query, r.logAuthor, r.logRef, pathQuery, r.logExcludeRef, r.logHideRoot, r.logFirstParent, r.logNoMerges, r.logTopo, r.logView.timestamps, r.logDate)
-		filteredView := query != "" || r.logAuthor != "" || r.logRef != "" || r.logDate.preset != "" || pathQuery != "" || r.logHideRoot || r.logFirstParent || r.logNoMerges
+		if len(history) == 0 {
+			ui.Text(c, "No commits yet").Padding(inset).TextColor(p.theme.TextMuted)
+			return
+		}
+		if r.logHistoryPath != "" {
+			ui.Row(c).FillWidth().Padding(0, gap).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "History · "+r.logHistoryPath).Grow(1).SingleLine().Ellipsis("…")
+				ui.Button(c, "Clear File History").OnClick(func() { r.logHistoryPath = "" })
+			})
+		}
+		key := fmt.Sprintf("%q:%q:%q:%q:%q:%q:%t:%t:%t:%t:%t:%v", query, r.logAuthor, r.logRef, pathQuery, r.logHistoryPath, r.logExcludeRef, r.logHideRoot, r.logFirstParent, r.logNoMerges, r.logTopo, r.logView.timestamps, r.logDate)
+		filteredView := query != "" || r.logAuthor != "" || r.logRef != "" || r.logExcludeRef != "" || r.logDate.preset != "" || pathQuery != "" || r.logHistoryPath != "" || r.logHideRoot || r.logFirstParent || r.logNoMerges || (s.Repository.Root != "" && !r.logTopo)
 		if key != r.lastQuery {
 			r.filteredLog = nil
 			if filteredView {
@@ -347,6 +376,9 @@ func (a *Workspace) commitLog(c *ui.Context, p tokens) {
 						(r.logAuthor == "" || r.logAuthor == commit.Author) &&
 						r.logDate.includes(logTimestamp(commit, r.logView.timestamps), history[0].Timestamp) &&
 						(reachable == nil || reachable[i]) && (excluded == nil || !excluded[i]) &&
+						(r.logHistoryPath == "" || slices.ContainsFunc(commit.Files, func(file domain.File) bool {
+							return file.Path == r.logHistoryPath || file.OldPath == r.logHistoryPath
+						})) &&
 						(pathQuery == "" || slices.ContainsFunc(commit.Files, func(file domain.File) bool {
 							return strings.Contains(strings.ToLower(file.Path), pathQuery)
 						})) {
@@ -460,6 +492,7 @@ func reachableCommits(history []domain.Commit, ref string) []bool {
 }
 
 func (a *Workspace) logRow(c *ui.Context, p tokens, entry domain.Commit, latest time.Time, rowIndex, commitIndex int, selected, filtered bool) {
+	r := a.repo()
 	row := ui.Row(c).FillWidth().Height(rowHeight).Padding(0, gap).Gap(gap).AlignItems(ui.Center)
 	row.ContextMenu(func(m *ui.Menu) { a.logMenu(m, commitIndex, entry) })
 	if rowIndex%2 == 1 && !selected {
@@ -470,7 +503,7 @@ func (a *Workspace) logRow(c *ui.Context, p tokens, entry domain.Commit, latest 
 		if selected {
 			meta, ref = p.theme.AccentText, p.theme.AccentText
 		}
-		v := a.repo().logView
+		v := r.logView
 		if !v.hideAuthor {
 			author := ui.Text(c, entry.Author).Label("Commit author " + entry.Hash).Width(84).Shrink(0).
 				FontSize(p.textSize(smallText)).TextColor(meta).SingleLine().Ellipsis("…")
@@ -480,15 +513,15 @@ func (a *Workspace) logRow(c *ui.Context, p tokens, entry domain.Commit, latest 
 		}
 		graph := graphRow{}
 		if !filtered {
-			graph = a.repo().graphRows[commitIndex]
+			graph = r.graphRows[commitIndex]
 		}
-		ui.Box(c).Width(graphWidth).FillHeight().Label("Commit graph " + entry.Hash).Draw(func(painter *ui.Painter, box ui.Rect) {
+		ui.Box(c).Width(r.graphWidth).Shrink(0).FillHeight().Label("Commit graph " + entry.Hash).Draw(func(painter *ui.Painter, box ui.Rect) {
 			drawCommit(painter, box, p, entry, graph)
 		})
 		refLabel := func() {
 			var labels []string
 			for _, name := range entry.Refs {
-				group := branchGroup(name)
+				group := repoBranchGroup(a.Model.Active().Repository, name)
 				if v.hideTags && group == "Tags" {
 					continue
 				}

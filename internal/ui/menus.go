@@ -3,7 +3,6 @@ package ui
 import (
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"vela/internal/domain"
@@ -143,7 +142,7 @@ var deferredCommands = map[commandID]string{
 	cherryPickChanges: "Cherry-Pick Selected Changes", extractChanges: "Extract Selected Changes to Separate Commit…",
 	dropChanges: "Drop Selected Changes", getRevision: "Get from Revision",
 
-	addIgnore: "Add to .gitignore", fileHistory: "Show History",
+	addIgnore:      "Add to .gitignore",
 	moveChangelist: "Move to Another Changelist…", newChangelist: "New Changelist…", editChangelist: "Edit Changelist…",
 	addToVCS: "Add to VCS", deleteFile: "Delete…", compareRevision: "Compare with Revision…",
 	compareBranch: "Compare with Branch or Tag…", historySelection: "Show History for Selection…",
@@ -154,6 +153,12 @@ var deferredCommands = map[commandID]string{
 }
 
 func commandLabel(id commandID) string {
+	if id == fileHistory {
+		return "Show History"
+	}
+	if id == openLocalRepository {
+		return "Open Local Repository…"
+	}
 	if label := commands[id]; label != "" {
 		return label
 	}
@@ -243,8 +248,11 @@ func (a *Workspace) fileMenu(m *ui.Menu, source string, f domain.File) {
 		a.menuNamed(m, openCode, t, "Jump to Source", "")
 		a.menu(m, copyPath, t)
 		m.Separator()
-		a.menuGroup(m, t, deleteFile, addToVCS)
+		a.menu(m, deleteFile, t)
 		if source == "working" {
+			if a.Model.Active().Repository.Root == "" {
+				a.menu(m, addToVCS, t)
+			}
 			a.menu(m, stageChanges, t)
 		} else {
 			a.menu(m, unstageChanges, t)
@@ -268,7 +276,8 @@ func (a *Workspace) fileMenu(m *ui.Menu, source string, f domain.File) {
 		a.menu(m, openRevision, t)
 		m.Separator()
 		a.menuGroup(m, t, revertChanges, cherryPickChanges, extractChanges, dropChanges, createPatch, getRevision, historyToRevision)
-		item := m.Item(commandLabel(showChangesToParents)).ID(string(showChangesToParents)).Checked(!a.repo().hideChangesToParents)
+		item := m.Item(commandLabel(showChangesToParents)).ID(string(showChangesToParents)).Checked(!a.repo().hideChangesToParents).
+			Disabled(a.disabledFor(showChangesToParents, t) != "")
 		if item.Chosen() {
 			a.pending = func() { a.run(showChangesToParents, t) }
 		}
@@ -367,9 +376,11 @@ func (a *Workspace) shelfMenu(m *ui.Menu, t commandTarget) {
 
 func (a *Workspace) branchMenu(m *ui.Menu, name string) {
 	t := commandTarget{source: name}
-	currentName := a.Model.Active().Repository.CurrentBranch
+	repo := a.Model.Active().Repository
+	currentName := repo.CurrentBranch
 	current := name == currentName
-	tag, remote := strings.HasPrefix(name, "refs/tags/"), strings.HasPrefix(name, "origin/")
+	group := repoBranchGroup(repo, name)
+	tag, remote := group == "Tags", group == "Remote"
 	if !current {
 		a.menu(m, checkoutBranch, t)
 	}
@@ -400,7 +411,12 @@ func (a *Workspace) branchMenu(m *ui.Menu, name string) {
 	a.menu(m, updateBranch, t)
 	if !remote {
 		a.menu(m, push, t)
-		if tracked := "origin/" + name; slices.Contains(a.Model.Active().Repository.Branches, tracked) {
+		tracked := "origin/" + name
+		if repo.Root != "" {
+			upstream := repo.Upstreams[name]
+			tracked = upstream.Remote + "/" + upstream.Branch
+		}
+		if slices.Contains(repo.Branches, tracked) {
 			m.Submenu("Tracked Branch '"+tracked+"'", func(sub *ui.Menu) {
 				a.menuGroup(sub, commandTarget{source: tracked}, branchDiff, missingBranchCommits)
 			})

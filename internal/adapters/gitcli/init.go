@@ -17,8 +17,8 @@ var ErrExistingRepository = errors.New("directory is already inside a Git reposi
 func (g *Executor) Initialize(ctx context.Context, directory, branch string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	g.initialize.Lock()
-	defer g.initialize.Unlock()
+	g.write.Lock()
+	defer g.write.Unlock()
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

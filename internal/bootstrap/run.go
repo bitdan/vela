@@ -15,6 +15,7 @@ import (
 	"vela/internal/adapters/gitcli"
 	"vela/internal/application"
 	"vela/internal/branding"
+	"vela/internal/domain"
 	"vela/internal/ui"
 )
 
@@ -44,7 +45,12 @@ func run(layoutPath string) error {
 		workspace.RestoreSession(session)
 	}
 	initial := workspace.SessionSnapshot()
-	var initializer application.RepositoryInitializer = gitcli.New()
+	git := gitcli.New()
+	var initializer application.RepositoryInitializer = git
+	var reader application.RepositoryReader = git
+	var index application.IndexWriter = git
+	var commits application.CommitWriter = git
+	var operator application.RepositoryOperator = git
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -68,6 +74,39 @@ func run(layoutPath string) error {
 					path = dirs[0]
 				}
 				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepository = func(ctx context.Context, directory string, done func(domain.Repository, error)) {
+			go func() {
+				repo, err := reader.ReadRepository(ctx, directory)
+				mygo.RunOnMain(func() { done(repo, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryFile = func(ctx context.Context, root, source string, file domain.File, done func(domain.File, error)) {
+			go func() {
+				file, err := reader.ReadFile(ctx, root, source, file)
+				mygo.RunOnMain(func() { done(file, err); window.Invalidate() })
+			}()
+		}
+		workspace.UpdateRepositoryIndex = func(repo domain.Repository, stage bool, files []domain.File, done func(domain.Repository, error, error)) {
+			go func() {
+				err := index.UpdateIndex(context.Background(), repo, stage, files)
+				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
+			}()
+		}
+		workspace.CommitRepository = func(repo domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
+			go func() {
+				err := commits.Commit(context.Background(), repo, message, amend)
+				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
+			}()
+		}
+		workspace.OperateRepository = func(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation, done func(domain.Repository, error, error)) {
+			go func() {
+				err := operator.ExecuteRepositoryOperation(ctx, repo, op)
+				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.CloseWindow = func() { go mygo.RunOnMain(window.Close) }

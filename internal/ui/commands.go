@@ -36,9 +36,11 @@ const (
 	fetch             commandID = "git.fetch"
 	pull              commandID = "git.pull"
 	push              commandID = "git.push"
-	stageChanges      commandID = "mock.stage-changes"
-	unstageChanges    commandID = "mock.unstage-changes"
+	stageChanges      commandID = "git.stage-changes"
+	unstageChanges    commandID = "git.unstage-changes"
 	commitMock        commandID = "mock.commit-preview"
+	commitRepository  commandID = "git.commit"
+	commitAndPush     commandID = "git.commit-and-push"
 )
 
 type commandTarget struct {
@@ -58,10 +60,53 @@ var commands = map[commandID]string{
 	showLoading: "Show mock loading", showError: "Show mock error", retryHistory: "Retry history",
 	switchRepo: "Switch repository", toggleGit: "Toggle Git", toggleCommit: "Toggle Commit",
 	toggleTheme: "Switch theme", closeTab: "Close active tab", openDiff: "Show Diff in a New Tab",
-	openCode: "Open in Editor", fetch: "Fetch", pull: "Pull", push: "Push", commitMock: "Preview Commit", stageChanges: "Stage Changes", unstageChanges: "Unstage Changes",
+	openCode: "Open in Editor", fetch: "Fetch", pull: "Pull", push: "Push", commitMock: "Preview Commit", commitRepository: "Commit",
+	commitAndPush: "Commit and Push…", stageChanges: "Stage Changes", unstageChanges: "Unstage Changes",
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	real := a.Model.Active().Repository.Root != ""
+	if id == openLocalRepository && (a.ReadRepository == nil || a.PickRepositoryDirectory == nil || a.pickingRepository) {
+		return "Directory picker is unavailable"
+	}
+	if id == fileHistory && (!real || target.file.Path == "") {
+		return "Select a file in a local Git repository"
+	}
+	if real {
+		switch id {
+		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject:
+			return a.repositoryOperationDisabled(id, target)
+		case commitMock, previewFileCommit, showIgnored, newScratch:
+			return "Available in a later Git phase"
+		case stageChanges, unstageChanges:
+			return a.indexDisabled(id == stageChanges, target)
+		case commitRepository:
+			return a.commitDisabled()
+		case commitAndPush:
+			if a.OperateRepository == nil || len(a.Model.Active().Repository.Remotes) == 0 {
+				return "Configure a remote before committing and pushing"
+			}
+			return a.commitDisabled()
+		case refreshChanges, refreshLog, retryHistory:
+			if a.repositoryWrite == a.Model.Active().Repository.Root {
+				return "Wait for the Git operation to finish"
+			}
+		case branchDiff, compareCurrentBranch, showChangesToParents:
+			return "This comparison is unavailable for local repositories"
+		case showLoading, showError:
+			return "Available in the sample workspace"
+		case previewDiff, openDiff:
+			if target.source == "project" {
+				if source, _ := a.projectChange(target.file.Path); source == "" {
+					return "This file has no local changes"
+				}
+			}
+		case openRevision:
+			if target.file.Status == "D" {
+				return "The file was deleted at this revision"
+			}
+		}
+	}
 	if _, ok := deferredCommands[id]; ok {
 		if id == updateBranch && (strings.HasPrefix(target.source, "origin/") || strings.HasPrefix(target.source, "refs/tags/")) {
 			return "Select a local tracking branch"
@@ -107,6 +152,29 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
 		return
 	}
+	if a.Model.Active().Repository.Root != "" {
+		switch id {
+		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject:
+			a.openRepositoryOperation(id, target)
+			return
+		case commitRepository, commitAndPush:
+			a.requestCommit(id == commitAndPush)
+			return
+		case stageChanges, unstageChanges:
+			a.requestIndexChange(id == stageChanges, target)
+			return
+		case previewDiff, openDiff, openCode, openRightSplit, openRevision, compareLocal, compareBefore:
+			if a.ReadRepositoryFile != nil {
+				a.readFileForCommand(id, target)
+			}
+			return
+		case refreshChanges, refreshLog, retryHistory:
+			if a.ReadRepository != nil {
+				a.loadRepository(a.Model.Active().Repository.Root, true)
+			}
+			return
+		}
+	}
 	switch id {
 	case newScratch:
 		r := a.repo()
@@ -136,7 +204,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		r := a.repo()
 		r.logExcludeRef = ""
 		r.logHideRoot = false
-		r.logQuery, r.logAuthor, r.logRef, r.logPath = "", "", "", ""
+		r.logQuery, r.logAuthor, r.logRef, r.logPath, r.logHistoryPath = "", "", "", "", ""
 		r.logDate = logDateRange{}
 	case groupDirectory, groupRepository, groupModule:
 		a.repo().commitGroup = id
@@ -158,6 +226,10 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		entry := diffTab(target.source, target.file)
 		a.repo().preview = &entry
 	case closePreview:
+		if a.repositoryFileRead != nil {
+			a.status = "File preview canceled"
+		}
+		stopRead(&a.repositoryFileRead)
 		r := a.repo()
 		r.preview = nil
 		r.emptyEditorFocus = len(r.tabs) == 0
@@ -205,12 +277,16 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 			file.New = other.New
 		}
 		a.run(previewDiff, commandTarget{source: displayBranch(target.source) + " vs " + repo.CurrentBranch, file: file})
-	case missingBranchCommits, historyToRevision:
+	case missingBranchCommits, historyToRevision, fileHistory:
 		a.run(clearLogFilters, commandTarget{})
 		r := a.repo()
-		r.logRef = target.source
+		if id != fileHistory {
+			r.logRef = target.source
+		}
 		if id == missingBranchCommits {
 			r.logExcludeRef = a.Model.Active().Repository.CurrentBranch
+		} else if a.Model.Active().Repository.Root != "" {
+			r.logHistoryPath = target.file.Path
 		} else {
 			r.logPath = target.file.Path
 		}
@@ -249,6 +325,10 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		a.openRemotes()
 	case initializeRepository:
 		a.openRepositoryInit()
+	case openLocalRepository:
+		if a.ReadRepository != nil && a.PickRepositoryDirectory != nil {
+			a.chooseRepository()
+		}
 	case openRemoteRepository:
 		a.browserURL = target.source
 	case copyRemoteRepository:
@@ -273,6 +353,13 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case switchRepo:
 		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
 	case selectRepo:
+		a.indexConfirmation = nil
+		a.commitConfirmation = nil
+		if a.repositoryOperation != nil && a.repositoryOperation.cancel == nil {
+			a.repositoryOperation = nil
+		}
+		stopRead(&a.repositoryRead)
+		stopRead(&a.repositoryFileRead)
 		a.Model.Switch(target.index)
 		a.status = "Switched to " + a.Model.Active().Repository.Name
 	case selectBranch:
@@ -281,6 +368,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case selectCommit:
 		s, r := a.Model.Active(), a.repo()
 		if s.Commit != target.index {
+			stopRead(&a.repositoryFileRead)
 			s.Commit = target.index
 			s.Historical, r.fileIndex = "", -1
 			r.files.List = ui.ListState{}
@@ -368,7 +456,10 @@ func (a *Workspace) menu(m *ui.Menu, id commandID, target commandTarget) {
 
 func (a *Workspace) record(message string) {
 	a.status = message
-	r := a.repo()
+	a.repo().addConsole(message)
+}
+
+func (r *repoView) addConsole(message string) {
 	r.console = append(r.console, message)
 	if len(r.console) > 50 {
 		r.console = r.console[len(r.console)-50:]

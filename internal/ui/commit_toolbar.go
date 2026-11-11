@@ -26,6 +26,8 @@ var commitIcons = map[commandID]*ui.SVG{
 	historicalDiffIcon:    changeIcon("M2 5h12l-3-3m3 3-3 3M14 11H2l3-3m-3 3 3 3"),
 	historicalRevertIcon:  changeIcon("M6 3 2 7l4 4M2 7h8a4 4 0 0 1 0 8H7"),
 	historicalHistoryIcon: changeIcon("M14 8a6 6 0 1 1-12 0 6 6 0 0 1 12 0zM8 4.5V8l2.5 1.5"),
+	stageChanges:          changeIcon("M2 8h12m-6-6v12"),
+	unstageChanges:        changeIcon("M2 8h12"),
 	historicalViewIcon:    changeIcon("M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8zm9 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"),
 	refreshLog:            changeIcon("M13.5 7A5.5 5.5 0 0 0 4 4L2 6m0-4v4h4m-3.5 3A5.5 5.5 0 0 0 12 12l2-2m0 4v-4h-4"),
 	cherryPick:            changeIcon("M5.5 10c0-3 4-3 4-8m1 8c0-4-1-5-1-8M8 12a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zm5 0a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"),
@@ -88,6 +90,13 @@ func (a *Workspace) commitToolbar(c *ui.Context, p tokens) {
 		tool(rollback, "Ctrl+Alt+Z", target)
 		tool(previewDiff, "Ctrl+D", target)
 		tool(shelveSilently, "Ctrl+Shift+H", target)
+		if a.Model.Active().Repository.Root != "" {
+			if target.source == "staged" {
+				tool(unstageChanges, "", target)
+			} else {
+				tool(stageChanges, "Ctrl+Alt+A", target)
+			}
+		}
 		commitIcon(c, viewChangeOptions, "View Options").Tooltip("View Options").Menu(func(m *ui.Menu) {
 			m.Item("Group By").Disabled(true)
 			for _, id := range []commandID{groupDirectory, groupRepository, groupModule} {
@@ -104,7 +113,8 @@ func (a *Workspace) commitToolbar(c *ui.Context, p tokens) {
 			}
 			m.Separator()
 			m.Item("Show").Disabled(true)
-			if m.Item(commandLabel(showIgnored)).ID(string(showIgnored)).Checked(r.showIgnored).Chosen() {
+			if m.Item(commandLabel(showIgnored)).ID(string(showIgnored)).Checked(r.showIgnored).
+				Disabled(a.disabledFor(showIgnored, commandTarget{}) != "").Chosen() {
 				a.run(showIgnored, commandTarget{})
 			}
 		})

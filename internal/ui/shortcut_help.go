@@ -37,6 +37,9 @@ var shortcutHelpGroups = []struct {
 	}},
 	{"Git Log and Shelf", []shortcutHelpItem{
 		{"Open Commit Tool Window", "Global", []string{"Ctrl+K"}},
+		{"Push", "Local Repository", []string{"Ctrl+Shift+K"}},
+		{"Update Project", "Local Repository", []string{"Ctrl+T"}},
+		{"New Branch", "Local Repository", []string{"Ctrl+Alt+N"}},
 		{"Refresh Commit Log", "Git Log", []string{"Ctrl+F5"}},
 		{"Copy Revision Number", "Git Log", []string{"Ctrl+Alt+Shift+C"}},
 		{"Go to Parent Commit", "Git Log", []string{"→"}},

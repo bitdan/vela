@@ -52,13 +52,13 @@ func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 					}
 				}
 				ui.Row(c).FillWidth().Gap(3).Children(func() {
-					remoteTool(c, p, "Add remote", commitIcons[projectNewIcon], s.editor != nil,
+					remoteTool(c, p, "Add remote", commitIcons[projectNewIcon], s.editor != nil || repo.Root != "",
 						func() { s.editor = &remoteEditor{index: -1} })
-					remoteTool(c, p, "Remove remote", remoteMinusIcon, s.editor != nil || !selection(), func() {
+					remoteTool(c, p, "Remove remote", remoteMinusIcon, s.editor != nil || !selection() || repo.Root != "", func() {
 						s.items = slices.Delete(s.items, s.selected, s.selected+1)
 						s.selected = min(s.selected, len(s.items)-1)
 					})
-					remoteTool(c, p, "Edit remote", remoteEditIcon, s.editor != nil || !selection(), edit)
+					remoteTool(c, p, "Edit remote", remoteEditIcon, s.editor != nil || !selection() || repo.Root != "", edit)
 				})
 				s.table.Selected = &s.selected
 				s.table.Key = func(i int) any { return s.items[i].Name }
@@ -71,7 +71,7 @@ func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 					}
 					ui.Text(c, value).Height(rowHeight).SingleLine().Ellipsis("…").Tooltip(value)
 				}).Grow(1).FillWidth().Border(1, p.theme.Border).Label("Remotes table")
-				if table.Submitted() && s.editor == nil {
+				if table.Submitted() && s.editor == nil && repo.Root == "" {
 					edit()
 				}
 				if len(s.items) == 0 {
@@ -85,7 +85,9 @@ func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 			ui.Row(c).FillWidth().Padding(inset).Gap(gap).Justify(ui.End).Children(func() {
 				ui.Button(c, "Cancel").Label("Cancel remotes").OnClick(func() { s.open = false })
 				ui.PrimaryButton(c, "OK").Label("Apply remotes").Disabled(s.editor != nil).OnClick(func() {
-					repo.Remotes = s.items
+					if repo.Root == "" {
+						repo.Remotes = s.items
+					}
 					s.open = false
 				})
 			})

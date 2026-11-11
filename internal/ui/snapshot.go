@@ -10,7 +10,13 @@ import (
 
 func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 	out := application.WorkspaceSnapshot{ActiveRepository: a.Model.Active().Repository.Name}
+	if a.Model.Active().Repository.Root != "" {
+		out.ActiveRepository = ""
+	}
 	for i, s := range a.Model.Sessions {
+		if s.Repository.Root != "" {
+			continue
+		}
 		r := &a.repos[i]
 		repo := application.RepositorySnapshot{Name: s.Repository.Name}
 		for _, tab := range r.tabs {

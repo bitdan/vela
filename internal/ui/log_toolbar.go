@@ -61,7 +61,7 @@ func (a *Workspace) logFilters(c *ui.Context, p tokens) {
 			for _, group := range []string{"Local", "Remote", "Tags"} {
 				m.Submenu(group, func(sub *ui.Menu) {
 					for _, ref := range r.logRefs {
-						if branchGroup(ref) == group {
+						if repoBranchGroup(repo, ref) == group {
 							logRadio(sub, displayBranch(ref), ref, &r.logRef)
 						}
 					}
@@ -72,9 +72,11 @@ func (a *Workspace) logFilters(c *ui.Context, p tokens) {
 			if m.Item("Select…").Chosen() {
 				r.logAuthor = ""
 			}
-			logRadio(m, "me", "Lin", &r.logAuthor)
-			m.Separator()
-			m.Item("Recent").Disabled(true)
+			if repo.Root == "" {
+				logRadio(m, "me", "Lin", &r.logAuthor)
+				m.Separator()
+				m.Item("Recent").Disabled(true)
+			}
 			for _, author := range r.logAuthors {
 				logRadio(m, author, author, &r.logAuthor)
 			}

@@ -40,6 +40,7 @@ func (a *Workspace) previewFiles(source string) []domain.File {
 
 func (a *Workspace) diffToolbar(c *ui.Context, p tokens, entry *tab) {
 	diff := entry.diff
+	real := a.Model.Active().Repository.Root != ""
 	files := a.previewFiles(entry.source)
 	index := slices.IndexFunc(files, func(file domain.File) bool { return file.Path == entry.path })
 	navigate := func(next int) {
@@ -52,7 +53,9 @@ func (a *Workspace) diffToolbar(c *ui.Context, p tokens, entry *tab) {
 		}
 		a.repo().commitSource = entry.source
 		a.run(previewDiff, commandTarget{source: entry.source, file: file})
-		a.repo().preview.diff.Layout = diff.Layout
+		if !real {
+			a.repo().preview.diff.Layout = diff.Layout
+		}
 	}
 	ui.Row(c).Height(headerHeight).FillWidth().Padding(0, gap).Gap(2).AlignItems(ui.Center).Background(p.chrome).Children(func() {
 		button := func(glyph, label string, disabled bool, action func()) {
@@ -89,6 +92,14 @@ func (a *Workspace) diffToolbar(c *ui.Context, p tokens, entry *tab) {
 		}
 		if entry.source == "staged" {
 			old, next = "Base version", "Staged version"
+		}
+		if real {
+			switch entry.source {
+			case "working":
+				old, next = "Index", "Working Tree"
+			case "staged":
+				old, next = "HEAD", "Index"
+			}
 		}
 		ui.Text(c, old+"  ·  "+entry.path).Grow(1).SingleLine().Ellipsis("…").FontSize(p.textSize(smallText))
 		if diff.Layout == editor.DiffSplit {

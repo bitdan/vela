@@ -24,6 +24,13 @@ func (a *Workspace) openDiff(source string, f domain.File) {
 	r := a.repo()
 	r.preview = nil
 	if a.activate("diff:" + source + ":" + f.Path) {
+		current := &r.tabs[r.active]
+		if a.Model.Active().Repository.Root != "" && current.file != f {
+			entry := diffTab(source, f)
+			entry.pinned = current.pinned
+			entry.diff.SetScrollY(current.diff.ScrollY())
+			*current = entry
+		}
 		return
 	}
 	entry := diffTab(source, f)
@@ -45,6 +52,16 @@ func (a *Workspace) openCode(source string, f domain.File) {
 	a.repo().preview = nil
 	id := "code:" + source + ":" + f.Path
 	if a.activate(id) {
+		current := &a.repo().tabs[a.repo().active]
+		if a.Model.Active().Repository.Root != "" && current.file != f {
+			buffer := editor.NewBuffer(f.New)
+			buffer.SetLanguage(editor.LanguageFor(f.Path))
+			state := &editor.State{Buffer: buffer, ReadOnly: true}
+			cursor := min(current.code.Cursor(), len(f.New))
+			state.Select(cursor, cursor)
+			state.SetScrollY(current.code.ScrollY())
+			current.code, current.file = state, f
+		}
 		return
 	}
 	buffer := editor.NewBuffer(f.New)
@@ -52,7 +69,7 @@ func (a *Workspace) openCode(source string, f domain.File) {
 	r := a.repo()
 	r.active = len(r.tabs)
 	r.tabs = append(r.tabs, tab{id: id, title: path.Base(f.Path), path: f.Path, source: source, context: "Editor · " + source, file: f,
-		code: &editor.State{Buffer: buffer, ReadOnly: strings.HasPrefix(source, "revision:")}})
+		code: &editor.State{Buffer: buffer, ReadOnly: strings.HasPrefix(source, "revision:") || a.Model.Active().Repository.Root != ""}})
 }
 
 func (a *Workspace) splitTab(id string, vertical, move bool) {
@@ -88,6 +105,12 @@ func (a *Workspace) hasUnsavedTabs() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	if a.repositoryWrite != "" {
+		a.status = "Wait for the Git operation to finish"
+		return false
+	}
+	stopRead(&a.repositoryRead)
+	stopRead(&a.repositoryFileRead)
 	if s := a.repositoryInit; s != nil && s.cancel != nil {
 		s.cancel()
 		return false

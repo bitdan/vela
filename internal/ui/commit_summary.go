@@ -62,7 +62,7 @@ func (a *Workspace) commitSummary(c *ui.Context, p tokens, repo domain.Repositor
 				}
 			})
 			commitMetadata(c, p, entry, func() { a.run(copyHash, commandTarget{source: entry.Hash}) })
-			commitReferenceLabels(c, p, entry.Refs, repo.CurrentBranch)
+			commitReferenceLabels(c, p, entry.Refs, repo)
 			if len(branches.names) > 0 {
 				commitBranchList(c, p, branches)
 			}
@@ -93,7 +93,7 @@ func commitMetadata(c *ui.Context, p tokens, entry domain.Commit, copyRevision f
 	})
 }
 
-func commitReferenceLabels(c *ui.Context, p tokens, refs []string, currentBranch string) {
+func commitReferenceLabels(c *ui.Context, p tokens, refs []string, repo domain.Repository) {
 	if len(refs) == 0 {
 		return
 	}
@@ -104,12 +104,15 @@ func commitReferenceLabels(c *ui.Context, p tokens, refs []string, currentBranch
 				ui.Text(c, name).Label("Commit reference " + name).FontSize(p.textSize(smallText)).SingleLine().Ellipsis("…")
 			})
 		}
-		if slices.Contains(refs, currentBranch) {
+		if slices.Contains(refs, repo.CurrentBranch) {
 			label("HEAD", p.favorite)
 		}
 		for _, ref := range refs {
+			if ref == "Detached HEAD" && repo.CurrentBranch == ref {
+				continue
+			}
 			color := p.graph[2]
-			switch branchGroup(ref) {
+			switch repoBranchGroup(repo, ref) {
 			case "Remote":
 				color = p.graph[1]
 			case "Tags":
