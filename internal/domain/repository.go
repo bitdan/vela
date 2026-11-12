@@ -19,6 +19,7 @@ type Commit struct {
 	Merge                                          bool
 	Files                                          []File
 	Parents                                        []int
+	ParentHashes                                   []string
 }
 
 type Shelf struct {
@@ -37,11 +38,19 @@ type Repository struct {
 	Refs                map[string]string
 	Upstreams           map[string]Upstream
 	RemoteVersion       string
+	MergeHeads          []string
+	Rebase              RebaseState
+	Sequencer           SequencerState
+	Conflicts           []MergeConflict
 	Branches            []string
 	Remotes             []Remote
 	Working, Staged     []File
 	History             []Commit
 	Shelf               []Shelf
+}
+
+func (r Repository) ResolvingConflicts() bool {
+	return len(r.MergeHeads) != 0 || r.Rebase.Active() || r.Sequencer.Active()
 }
 
 func MockRepositories() []Repository {

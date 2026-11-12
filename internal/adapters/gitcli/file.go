@@ -23,6 +23,9 @@ func (g *Executor) ReadFile(ctx context.Context, root, source string, file domai
 	if !validGitPath(file.Path) || (file.OldPath != "" && !validGitPath(file.OldPath)) {
 		return file, errors.New("invalid repository file path")
 	}
+	if source == "merge-conflict" {
+		return g.readMergeDiff(ctx, root, file)
+	}
 	if mode, revision, ok := strings.Cut(source, ":"); ok && (mode == "local" || mode == "before") {
 		if !validObjectID(revision) {
 			return file, errors.New("invalid Git commit ID")

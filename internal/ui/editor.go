@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"maps"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -100,6 +102,17 @@ func (a *Workspace) hasUnsavedTabs() bool {
 			}
 		}
 	}
+	return a.hasUnsavedMergeDrafts()
+}
+
+func (a *Workspace) hasUnsavedMergeDrafts() bool {
+	for _, repo := range a.repos {
+		for _, draft := range repo.mergeDrafts {
+			if draft.result.Buffer.Modified() {
+				return true
+			}
+		}
+	}
 	return false
 }
 
@@ -124,7 +137,11 @@ func (a *Workspace) RequestClose() bool {
 
 func (a *Workspace) editor(c *ui.Context, p tokens) {
 	r := a.repo()
-	if len(r.tabs) == 0 && r.preview == nil {
+	if draft := r.mergeDrafts[r.mergeActive]; draft != nil {
+		a.mergeEditor(c, p, draft)
+		return
+	}
+	if len(r.tabs) == 0 && r.preview == nil && len(r.mergeDrafts) == 0 {
 		a.emptyEditor(c, p)
 		return
 	}
@@ -132,6 +149,13 @@ func (a *Workspace) editor(c *ui.Context, p tokens) {
 		ui.Row(c).FillWidth().Height(headerHeight+4).Padding(0, gap).Gap(gap).AlignItems(ui.Center).Background(p.chrome).Clip().Children(func() {
 			ui.ScrollHorizontal(c).Grow(1).FillHeight().Children(func() {
 				ui.Row(c).FillHeight().Gap(gap).AlignItems(ui.Center).Children(func() {
+					if len(r.mergeDrafts) != 0 {
+						ui.Button(c, "Merge Drafts").Menu(func(m *ui.Menu) {
+							for _, name := range slices.Sorted(maps.Keys(r.mergeDrafts)) {
+								a.menuNamed(m, openMergeEditor, commandTarget{file: domain.File{Path: name}}, name, "")
+							}
+						})
+					}
 					for i, entry := range r.tabs {
 						if r.split != nil && r.splitMoved && r.split.id == entry.id {
 							continue
@@ -174,6 +198,10 @@ func (a *Workspace) editor(c *ui.Context, p tokens) {
 			a.diffToolbar(c, p, r.preview)
 			r.preview.diff.Font, r.preview.diff.TabSize = a.editorPreferences()
 			editor.DiffView(c.Key("preview:"+r.preview.id), r.preview.diff).Grow(1).FillWidth()
+			return
+		}
+		if len(r.tabs) == 0 {
+			a.emptyEditor(c, p)
 			return
 		}
 		entry := r.tabs[r.active]

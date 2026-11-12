@@ -25,6 +25,15 @@ func (a *Workspace) mainGitMenu(m *ui.Menu) {
 	a.menu(m, fetch, target)
 	m.Separator()
 	a.menuGroup(m, target, mergeBranch, rebaseBranch)
+	if len(a.Model.Active().Repository.MergeHeads) > 0 {
+		a.menuGroup(m, target, continueMerge, abortMerge)
+	} else if a.Model.Active().Repository.Rebase.Active() {
+		a.menuGroup(m, target, continueRebase, skipRebase, abortRebase)
+	} else if repo := a.Model.Active().Repository; repo.Sequencer.Active() {
+		for _, id := range []commandID{continueSequence, skipSequence, abortSequence} {
+			a.menuNamed(m, id, target, sequenceActionLabel(repo, id), "")
+		}
+	}
 	m.Separator()
 	a.menuGroup(m, target, openBranches, newBranch, newTag)
 	a.menuNamed(m, resetRevision, target, "Reset HEAD…", "")

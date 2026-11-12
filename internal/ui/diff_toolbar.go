@@ -13,6 +13,8 @@ func (a *Workspace) previewTab(c *ui.Context, p tokens, entry tab) {
 	label := "Diff: " + entry.title
 	if entry.source == "working" || entry.source == "staged" {
 		label = "Commit: " + entry.title
+	} else if entry.source == "merge-conflict" {
+		label = "Conflict: " + entry.title
 	}
 	row := ui.Row(c.Key("temporary-diff")).Height(controlHeight).AlignItems(ui.Center).Label("Diff Preview").
 		ContextMenu(func(m *ui.Menu) { a.tabMenu(m, entry, true) })
@@ -99,6 +101,17 @@ func (a *Workspace) diffToolbar(c *ui.Context, p tokens, entry *tab) {
 				old, next = "Index", "Working Tree"
 			case "staged":
 				old, next = "HEAD", "Index"
+			case "merge-conflict":
+				repo := a.Model.Active().Repository
+				old, next = conflictPaneLabels(repo.Rebase, repo.Sequencer)
+				if conflict, ok := findMergeConflict(a.Model.Active().Repository, entry.path); ok {
+					if conflict.Current == "" {
+						old += " (deleted)"
+					}
+					if conflict.Incoming == "" {
+						next += " (deleted)"
+					}
+				}
 			}
 		}
 		ui.Text(c, old+"  ·  "+entry.path).Grow(1).SingleLine().Ellipsis("…").FontSize(p.textSize(smallText))

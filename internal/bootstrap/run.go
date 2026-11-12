@@ -51,6 +51,7 @@ func run(layoutPath string) error {
 	var index application.IndexWriter = git
 	var commits application.CommitWriter = git
 	var operator application.RepositoryOperator = git
+	var mergeDocuments application.MergeDocumentReader = git
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -86,6 +87,12 @@ func run(layoutPath string) error {
 			go func() {
 				file, err := reader.ReadFile(ctx, root, source, file)
 				mygo.RunOnMain(func() { done(file, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadMergeDocument = func(ctx context.Context, repo domain.Repository, path string, done func(domain.MergeDocument, error)) {
+			go func() {
+				doc, err := mergeDocuments.ReadMergeDocument(ctx, repo, path)
+				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
 			}()
 		}
 		workspace.UpdateRepositoryIndex = func(repo domain.Repository, stage bool, files []domain.File, done func(domain.Repository, error, error)) {

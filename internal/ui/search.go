@@ -192,8 +192,10 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 	if category == searchActions || (category == searchAll && query != "") {
 		for _, id := range []commandID{switchRepo, toggleCommit, toggleGit, toggleBranches, toggleDetails, toggleTheme,
 			closeTab, openProject, openShelf, toggleConsole, showLog, refreshLog, showSettings, showLoading, showError, retryHistory,
-			goToFile, showRecentFiles, focusProject, manageRemotes, openLocalRepository, newBranch, fetch, pull, push, updateProject} {
-			label := commandLabel(id)
+			goToFile, showRecentFiles, focusProject, manageRemotes, openLocalRepository, newBranch, fetch, pull, push, updateProject,
+			mergeBranch, rebaseBranch, cherryPick, revertCommit, continueMerge, abortMerge, continueRebase, skipRebase, abortRebase,
+			continueSequence, skipSequence, abortSequence} {
+			label := sequenceActionLabel(a.Model.Active().Repository, id)
 			if match(label) && a.disabledFor(id, commandTarget{}) == "" {
 				results = append(results, searchResult{title: label, detail: "Action", kind: searchActions, action: id})
 			}

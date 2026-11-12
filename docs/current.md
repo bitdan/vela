@@ -1,6 +1,6 @@
 # vela 当前版本
 
-当前版本运行在 Windows 上，使用 Go 1.27.3 和 MyGo 0.8.3。启动后可在 vela 和 sandbox 两个 Mock 项目间切换。
+当前版本运行在 Windows 上，使用 Go 1.27.4 和 MyGo 0.8.3，模块最低要求 Go 1.27.3。启动后可在 vela 和 sandbox 两个 Mock 项目间切换。
 
 ## 初始化 Git 仓库
 
@@ -32,6 +32,31 @@ go run ./cmd/vela init -branch main 'F:\path\to\project'
 - **Update Branch** 按所选本地分支的 upstream 获取并快进。Git 菜单中的 **Update Project…** 以当前分支为目标。更新非当前分支时保留当前工作树，目标分支已在另一个工作树中检出时会拒绝更新。
 - **Push** 明确显示源分支，允许指定远端、目标分支和是否设置 upstream。只推送指定分支。Pull 和 Update 遇到分叉会保留本地分支，Fetch 已成功的远端跟踪引用可用于后续检查。
 - Update Branch 的行为已用 Git 集成测试验证。与目标 IDEA 版本的行为对照尚未实测。
+
+## 合并与冲突
+
+- 从 **Git → Merge…** 选择来源分支或标签，也可从分支右键菜单发起。合并前需处理跟踪文件的未提交改动。Git 可以快进时直接快进，其余无冲突的合并会创建合并提交。
+- 合并暂停时，Commit 区显示未解决的文件。单击文本冲突文件，或右键选择 **Resolve in Merge Editor**，可在左侧 **Current**、中间 **Result**、右侧 **Incoming** 三栏中解决冲突。Result 从 Git 已生成的工作区内容开始，保留已自动合并的内容。
+- 用两侧箭头采用当前冲突块，或直接编辑 Result。F7 和 Shift+F7 切换冲突块。清除冲突标记后，点击 **Apply Changes** 或按 Ctrl+S 写入并暂存。若磁盘内容在编辑期间变化，应用会被拒绝。关闭编辑区后，可从 **Merge Drafts** 找回本会话的未应用草稿。
+- 文件菜单仍提供整文件采用一侧的操作。在外部编辑后可使用 **Mark Resolved** 暂存文件。
+- 所有冲突解决后可点击 **Continue Merge**。**Abort Merge** 会尝试恢复合并前的状态，确认前请保留需要的解决改动。二进制文件不提供文本预览，子模块冲突需在 Git 中处理。
+
+## Rebase
+
+- 从 **Git → Rebase…** 选择基准分支或标签。分支右键菜单也可将当前分支变基到所选引用。确认窗口会提示重放提交可能获得新的提交 ID。
+- 暂停时，Commit 区显示正在变基的分支。三栏中的 **Rebased** 是已重放到新基准的内容，**Replayed Commit** 是当前正在重放的提交。应用全部冲突解决结果后点击 **Continue Rebase**。
+- **Skip Commit** 会放弃当前提交及该步的解决结果。**Abort Rebase** 会恢复原分支位置。这两项都需要确认。当前界面支持普通变基，含合并提交的重放范围和交互式变基需通过 Git 处理。
+
+## Cherry-pick 与 Revert
+
+- 在真实仓库的 Git Log 中选择提交，点击工具栏的 **Cherry-Pick** 或使用提交右键菜单的 **Cherry-Pick**、**Revert Commit**。确认窗口显示目标分支、完整提交 ID 和提交主题，每次处理一个提交。
+- Cherry-pick 将所选变更创建为当前分支的新提交。Revert 创建抵消所选变更的新提交。操作前需要处理跟踪文件的未提交改动；可能被覆盖的未跟踪或忽略文件会受到保护。
+- 选择合并提交时，必须明确选择 **Mainline parent**。变更相对于该父提交计算。撤销合并也会影响未来合并能否重新引入原有变更，执行前请确认父提交及其影响。
+- 冲突复用三栏编辑器。Cherry-pick 的右栏 **Picked Commit** 是所选提交；Revert 的右栏 **Reverted Parent** 是被撤销提交的选定父版本。中间 **Result** 保留 Git 已自动合并的内容，支持逐块采用、编辑和应用。
+- 暂停后可从 Commit 区或 Git 菜单继续、跳过或中止。继续前需要暂存所有冲突的解决结果；Git 保留暂停状态的空结果可选择 **Skip Current Commit**。空 Revert 未留下暂停状态时，会核对并报告未生成提交、HEAD、Index 和跟踪文件未改变，保留 Git 原始诊断。跳过和中止均有确认窗口，会放弃相应的解决改动。
+- 当前只从界面发起单个提交。外部序列仍有多个待处理提交时，可在这里解决文件冲突或中止，继续和跳过请使用 Git。Reset、Stash、Worktree 和 Bisect 的真实写操作尚未接入。
+
+命令语义参考 [Git Cherry-pick](https://git-scm.com/docs/git-cherry-pick) 和 [Git Revert](https://git-scm.com/docs/git-revert)。
 
 ## 工作区
 

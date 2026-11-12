@@ -31,6 +31,17 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return g.changeBranch(ctx, repo, index, op)
 	case domain.FetchRemote, domain.PullBranch, domain.PushBranch, domain.UpdateTrackedBranch:
 		return g.syncRemote(ctx, repo, current, index, op)
+	case domain.StartMerge, domain.ContinueMerge, domain.AbortMerge:
+		return g.merge(ctx, repo, index, op)
+	case domain.StartRebase, domain.ContinueRebase, domain.SkipRebase, domain.AbortRebase:
+		return g.rebase(ctx, repo, index, op)
+	case domain.StartCherryPick, domain.StartRevert, domain.ContinueSequence, domain.SkipSequence, domain.AbortSequence:
+		return g.sequence(ctx, repo, index, op)
+	case domain.AcceptCurrent, domain.AcceptIncoming, domain.MarkResolved, domain.SaveMergeResult:
+		if err := g.verifyConflictOperation(ctx, repo); err != nil {
+			return err
+		}
+		return g.resolveMergeFile(ctx, repo, index, op)
 	default:
 		return errors.New("unknown repository operation")
 	}
@@ -304,6 +315,10 @@ var httpAddress = regexp.MustCompile(`(?i)https?://[^\s'"]+`)
 
 func (g *Executor) runOperation(ctx context.Context, root string, args ...string) error {
 	out, err := g.run(ctx, root, args...)
+	return operationError(ctx, out, err)
+}
+
+func operationError(ctx context.Context, out result, err error) error {
 	if err == nil || ctx.Err() != nil {
 		return err
 	}

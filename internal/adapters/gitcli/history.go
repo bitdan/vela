@@ -30,7 +30,7 @@ func parseHistory(value string, refs map[string][]string) ([]domain.Commit, erro
 		parentHashes := strings.Fields(rows[i+2])
 		commit := domain.Commit{Hash: hash, Author: rows[i+3], AuthorEmail: rows[i+4],
 			AuthoredAt: time.Unix(authored, 0), Timestamp: time.Unix(committed, 0),
-			Subject: rows[i+7], Body: strings.TrimRight(rows[i+8], "\n"), Merge: len(parentHashes) > 1, Refs: refs[hash]}
+			Subject: rows[i+7], Body: strings.TrimRight(rows[i+8], "\n"), Merge: len(parentHashes) > 1, Refs: refs[hash], ParentHashes: parentHashes}
 		i += 9
 		for i < len(rows) && rows[i] != "" {
 			status := strings.TrimPrefix(rows[i], "\n")

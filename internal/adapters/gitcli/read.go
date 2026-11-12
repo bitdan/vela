@@ -22,12 +22,36 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 	}
 	repo.Root = filepath.Clean(strings.TrimSuffix(root, "\n"))
 	repo.Name = filepath.Base(repo.Root)
-	if _, err = g.readCheckout(ctx, &repo); err != nil {
+	index, err := g.readCheckout(ctx, &repo)
+	if err != nil {
 		return repo, err
 	}
+	gitDir, err := g.gitDirectory(ctx, repo.Root)
+	if err != nil {
+		return repo, err
+	}
+	repo.MergeHeads, err = mergeHeadsAt(gitDir)
+	if err != nil {
+		return repo, err
+	}
+	repo.Rebase, err = rebaseAt(gitDir)
+	if err != nil {
+		return repo, err
+	}
+	repo.Sequencer, err = sequencerAt(gitDir)
+	if err != nil {
+		return repo, err
+	}
+	repo.Conflicts = conflictsFromIndex(index)
 	repo.Staged, repo.Working, err = g.readStatus(ctx, repo.Root)
 	if err != nil {
 		return repo, err
+	}
+	workingPaths := filesByPath(repo.Working)
+	for _, conflict := range repo.Conflicts {
+		if _, found := workingPaths[conflict.Path]; !found {
+			repo.Working = append(repo.Working, domain.File{Path: conflict.Path, Status: "U"})
+		}
 	}
 	paths, err := g.read(ctx, repo.Root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate")
 	if err != nil {

@@ -119,8 +119,16 @@ func (a *Workspace) logFilters(c *ui.Context, p tokens) {
 		})
 		ui.Box(c).Width(1).Height(16).Background(p.theme.Border)
 		commitIcon(c, refreshLog, "Refresh Log").Tooltip("Refresh  Ctrl+F5").OnClick(func() { a.run(refreshLog, commandTarget{}) })
-		reason := a.disabledFor(cherryPick, commandTarget{})
-		commitIcon(c, cherryPick, "Cherry-Pick").Disabled(reason != "").Tooltip("Cherry-Pick — " + reason)
+		target := commandTarget{}
+		if commit, ok := a.operationCommit(target); ok {
+			target.source = commit.Hash
+		}
+		reason := a.disabledFor(cherryPick, target)
+		tip := "Cherry-Pick"
+		if reason != "" {
+			tip += " — " + reason
+		}
+		commitIcon(c, cherryPick, "Cherry-Pick").Disabled(reason != "").Tooltip(tip).OnClick(func() { a.run(cherryPick, target) })
 		view := commitIcon(c, logViewIcon, "Log View Options").Tooltip("Log View Options").Radius(5)
 		viewOpen := toolbarPopoverMenu(view, p, func(m *ui.Menu) {
 			v := &r.logView

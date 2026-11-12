@@ -84,6 +84,7 @@ func (a *Workspace) installRepository(repo domain.Repository) int {
 		session.Message = previous.Message
 		session.Amend = previous.Amend && previous.Repository.Head == repo.Head
 		view.tabs, view.closed, view.active = oldView.tabs, oldView.closed, oldView.active
+		view.mergeDrafts, view.mergeActive = oldView.mergeDrafts, oldView.mergeActive
 		view.split, view.splitMoved, view.splitSize, view.splitVertical = oldView.split, oldView.splitMoved, oldView.splitSize, oldView.splitVertical
 		view.toolPage, view.console, view.consoleOpen = oldView.toolPage, oldView.console, oldView.consoleOpen
 		view.project, view.projectReady, view.projectShowPaths = oldView.project, oldView.projectReady, oldView.projectShowPaths
@@ -119,11 +120,19 @@ func (a *Workspace) readFileForCommand(id commandID, target commandTarget) {
 		if source == "project" {
 			source, file = a.projectChange(file.Path)
 		}
+		if source == "working" && file.Status == "U" && a.Model.Active().Repository.ResolvingConflicts() {
+			if id == previewDiff && a.ReadMergeDocument != nil {
+				a.run(openMergeEditor, commandTarget{file: file})
+				return
+			}
+			source = "merge-conflict"
+		}
 	case compareLocal:
 		source = "local:" + source
 	case compareBefore:
 		source = "before:" + source
 	}
+	a.repo().mergeActive = ""
 	stopRead(&a.repositoryFileRead)
 	ctx, cancel := context.WithCancel(context.Background())
 	request := &readRequest{cancel: cancel}

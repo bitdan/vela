@@ -17,6 +17,9 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 	ui.Column(c).Fill().Background(p.panel).Children(func() {
 		a.commitToolbar(c, p)
 		divider(c, p)
+		if s.Repository.ResolvingConflicts() {
+			a.mergeControls(c, p)
+		}
 		working := s.Repository.Working
 		if r.showIgnored {
 			working = appendIgnored(working)
@@ -32,7 +35,7 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 				ui.TextArea(c, &s.Message).Label("Commit message").Placeholder("Commit message").Height(66).FillWidth()
 				a.button(c, commitMock, "Preview Commit")
 			})
-		} else {
+		} else if !s.Repository.ResolvingConflicts() {
 			a.commitForm(c, p)
 		}
 	})
@@ -137,6 +140,9 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 			id := previewDiff
 			if working {
 				id = openCode
+			}
+			if source == "working" && f.Status == "U" && a.ReadMergeDocument != nil && repo.ResolvingConflicts() {
+				id = openMergeEditor
 			}
 			a.run(id, target)
 		} else if list.Changed() && (working || r.historyPreview) {

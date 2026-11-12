@@ -35,6 +35,8 @@ type repoView struct {
 	splitVertical, splitMoved                         bool
 	splitSize                                         float32
 	preview                                           *tab
+	mergeDrafts                                       map[string]*mergeEditorState
+	mergeActive                                       string
 	console                                           []string
 	consoleOpen                                       bool
 	toolPage                                          string
@@ -109,6 +111,7 @@ type Workspace struct {
 	PickRepositoryDirectory   func(func(string, error))
 	ReadRepository            func(context.Context, string, func(domain.Repository, error))
 	ReadRepositoryFile        func(context.Context, string, string, domain.File, func(domain.File, error))
+	ReadMergeDocument         func(context.Context, domain.Repository, string, func(domain.MergeDocument, error))
 	repositoryRead            *readRequest
 	repositoryFileRead        *readRequest
 	pickingRepository         bool
@@ -271,7 +274,11 @@ func (a *Workspace) View(c *ui.Context) {
 		a.run(closePreview, commandTarget{})
 	}
 	if a.confirmExit {
-		if ui.AlertDialog(c, &a.confirmExit, "Discard mock edits?", "Edited mock files are kept in memory for this session.", "Cancel", "Discard and Close") == 1 {
+		title, message := "Discard mock edits?", "Edited mock files are kept in memory for this session."
+		if a.hasUnsavedMergeDrafts() {
+			title, message = "Discard unsaved edits?", "Unsaved editor changes and merge drafts will be lost."
+		}
+		if ui.AlertDialog(c, &a.confirmExit, title, message, "Cancel", "Discard and Close") == 1 {
 			a.exitApproved = true
 			if a.CloseWindow != nil {
 				a.CloseWindow()
@@ -318,7 +325,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyW) || c.Shortcut(ui.Ctrl, ui.KeyF4) {
 		id := closeTab
-		if a.repo().preview != nil {
+		if a.repo().mergeActive != "" {
+			id = closeMergeEditor
+		} else if a.repo().preview != nil {
 			id = closePreview
 		}
 		a.run(id, commandTarget{})

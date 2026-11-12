@@ -80,11 +80,10 @@ func (g *Executor) checkCommitState(ctx context.Context, root, index string) err
 			return errors.New("resolve the index conflicts before committing")
 		}
 	}
-	gitDir, err := g.read(ctx, root, "rev-parse", "--absolute-git-dir")
+	dir, err := g.gitDirectory(ctx, root)
 	if err != nil {
 		return err
 	}
-	dir := strings.TrimSuffix(gitDir, "\n")
 	for _, marker := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-apply", "rebase-merge", "sequencer"} {
 		if _, err := os.Lstat(filepath.Join(dir, marker)); err == nil {
 			return errors.New("finish the in-progress Git operation before committing here")

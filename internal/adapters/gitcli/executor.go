@@ -27,12 +27,17 @@ func (g *Executor) run(ctx context.Context, directory string, args ...string) (r
 	return g.runInput(ctx, directory, "", args...)
 }
 
-func (*Executor) runInput(ctx context.Context, directory, input string, args ...string) (result, error) {
+func (g *Executor) runInput(ctx context.Context, directory, input string, args ...string) (result, error) {
+	return g.runInputWithEnv(ctx, directory, input, nil, args...)
+}
+
+func (*Executor) runInputWithEnv(ctx context.Context, directory, input string, env []string, args ...string) (result, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = directory
 	cmd.Stdin = strings.NewReader(input)
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Env = append(repositoryEnvironment(), "GIT_OPTIONAL_LOCKS=0", "GIT_NO_LAZY_FETCH=1")
+	cmd.Env = append(cmd.Env, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

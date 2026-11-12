@@ -240,6 +240,18 @@ func (a *Workspace) menuGroup(m *ui.Menu, target commandTarget, ids ...commandID
 
 func (a *Workspace) fileMenu(m *ui.Menu, source string, f domain.File) {
 	t := commandTarget{source: source, file: f}
+	if source == "working" && f.Status == "U" && a.Model.Active().Repository.ResolvingConflicts() {
+		if a.ReadMergeDocument != nil {
+			a.menu(m, openMergeEditor, t)
+		}
+		a.menuGroup(m, t, previewDiff, openDiff, openCode, copyPath)
+		m.Separator()
+		repo := a.Model.Active().Repository
+		a.menuNamed(m, acceptCurrent, t, conflictActionLabel(repo, acceptCurrent), "")
+		a.menuNamed(m, acceptIncoming, t, conflictActionLabel(repo, acceptIncoming), "")
+		a.menu(m, markResolved, t)
+		return
+	}
 	switch source {
 	case "project":
 		a.projectMenu(m, t, false)
@@ -403,6 +415,9 @@ func (a *Workspace) branchMenu(m *ui.Menu, name string) {
 	if !current {
 		m.Separator()
 		a.menuNamed(m, mergeBranch, t, "Merge '"+displayBranch(name)+"' into '"+currentName+"'", "")
+		if repo.Root != "" {
+			a.menuNamed(m, rebaseBranch, t, "Rebase '"+currentName+"' onto '"+displayBranch(name)+"'…", "")
+		}
 	}
 	if tag {
 		return

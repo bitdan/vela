@@ -12,35 +12,53 @@ import (
 type commandID string
 
 const (
-	selectRepo        commandID = "workspace.select-repository"
-	selectBranch      commandID = "mock.inspect-branch"
-	selectCommit      commandID = "mock.inspect-commit"
-	showSearch        commandID = "workspace.search-everywhere"
-	showSearchActions commandID = "workspace.search-actions"
-	goToFile          commandID = "workspace.go-to-file"
-	showRecentFiles   commandID = "workspace.recent-files"
-	focusProject      commandID = "workspace.focus-project"
-	toggleMainMenu    commandID = "workspace.toggle-main-menu"
-	toggleBranches    commandID = "workspace.toggle-branches"
-	toggleDetails     commandID = "workspace.toggle-details"
-	showLoading       commandID = "mock.history-loading"
-	showError         commandID = "mock.history-error"
-	retryHistory      commandID = "mock.history-retry"
-	switchRepo        commandID = "workspace.switch-repository"
-	toggleGit         commandID = "workspace.toggle-git"
-	toggleCommit      commandID = "workspace.toggle-commit"
-	toggleTheme       commandID = "workspace.toggle-theme"
-	closeTab          commandID = "editor.close-tab"
-	openDiff          commandID = "editor.open-diff"
-	openCode          commandID = "editor.open-code"
-	fetch             commandID = "git.fetch"
-	pull              commandID = "git.pull"
-	push              commandID = "git.push"
-	stageChanges      commandID = "git.stage-changes"
-	unstageChanges    commandID = "git.unstage-changes"
-	commitMock        commandID = "mock.commit-preview"
-	commitRepository  commandID = "git.commit"
-	commitAndPush     commandID = "git.commit-and-push"
+	selectRepo         commandID = "workspace.select-repository"
+	selectBranch       commandID = "mock.inspect-branch"
+	selectCommit       commandID = "mock.inspect-commit"
+	showSearch         commandID = "workspace.search-everywhere"
+	showSearchActions  commandID = "workspace.search-actions"
+	goToFile           commandID = "workspace.go-to-file"
+	showRecentFiles    commandID = "workspace.recent-files"
+	focusProject       commandID = "workspace.focus-project"
+	toggleMainMenu     commandID = "workspace.toggle-main-menu"
+	toggleBranches     commandID = "workspace.toggle-branches"
+	toggleDetails      commandID = "workspace.toggle-details"
+	showLoading        commandID = "mock.history-loading"
+	showError          commandID = "mock.history-error"
+	retryHistory       commandID = "mock.history-retry"
+	switchRepo         commandID = "workspace.switch-repository"
+	toggleGit          commandID = "workspace.toggle-git"
+	toggleCommit       commandID = "workspace.toggle-commit"
+	toggleTheme        commandID = "workspace.toggle-theme"
+	closeTab           commandID = "editor.close-tab"
+	openDiff           commandID = "editor.open-diff"
+	openCode           commandID = "editor.open-code"
+	fetch              commandID = "git.fetch"
+	pull               commandID = "git.pull"
+	push               commandID = "git.push"
+	stageChanges       commandID = "git.stage-changes"
+	unstageChanges     commandID = "git.unstage-changes"
+	commitMock         commandID = "mock.commit-preview"
+	commitRepository   commandID = "git.commit"
+	commitAndPush      commandID = "git.commit-and-push"
+	continueMerge      commandID = "git.continue-merge"
+	abortMerge         commandID = "git.abort-merge"
+	continueRebase     commandID = "git.continue-rebase"
+	skipRebase         commandID = "git.skip-rebase"
+	abortRebase        commandID = "git.abort-rebase"
+	continueSequence   commandID = "git.continue-sequence"
+	skipSequence       commandID = "git.skip-sequence"
+	abortSequence      commandID = "git.abort-sequence"
+	acceptCurrent      commandID = "git.accept-current"
+	acceptIncoming     commandID = "git.accept-incoming"
+	markResolved       commandID = "git.mark-resolved"
+	openMergeEditor    commandID = "merge.open-editor"
+	previousConflict   commandID = "merge.previous-conflict"
+	nextConflict       commandID = "merge.next-conflict"
+	applyCurrentBlock  commandID = "merge.apply-current-block"
+	applyIncomingBlock commandID = "merge.apply-incoming-block"
+	saveMergeResult    commandID = "merge.save-result"
+	closeMergeEditor   commandID = "merge.close-editor"
 )
 
 type commandTarget struct {
@@ -62,9 +80,19 @@ var commands = map[commandID]string{
 	toggleTheme: "Switch theme", closeTab: "Close active tab", openDiff: "Show Diff in a New Tab",
 	openCode: "Open in Editor", fetch: "Fetch", pull: "Pull", push: "Push", commitMock: "Preview Commit", commitRepository: "Commit",
 	commitAndPush: "Commit and Push…", stageChanges: "Stage Changes", unstageChanges: "Unstage Changes",
+	continueMerge: "Continue Merge", abortMerge: "Abort Merge", acceptCurrent: "Accept Current", acceptIncoming: "Accept Incoming", markResolved: "Mark Resolved",
+	continueRebase: "Continue Rebase", skipRebase: "Skip Commit", abortRebase: "Abort Rebase",
+	continueSequence: "Continue Operation", skipSequence: "Skip Current Commit", abortSequence: "Abort Operation",
+	openMergeEditor: "Resolve in Merge Editor", previousConflict: "Previous Conflict", nextConflict: "Next Conflict",
+	applyCurrentBlock: "Apply Current Block", applyIncomingBlock: "Apply Incoming Block", saveMergeResult: "Apply Changes",
+	closeMergeEditor: "Close Merge Editor",
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	switch id {
+	case openMergeEditor, previousConflict, nextConflict, applyCurrentBlock, applyIncomingBlock, saveMergeResult, closeMergeEditor:
+		return a.mergeEditorDisabled(id, target)
+	}
 	real := a.Model.Active().Repository.Root != ""
 	if id == openLocalRepository && (a.ReadRepository == nil || a.PickRepositoryDirectory == nil || a.pickingRepository) {
 		return "Directory picker is unavailable"
@@ -74,7 +102,9 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 	}
 	if real {
 		switch id {
-		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject:
+		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
+			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
+			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence:
 			return a.repositoryOperationDisabled(id, target)
 		case commitMock, previewFileCommit, showIgnored, newScratch:
 			return "Available in a later Git phase"
@@ -152,9 +182,19 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
 		return
 	}
+	switch id {
+	case openMergeEditor:
+		a.loadMergeEditor(target.file.Path)
+		return
+	case previousConflict, nextConflict, applyCurrentBlock, applyIncomingBlock, saveMergeResult, closeMergeEditor:
+		a.runMergeEditor(id)
+		return
+	}
 	if a.Model.Active().Repository.Root != "" {
 		switch id {
-		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject:
+		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
+			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
+			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence:
 			a.openRepositoryOperation(id, target)
 			return
 		case commitRepository, commitAndPush:
@@ -445,7 +485,15 @@ func (a *Workspace) button(c *ui.Context, id commandID, label string) {
 	if reason != "" {
 		tip = reason
 	}
-	ui.Button(c.Key(string(id)), label).Height(controlHeight).Label(commandLabel(id)).Disabled(reason != "").Tooltip(tip).OnClick(func() {
+	accessLabel := commandLabel(id)
+	if id == continueSequence || id == abortSequence {
+		accessLabel = label
+		tip = label
+		if reason != "" {
+			tip = reason
+		}
+	}
+	ui.Button(c.Key(string(id)), label).Height(controlHeight).Label(accessLabel).Disabled(reason != "").Tooltip(tip).OnClick(func() {
 		a.run(id, commandTarget{})
 	})
 }
