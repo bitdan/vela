@@ -39,6 +39,9 @@ func (a *Workspace) mainGitMenu(m *ui.Menu) {
 	a.menuNamed(m, resetRevision, target, "Reset HEAD…", "")
 	m.Separator()
 	a.menu(m, showWorktrees, target)
+	m.Submenu("Bisect", func(sub *ui.Menu) {
+		a.menuGroup(sub, target, startBisect, showBisectCandidate, createBisectWorktree, bisectGood, bisectBad, bisectSkip, resetBisect)
+	})
 	m.Separator()
 	a.menuNamed(m, showLog, target, "Show Git Log", "")
 	m.Submenu("Patch", func(sub *ui.Menu) {

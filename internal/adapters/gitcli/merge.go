@@ -121,6 +121,11 @@ func (g *Executor) verifyConflictOperation(ctx context.Context, repo domain.Repo
 		return err
 	}
 	if len(heads) == 0 || !slices.Equal(heads, repo.MergeHeads) {
+		// Stash apply and external read-tree merges leave unmerged entries
+		// without a sequencer or MERGE_HEAD. The verified index is their identity.
+		if len(heads) == 0 && len(repo.MergeHeads) == 0 && len(repo.Conflicts) > 0 {
+			return g.checkOperationState(ctx, repo.Root, "", false)
+		}
 		return ErrStaleIndex
 	}
 	return nil

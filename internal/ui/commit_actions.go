@@ -58,6 +58,8 @@ func (a *Workspace) commitDisabled() string {
 		return "Wait for the current Git operation to finish"
 	case s.Repository.IndexVersion == "":
 		return "Refresh the repository before committing"
+	case s.Repository.Bisect.Active():
+		return "End Bisect before committing"
 	case s.Repository.CurrentBranch == "Detached HEAD":
 		return "Check out a local branch before committing"
 	case s.Amend && s.Repository.Head == "":

@@ -74,6 +74,10 @@ func (g *Executor) Commit(ctx context.Context, snapshot domain.Repository, messa
 }
 
 func (g *Executor) checkCommitState(ctx context.Context, root, index string) error {
+	return g.checkOperationState(ctx, root, index, false)
+}
+
+func (g *Executor) checkOperationState(ctx context.Context, root, index string, allowBisect bool) error {
 	for _, row := range nulFields(index) {
 		fields, _, _ := strings.Cut(row, "\t")
 		if !strings.HasSuffix(fields, " 0") {
@@ -84,7 +88,11 @@ func (g *Executor) checkCommitState(ctx context.Context, root, index string) err
 	if err != nil {
 		return err
 	}
-	for _, marker := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-apply", "rebase-merge", "sequencer"} {
+	markers := []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-apply", "rebase-merge", "sequencer"}
+	if !allowBisect {
+		markers = append(markers, "BISECT_START")
+	}
+	for _, marker := range markers {
 		if _, err := os.Lstat(filepath.Join(dir, marker)); err == nil {
 			return errors.New("finish the in-progress Git operation before committing here")
 		} else if !errors.Is(err, os.ErrNotExist) {

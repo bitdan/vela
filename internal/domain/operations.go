@@ -31,6 +31,17 @@ const (
 	ContinueSequence
 	SkipSequence
 	AbortSequence
+	ResetRevision
+	SaveStash
+	ApplyStash
+	DropStash
+	CreateWorktree
+	RemoveWorktree
+	StartBisect
+	BisectGood
+	BisectBad
+	BisectSkip
+	ResetBisect
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.
@@ -63,4 +74,9 @@ type RepositoryOperation struct {
 	Result, WorktreeVersion        string
 	Conflict                       MergeConflict
 	Mainline                       int
+	Mode                           string
+	Message                        string
+	Path                           string
+	BisectVersion                  string
+	IncludeUntracked, RestoreIndex bool
 }

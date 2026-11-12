@@ -20,6 +20,9 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 		if s.Repository.ResolvingConflicts() {
 			a.mergeControls(c, p)
 		}
+		if s.Repository.Bisect.Active() {
+			a.bisectControls(c, p)
+		}
 		working := s.Repository.Working
 		if r.showIgnored {
 			working = appendIgnored(working)

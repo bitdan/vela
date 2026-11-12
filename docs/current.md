@@ -54,9 +54,44 @@ go run ./cmd/vela init -branch main 'F:\path\to\project'
 - 选择合并提交时，必须明确选择 **Mainline parent**。变更相对于该父提交计算。撤销合并也会影响未来合并能否重新引入原有变更，执行前请确认父提交及其影响。
 - 冲突复用三栏编辑器。Cherry-pick 的右栏 **Picked Commit** 是所选提交；Revert 的右栏 **Reverted Parent** 是被撤销提交的选定父版本。中间 **Result** 保留 Git 已自动合并的内容，支持逐块采用、编辑和应用。
 - 暂停后可从 Commit 区或 Git 菜单继续、跳过或中止。继续前需要暂存所有冲突的解决结果；Git 保留暂停状态的空结果可选择 **Skip Current Commit**。空 Revert 未留下暂停状态时，会核对并报告未生成提交、HEAD、Index 和跟踪文件未改变，保留 Git 原始诊断。跳过和中止均有确认窗口，会放弃相应的解决改动。
-- 当前只从界面发起单个提交。外部序列仍有多个待处理提交时，可在这里解决文件冲突或中止，继续和跳过请使用 Git。Reset、Stash、Worktree 和 Bisect 的真实写操作尚未接入。
+- 当前只从界面发起单个提交。外部序列仍有多个待处理提交时，可在这里解决文件冲突或中止，继续和跳过请使用 Git。
 
 命令语义参考 [Git Cherry-pick](https://git-scm.com/docs/git-cherry-pick) 和 [Git Revert](https://git-scm.com/docs/git-revert)。
+
+## Reset
+
+从 Log 提交右键菜单选择 **Reset Current Branch to Here…**，或从 Git 菜单选择 **Reset HEAD…**。确认窗口显示当前分支和目标完整提交 ID。
+
+- **Soft** 只移动 HEAD，保留 Index 和工作文件。
+- **Mixed** 是默认模式，移动 HEAD、重置 Index、保留工作文件，原暂存改动变成未暂存改动。
+- **Hard** 同时替换 Index 和跟踪工作文件，需额外勾选丢弃跟踪改动。可能被覆盖的未跟踪或忽略文件会阻止执行。
+- 操作会让目标之后的提交离开当前分支。进行中的合并、变基、提交恢复或 Bisect 必须先结束。磁盘内容在确认期间变化会拒绝执行。
+
+## Stash
+
+**Git → Uncommitted Changes → Stash Changes…** 保存暂存和未暂存改动，可填写消息并勾选包含未跟踪文件。忽略文件保留，子模块仓库及存在 assume-unchanged/skip-worktree 索引标记的仓库暂不支持这一操作。Mock Shelf 与真实 Stash 分开。
+
+**Unstash Changes…** 列出真实 Stash。**Apply Stash** 恢复到干净的跟踪工作区，可勾选恢复暂存状态，原条目始终保留。**Drop Selected Stash…** 打开单独的删除确认；没有自动 Pop 或 Clear。
+
+恢复遇到冲突后，可使用三栏编辑器应用解决结果或在外部修改后 **Mark Resolved**，全部解决后创建普通提交。若要放弃这次应用，选中当前 HEAD 并明确执行 Mixed/Hard Reset；Hard 会丢弃跟踪工作文件改动。原 Stash 仍可再次恢复。
+
+## Worktrees
+
+**Git → Worktrees…** 查看目录、提交、分支和锁定状态，**Open Worktree** 在当前应用中打开该工作树。**New Worktree…** 输入不存在的新绝对目录；Detached 模式使用已加载的提交 ID 或完整引用，Branch 模式使用未被其他工作树检出的已有本地 `refs/heads/name`。**New Branch** 模式填写新本地分支名称和起点，一次创建分支及工作树，不替换已有分支，也不自动设置 upstream。分支右键菜单也提供创建入口。创建失败或取消后请检查已刷新的实际工作树和分支；不会自动删除部分结果。
+
+移除必须再次确认，保留分支。主工作树、当前工作树、锁定/缺失工作树不能移除；存在未跟踪、忽略文件或隐藏索引标记时也拒绝。没有 Force 删除。已打开的被移除会话保留缓存标签和草稿，但需要刷新后才能执行 Git 写操作。
+
+## Bisect
+
+**Git → Bisect → Start Bisect…** 输入 Bad 提交和已知 Good 祖先的完整提交 ID 或完整引用。第一版使用 **no-checkout**：当前 HEAD、Index 和工作文件不切换，测试候选版本需在独立工作树或其他外部环境进行。
+
+Commit 面板显示候选 OID；**Show Candidate in Log** 定位已加载的候选提交，可从历史文件菜单打开只读版本。测试后通过 **Mark Good**、**Mark Bad** 或 **Skip Candidate** 明确分类。搜索显示 First Bad，或提示跳过的提交导致结果不可判定。**End Bisect…** 确认后结束搜索。
+
+**Create Candidate Worktree…** 可从 **Git → Bisect** 或 Commit 面板的 **Test Worktree…** 打开。输入新的绝对目录后，把确认框中的精确候选创建为独立 Detached 工作树；候选超出已加载日志时也可使用。模式和 OID 固定，确认期间搜索或候选变化会拒绝创建。随后从 **Worktrees… → Open Worktree** 打开该目录，在外部运行测试，再返回原仓库使用 **Good / Bad / Skip** 标记结果。搜索仓库的 HEAD、Index 和文件保持原位，候选工作树不会自动删除，也不会在下一步自动切换到新候选。
+
+不自动执行测试脚本。外部发起的 checkout 模式或自定义术语搜索请通过 Git 分类；应用可在安全检查后结束。候选超出最多 10,000 条的已加载 Log 时，请根据显示的 OID 使用 Git 检查。
+
+命令语义参考 [Git Reset](https://git-scm.com/docs/git-reset)、[Git Stash](https://git-scm.com/docs/git-stash)、[Git Worktree](https://git-scm.com/docs/git-worktree) 和 [Git Bisect](https://git-scm.com/docs/git-bisect)。
 
 ## 工作区
 

@@ -117,6 +117,9 @@ func (a *Workspace) mergeControls(c *ui.Context, p tokens) {
 	} else if repo.Sequencer.Active() {
 		title = sequenceTitle(repo.Sequencer) + " in progress"
 		actions = []commandID{continueSequence, skipSequence, abortSequence}
+	} else if len(repo.MergeHeads) == 0 {
+		title = "Unmerged files · resolve and stage, then commit"
+		actions = nil
 	}
 	ui.Column(c).FillWidth().Padding(gap, inset).Gap(gap).Children(func() {
 		ui.Text(c, title+" · "+fileCount(len(repo.Conflicts))+" unresolved").Bold()

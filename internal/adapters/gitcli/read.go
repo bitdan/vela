@@ -30,6 +30,20 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 	if err != nil {
 		return repo, err
 	}
+	repo.GitDir = gitDir
+	repo.Bisect, err = g.readBisect(ctx, repo.Root, gitDir)
+	if err != nil {
+		return repo, err
+	}
+	common, err := g.read(ctx, repo.Root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return repo, err
+	}
+	repo.CommonDir = filepath.Clean(strings.TrimSuffix(common, "\n"))
+	repo.Worktrees, repo.WorktreesVersion, err = g.readWorktrees(ctx, repo.Root)
+	if err != nil {
+		return repo, err
+	}
 	repo.MergeHeads, err = mergeHeadsAt(gitDir)
 	if err != nil {
 		return repo, err
@@ -43,6 +57,14 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 		return repo, err
 	}
 	repo.Conflicts = conflictsFromIndex(index)
+	repo.Stashes, repo.StashVersion, err = g.readStashes(ctx, repo.Root)
+	if err != nil {
+		return repo, err
+	}
+	repo.WorktreeVersion, err = g.worktreeVersion(ctx, repo.Root)
+	if err != nil {
+		return repo, err
+	}
 	repo.Staged, repo.Working, err = g.readStatus(ctx, repo.Root)
 	if err != nil {
 		return repo, err

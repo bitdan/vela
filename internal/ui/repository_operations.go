@@ -19,6 +19,11 @@ type repositoryOperationDialog struct {
 	mergeSource                  string
 	mainline                     string
 	mainlines                    []string
+	acknowledged                 bool
+	snapshot                     domain.Repository
+	choice                       string
+	choices                      []string
+	management                   bool
 }
 
 func operationRef(repo domain.Repository, source string) string {
@@ -47,10 +52,43 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 		return "Refresh the repository before continuing"
 	}
 	branch := target.source
+	if isBisectCommand(id) {
+		return bisectDisabled(repo, id)
+	}
+	if repo.Bisect.Active() {
+		switch id {
+		case resetRevision, stashChanges, unstashChanges, dropStash, newBranch, checkoutBranch, pull, updateBranch, updateProject, mergeBranch, rebaseBranch, cherryPick, revertCommit:
+			return "End Bisect before running this operation"
+		}
+	}
 	if branch == "" || id == updateProject {
 		branch = repo.CurrentBranch
 	}
 	switch id {
+	case newWorktree, showWorktrees, removeWorktree:
+		if id == newWorktree && repo.Head == "" {
+			return "Create a commit before adding a worktree"
+		}
+	case stashChanges, unstashChanges, dropStash:
+		if repo.ResolvingConflicts() || len(repo.Conflicts) > 0 {
+			return "Finish the current Git operation first"
+		}
+		if repo.Head == "" {
+			return "Create a commit before using Stash"
+		}
+		if id != stashChanges && len(repo.Stashes) == 0 {
+			return "No stashes"
+		}
+	case resetRevision:
+		if len(repo.MergeHeads) > 0 || repo.Rebase.Active() || repo.Sequencer.Active() {
+			return "Finish the current Git operation first"
+		}
+		if repo.Head == "" || repo.CurrentBranch == "Detached HEAD" {
+			return "Check out a local branch with a commit"
+		}
+		if _, ok := a.operationCommit(target); !ok {
+			return "Select a commit in the Git Log"
+		}
 	case mergeBranch, rebaseBranch, cherryPick, revertCommit:
 		if repo.ResolvingConflicts() {
 			return "Finish the current Git operation first"
@@ -134,7 +172,7 @@ func remoteConfigured(repo domain.Repository, name string) bool {
 
 func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) {
 	repo := a.Model.Active().Repository
-	s := &repositoryOperationDialog{open: true, root: repo.Root}
+	s := &repositoryOperationDialog{open: true, root: repo.Root, snapshot: repo}
 	branch := target.source
 	if branch == "" || id == updateProject {
 		branch = repo.CurrentBranch
@@ -152,6 +190,16 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 		remoteBranch = branch
 	}
 	switch id {
+	case startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, createBisectWorktree:
+		s.configureBisect(repo, id)
+	case newWorktree, showWorktrees, removeWorktree:
+		s.configureWorktree(repo, id, target)
+	case stashChanges, unstashChanges, dropStash:
+		s.configureStash(repo, id, target)
+	case resetRevision:
+		commit, _ := a.operationCommit(target)
+		s.label, s.detail = "Reset", "Reset branch "+repo.CurrentBranch+" to "+commit.Hash+" · "+commit.Subject
+		s.op = domain.RepositoryOperation{Kind: domain.ResetRevision, Source: commit.Hash, Mode: "Mixed"}
 	case cherryPick, revertCommit, continueSequence, skipSequence, abortSequence:
 		commit, _ := a.operationCommit(target)
 		s.configureSequence(repo, id, commit)
@@ -205,6 +253,18 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 			heading(c, p, s.label, repo.Name)
 			ui.Column(c).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Text(c, s.detail).FillWidth().TextColor(p.theme.TextMuted)
+				a.stashFields(c, s, busy)
+				a.worktreeFields(c, s, busy)
+				bisectFields(c, s, busy)
+				if op.Kind == domain.ResetRevision {
+					ui.Text(c, op.Source)
+					ui.Text(c, repo.CurrentBranch)
+					ui.Select(c, &op.Mode, []string{"Soft", "Mixed", "Hard"}).Label("Reset mode").Disabled(busy)
+					ui.Text(c, resetImpact(op.Mode)).FillWidth()
+					if op.Mode == "Hard" {
+						ui.Checkbox(c, &s.acknowledged, "I understand Hard reset discards tracked changes").Disabled(busy)
+					}
+				}
 				if op.Kind == domain.StartMerge || op.Kind == domain.StartRebase {
 					ui.Text(c, "Source branch or tag")
 					options := []string{chooseMergeSource}
@@ -261,6 +321,10 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 				needsBranch := op.Kind == domain.CreateBranch || (op.Kind == domain.CheckoutBranch && strings.HasPrefix(op.Source, "refs/remotes/"))
 				needsTarget := op.Kind == domain.PullBranch || op.Kind == domain.PushBranch
 				disabled := busy || a.repositoryWrite != "" || a.repositoryRead != nil || repo.Root != s.root || repo.IndexVersion == "" ||
+					worktreeCommandDisabled(s) ||
+					bisectNeedsRange(*op) ||
+					((op.Kind == domain.ApplyStash || op.Kind == domain.DropStash) && len(s.choices) == 0) ||
+					(op.Kind == domain.ResetRevision && op.Mode == "Hard" && !s.acknowledged) ||
 					(len(s.mainlines) > 0 && slices.Index(s.mainlines, s.mainline) <= 0) ||
 					(needsBranch && strings.TrimSpace(op.Branch) == "") || (needsTarget && strings.TrimSpace(op.Target) == "") ||
 					((op.Kind == domain.StartMerge || op.Kind == domain.StartRebase) && (s.mergeSource == chooseMergeSource || s.mergeSource == repo.CurrentBranch ||
@@ -282,13 +346,32 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 }
 
 func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
+	if s.op.Kind == domain.RemoveWorktree && s.management {
+		entry, _ := s.selectedWorktree()
+		a.repositoryOperation = nil
+		a.run(removeWorktree, commandTarget{source: entry.Path})
+		return
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel, s.message = cancel, ""
 	op := s.op
+	if op.Kind == domain.RemoveWorktree {
+		entry, _ := s.selectedWorktree()
+		op.Path = entry.Path
+	}
+	if op.Kind == domain.ApplyStash || op.Kind == domain.DropStash {
+		entry, ok := s.selectedStash()
+		if !ok {
+			cancel()
+			s.cancel = nil
+			return
+		}
+		op.Source, op.Target = entry.OID, entry.Selector
+	}
 	if len(s.mainlines) > 0 {
 		op.Mainline = slices.Index(s.mainlines, s.mainline)
 	}
-	snapshot := a.Model.Active().Repository
+	snapshot := s.snapshot
 	if op.Kind == domain.StartMerge || op.Kind == domain.StartRebase {
 		op.Source = operationRef(snapshot, s.mergeSource)
 	}
@@ -304,7 +387,20 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		sequencePaused := (op.Kind == domain.StartCherryPick || op.Kind == domain.StartRevert || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence) &&
 			refreshErr == nil && repo.Sequencer.Active() && repo.Sequencer != snapshot.Sequencer
 		unchanged := refreshErr == nil && errors.Is(err, domain.ErrRevertUnchanged)
-		if unchanged {
+		stashConflicts := op.Kind == domain.ApplyStash && refreshErr == nil && len(repo.Conflicts) > 0
+		if stashConflicts {
+			message = "Stash applied with conflicts. Original entry retained. Resolve and stage the unmerged files, or explicitly reset to HEAD to discard the applied changes."
+			if err != nil {
+				message += " · " + err.Error()
+			}
+			s.open = false
+		} else if op.Kind >= domain.StartBisect && op.Kind <= domain.ResetBisect && refreshErr == nil && (repo.Bisect.FirstBad != "" || repo.Bisect.Ambiguous) {
+			message = bisectSummary(repo.Bisect)
+			if err != nil {
+				message += " · " + err.Error()
+			}
+			s.open = false
+		} else if unchanged {
 			message = err.Error()
 			s.open = false
 		} else if sequencePaused {
@@ -331,7 +427,10 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 			s.message = message
 		}
 		a.finishRepositoryWrite(s.root, repo, refreshErr, message)
-		if (paused || rebasePaused || sequencePaused) && a.Model.Active().Repository.Root == s.root {
+		if err == nil && refreshErr == nil && op.Kind == domain.RemoveWorktree {
+			a.invalidateRemovedWorktree(op.Path)
+		}
+		if (paused || rebasePaused || sequencePaused || stashConflicts) && a.Model.Active().Repository.Root == s.root {
 			a.run(showCommit, commandTarget{})
 		}
 	})

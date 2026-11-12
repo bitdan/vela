@@ -32,6 +32,13 @@ type Repository struct {
 	Name, CurrentBranch string
 	Root                string
 	Head, IndexVersion  string
+	WorktreeVersion     string
+	StashVersion        string
+	Stashes             []StashEntry
+	GitDir, CommonDir   string
+	WorktreesVersion    string
+	Worktrees           []Worktree
+	Bisect              BisectState
 	HeadMessage         string
 	Project             []File
 	RemoteBranches      map[string]bool
@@ -50,7 +57,7 @@ type Repository struct {
 }
 
 func (r Repository) ResolvingConflicts() bool {
-	return len(r.MergeHeads) != 0 || r.Rebase.Active() || r.Sequencer.Active()
+	return len(r.MergeHeads) != 0 || r.Rebase.Active() || r.Sequencer.Active() || len(r.Conflicts) != 0
 }
 
 func MockRepositories() []Repository {

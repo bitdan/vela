@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -70,6 +71,9 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	createBisectWorktree: "Create Candidate Worktree…",
+	startBisect:          "Start Bisect…", bisectGood: "Mark Good", bisectBad: "Mark Bad", bisectSkip: "Skip Candidate", resetBisect: "End Bisect…", showBisectCandidate: "Show Candidate in Log",
+	dropStash: "Drop Stash…", removeWorktree: "Remove Worktree…", openWorktree: "Open Worktree",
 	selectBranch: "Inspect Branch", selectCommit: "Inspect Commit",
 	showSearch: "Search Everywhere", showSearchActions: "Search Actions", toggleBranches: "Toggle Branches", toggleDetails: "Toggle Commit Details",
 	goToFile: "Go to File", showRecentFiles: "Recent Files", focusProject: "Project Navigation",
@@ -94,6 +98,12 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 		return a.mergeEditorDisabled(id, target)
 	}
 	real := a.Model.Active().Repository.Root != ""
+	if !real {
+		switch id {
+		case dropStash, removeWorktree, openWorktree, startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, showBisectCandidate, createBisectWorktree:
+			return "Open a local Git repository"
+		}
+	}
 	if id == openLocalRepository && (a.ReadRepository == nil || a.PickRepositoryDirectory == nil || a.pickingRepository) {
 		return "Directory picker is unavailable"
 	}
@@ -102,9 +112,24 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 	}
 	if real {
 		switch id {
+		case showBisectCandidate:
+			repo := a.Model.Active().Repository
+			if !repo.Bisect.Active() || !slices.ContainsFunc(repo.History, func(c domain.Commit) bool { return c.Hash == repo.Bisect.Candidate }) {
+				return "Candidate is outside the loaded log. Inspect its OID using Git"
+			}
+			return ""
+		case openWorktree:
+			if a.ReadRepository == nil || a.repositoryWrite != "" {
+				return "Wait for Git or connect the repository reader"
+			}
+			if !slices.ContainsFunc(a.Model.Active().Repository.Worktrees, func(w domain.Worktree) bool { return w.Path == target.source && !w.Bare && !w.Prunable }) {
+				return "Select an available worktree"
+			}
+			return ""
 		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
-			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence:
+			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,
+			newWorktree, showWorktrees, removeWorktree, startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, createBisectWorktree:
 			return a.repositoryOperationDisabled(id, target)
 		case commitMock, previewFileCommit, showIgnored, newScratch:
 			return "Available in a later Git phase"
@@ -192,9 +217,16 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	}
 	if a.Model.Active().Repository.Root != "" {
 		switch id {
+		case showBisectCandidate:
+			a.selectBisectCandidate()
+			return
+		case openWorktree:
+			a.loadRepository(target.source, false)
+			return
 		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
-			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence:
+			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,
+			newWorktree, showWorktrees, removeWorktree, startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, createBisectWorktree:
 			a.openRepositoryOperation(id, target)
 			return
 		case commitRepository, commitAndPush:

@@ -27,6 +27,14 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return err
 	}
 	switch op.Kind {
+	case domain.ResetRevision:
+		return g.reset(ctx, repo, index, op)
+	case domain.SaveStash, domain.ApplyStash, domain.DropStash:
+		return g.stash(ctx, repo, index, op)
+	case domain.CreateWorktree, domain.RemoveWorktree:
+		return g.worktree(ctx, repo, op)
+	case domain.StartBisect, domain.BisectGood, domain.BisectBad, domain.BisectSkip, domain.ResetBisect:
+		return g.bisect(ctx, repo, index, op)
 	case domain.CreateBranch, domain.CheckoutBranch:
 		return g.changeBranch(ctx, repo, index, op)
 	case domain.FetchRemote, domain.PullBranch, domain.PushBranch, domain.UpdateTrackedBranch:
