@@ -49,6 +49,7 @@ func run(layoutPath string) error {
 	var initializer application.RepositoryInitializer = git
 	var cloner application.RepositoryCloner = git
 	var reader application.RepositoryReader = git
+	var logReader application.RepositoryLogReader = git
 	var index application.IndexWriter = git
 	var commits application.CommitWriter = git
 	var operator application.RepositoryOperator = git
@@ -113,6 +114,12 @@ func run(layoutPath string) error {
 			go func() {
 				repo, err := reader.ReadRepository(ctx, directory)
 				mygo.RunOnMain(func() { done(repo, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryLog = func(ctx context.Context, root string, snapshot domain.CommitLogSnapshot, offset, limit int, done func(domain.CommitLogPage, error)) {
+			go func() {
+				page, err := logReader.ReadCommitLog(ctx, root, snapshot, offset, limit)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
 			}()
 		}
 		workspace.ReadRepositoryFile = func(ctx context.Context, root, source string, file domain.File, done func(domain.File, error)) {

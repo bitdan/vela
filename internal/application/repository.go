@@ -6,6 +6,11 @@ import (
 	"vela/internal/domain"
 )
 
+// RepositoryLogReader pages one immutable set of reachable commits.
+type RepositoryLogReader interface {
+	ReadCommitLog(context.Context, string, domain.CommitLogSnapshot, int, int) (domain.CommitLogPage, error)
+}
+
 type RepositoryReader interface {
 	ReadRepository(context.Context, string) (domain.Repository, error)
 	ReadFile(context.Context, string, string, domain.File) (domain.File, error)

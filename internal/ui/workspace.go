@@ -87,6 +87,7 @@ type repoView struct {
 	branchResultIndex                                 int
 	filteredLog                                       []int
 	lastQuery                                         string
+	logError                                          string
 }
 
 type Workspace struct {
@@ -122,6 +123,7 @@ type Workspace struct {
 	InitializeRepository       func(context.Context, string, string, func(string, error))
 	PickRepositoryDirectory    func(func(string, error))
 	ReadRepository             func(context.Context, string, func(domain.Repository, error))
+	ReadRepositoryLog          func(context.Context, string, domain.CommitLogSnapshot, int, int, func(domain.CommitLogPage, error))
 	ReadRepositoryFile         func(context.Context, string, string, domain.File, func(domain.File, error))
 	ReadRepositoryBlame        func(context.Context, string, string, string, func(domain.BlameDocument, error))
 	ReadRepositoryPatch        func(context.Context, domain.Repository, string, string, func(domain.PatchDocument, error))
@@ -132,6 +134,7 @@ type Workspace struct {
 	SaveRepositoryFile         func(context.Context, domain.Repository, domain.File, string, func(domain.Repository, domain.File, error, error))
 	ReadMergeDocument          func(context.Context, domain.Repository, string, func(domain.MergeDocument, error))
 	repositoryRead             *readRequest
+	logRead                    *readRequest
 	repositoryFileRead         *readRequest
 	pickingRepository          bool
 	repositoryWrite            string
@@ -170,15 +173,24 @@ func newRepoView(repo domain.Repository, layout application.Layout) repoView {
 	r.projectIndex, r.shelfIndex = -1, -1
 	r.shelfExpanded = make(map[int]bool)
 	applyLogSettings(r, layout.VersionControl.Log)
-	history := repo.History
 	r.logTopo = repo.Root != ""
 	if repo.Root != "" {
 		r.projectTree = buildProjectTree(repo.Project)
 	}
+	r.rebuildCommitLog(repo)
+	return *r
+}
+
+// rebuildCommitLog updates derived history data without replacing the list's
+// scroll/focus state, selections or editor buffers when another page arrives.
+func (r *repoView) rebuildCommitLog(repo domain.Repository) {
+	history := repo.History
 	r.children = make([][]int, len(history))
 	r.graphRows = buildGraph(history)
 	r.graphWidth = graphWidth
 	r.logFirstParentRows = firstParentRows(history, repo.CurrentBranch)
+	r.logAuthors, r.logRefs, r.logFilePaths = nil, nil, nil
+	r.filteredLog, r.lastQuery = nil, ""
 	paths := make(map[string]bool)
 	authors := make(map[string]bool)
 	refs := make(map[string]bool)
@@ -204,7 +216,6 @@ func newRepoView(repo domain.Repository, layout application.Layout) repoView {
 			r.children[parent] = append(r.children[parent], child)
 		}
 	}
-	return *r
 }
 
 func (a *Workspace) repo() *repoView { return &a.repos[a.Model.Index] }

@@ -142,6 +142,7 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	stopRead(&a.logRead)
 	if a.repositoryWrite != "" {
 		a.status = "Wait for the Git operation to finish"
 		return false

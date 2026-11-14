@@ -37,6 +37,7 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	stopRead(&a.logRead)
 	a.stopSourceDecision()
 	a.stopPatchExports()
 	a.closeFileHistoryDialog()
@@ -84,6 +85,9 @@ func (a *Workspace) loadRepository(directory string, refresh bool) {
 }
 
 func (a *Workspace) installRepository(repo domain.Repository) int {
+	if a.Model.Active().Repository.Root == repo.Root {
+		stopRead(&a.logRead)
+	}
 	index := slices.IndexFunc(a.Model.Sessions, func(s application.Session) bool { return s.Repository.Root == repo.Root })
 	view := newRepoView(repo, a.Layout)
 	session := application.Session{Repository: repo, Branch: repo.CurrentBranch}

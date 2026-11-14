@@ -55,6 +55,8 @@ type Repository struct {
 	Remotes                 []Remote
 	Working, Staged         []File
 	History                 []Commit
+	LogSnapshot             CommitLogSnapshot
+	LogHasMore              bool
 	Shelf                   []Shelf
 }
 

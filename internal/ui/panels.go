@@ -344,6 +344,9 @@ func (a *Workspace) commitLog(c *ui.Context, p tokens) {
 	history := s.Repository.History
 	ui.Column(c).Fill().Label("Commit Log / Graph").Children(func() {
 		a.logFilters(c, p)
+		if s.Repository.Root != "" {
+			defer a.commitLogFooter(c, p)
+		}
 		switch s.HistoryState {
 		case application.HistoryLoading:
 			ui.Text(c, "Loading mock history…").Padding(inset).TextColor(p.theme.TextMuted)

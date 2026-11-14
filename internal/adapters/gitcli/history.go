@@ -12,8 +12,6 @@ import (
 func parseHistory(value string, refs map[string][]string) ([]domain.Commit, error) {
 	rows := nulFields(value)
 	var commits []domain.Commit
-	var parents [][]string
-	indices := make(map[string]int)
 	for i := 0; i < len(rows); {
 		if rows[i] != "" || i+8 >= len(rows) {
 			return nil, errors.New("invalid Git history header")
@@ -48,48 +46,8 @@ func parseHistory(value string, refs map[string][]string) ([]domain.Commit, erro
 			}
 			commit.Files = append(commit.Files, file)
 		}
-		indices[hash] = len(commits)
 		commits = append(commits, commit)
-		parents = append(parents, parentHashes)
 	}
-	for i, hashes := range parents {
-		for _, hash := range hashes {
-			if parent, ok := indices[hash]; ok && parent > i {
-				commits[i].Parents = append(commits[i].Parents, parent)
-			}
-		}
-	}
-	assignLanes(commits)
+	domain.ReconnectCommitLog(commits)
 	return commits, nil
-}
-
-func assignLanes(commits []domain.Commit) {
-	// Keep a lane reserved until its next expected commit is reached.
-	var lanes []int
-	pending := make(map[int]int)
-	for index := range commits {
-		lane, found := pending[index]
-		if !found {
-			lane = reserveLane(&lanes, index)
-		}
-		commits[index].Lane = lane
-		lanes[lane] = -1
-		delete(pending, index)
-		for _, parent := range commits[index].Parents {
-			if _, found := pending[parent]; !found {
-				pending[parent] = reserveLane(&lanes, parent)
-			}
-		}
-	}
-}
-
-func reserveLane(lanes *[]int, target int) int {
-	for i, reserved := range *lanes {
-		if reserved == -1 {
-			(*lanes)[i] = target
-			return i
-		}
-	}
-	*lanes = append(*lanes, target)
-	return len(*lanes) - 1
 }

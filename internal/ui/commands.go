@@ -74,6 +74,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	loadMoreCommits: "Load More Commits", cancelLogLoading: "Cancel Log Loading",
 	saveCloseSource: "Save and Close Source", discardCloseSource: "Discard and Close Source", confirmReloadSource: "Reload Source File",
 	savePatchFile:       "Save Patch File",
 	loadMoreFileHistory: "Load More File History", closeFileHistory: "Close File History", openFileHistoryRevision: "Open Historical Version", openFileHistoryDiff: "Show Historical Diff",
@@ -101,6 +102,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if id == loadMoreCommits || id == cancelLogLoading {
+		return a.commitLogDisabled(id)
+	}
 	if id == saveCloseSource || id == discardCloseSource || id == confirmReloadSource {
 		return a.sourceDecisionDisabled(id)
 	}
@@ -274,6 +278,12 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	switch id {
 	case saveCloseSource, discardCloseSource, confirmReloadSource:
 		a.runSourceDecision(id)
+		return
+	case loadMoreCommits:
+		a.loadMoreCommits()
+		return
+	case cancelLogLoading:
+		stopRead(&a.logRead)
 		return
 	case reloadProjectFile:
 		a.requestSourceReload(target)
@@ -540,6 +550,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case switchRepo:
 		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
 	case selectRepo:
+		stopRead(&a.logRead)
 		a.stopSourceDecision()
 		a.stopPatchExports()
 		a.closeFileHistoryDialog()
