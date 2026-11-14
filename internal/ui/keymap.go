@@ -65,6 +65,9 @@ func (a *Workspace) runWorkspaceShortcut(id commandID) {
 }
 
 func (a *Workspace) dispatchWorkspaceShortcuts(c *ui.Context) {
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF) {
+		a.run(findInProject, commandTarget{})
+	}
 	for _, binding := range application.WorkspaceShortcuts() {
 		id := commandID(binding.Command)
 		if a.Model.Active().Repository.Root == "" && (id == push || id == updateProject || id == newBranch) {

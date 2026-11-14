@@ -119,6 +119,8 @@ type Workspace struct {
 	patchCopyRead              *readRequest
 	sourceDecision             *sourceFileDecision
 	fileTypeDialog             *fileTypeDialog
+	projectSearch              *projectSearchDialog
+	SearchProjectFiles         func(context.Context, application.ProjectSearchInput, func(application.ProjectSearchResult, error))
 	sourceRefreshes            map[string]*readRequest
 	CloneRepository            func(context.Context, string, string, func(string, error))
 	repositoryNavigation       uint64
@@ -317,6 +319,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.fileTypeDialog != nil {
 		a.fileTypeView(c, p)
+	}
+	if a.projectSearch != nil {
+		a.projectSearchView(c, p)
 	}
 	if a.indexConfirmation != nil {
 		a.confirmIndexChange(c)

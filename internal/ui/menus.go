@@ -130,7 +130,7 @@ var extraCommands = map[commandID]string{
 var deferredCommands = map[commandID]string{
 	checkoutRebase: "Checkout and Rebase", checkoutUpdate: "Checkout and Update",
 	newProjectFile: "File…", newProjectDirectory: "Directory…", cutProjectFile: "Cut", copyProjectFile: "Copy",
-	pasteProjectFile: "Paste", findInProject: "Find in Files…", replaceInProject: "Replace in Files…", reloadProjectFile: "Reload from Disk",
+	pasteProjectFile: "Paste", replaceInProject: "Replace in Files…", reloadProjectFile: "Reload from Disk",
 	shelveSilently: "Shelve Silently",
 	newTabWindow:   "Open Tab in New Window",
 	configureTabs:  "Configure Editor Tabs…",

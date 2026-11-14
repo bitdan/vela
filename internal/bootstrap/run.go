@@ -60,6 +60,7 @@ func run(layoutPath string) error {
 	var fileHistoryReader application.RepositoryFileHistoryReader = git
 	var patchExporter application.RepositoryPatchExporter = git
 	var patchFiles application.PatchFileWriter = adapters.PatchFiles{}
+	var projectSearch application.ProjectSearcher = adapters.ProjectFiles{}
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -126,6 +127,12 @@ func run(layoutPath string) error {
 			go func() {
 				file, err := reader.ReadFile(ctx, root, source, file)
 				mygo.RunOnMain(func() { done(file, err); window.Invalidate() })
+			}()
+		}
+		workspace.SearchProjectFiles = func(ctx context.Context, input application.ProjectSearchInput, done func(application.ProjectSearchResult, error)) {
+			go func() {
+				result, err := projectSearch.SearchProject(ctx, input)
+				mygo.RunOnMain(func() { done(result, err); window.Invalidate() })
 			}()
 		}
 		workspace.ReadMergeDocument = func(ctx context.Context, repo domain.Repository, path string, done func(domain.MergeDocument, error)) {

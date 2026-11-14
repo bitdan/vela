@@ -76,6 +76,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	findInProject: "Find in Files…", startProjectSearch: "Find Project Text", cancelProjectSearch: "Cancel Project Search", openProjectSearchResult: "Open Search Result", closeProjectSearch: "Close Find in Files",
 	toggleBookmark: "Toggle Line Bookmark", nextBookmark: "Next Bookmark", previousBookmark: "Previous Bookmark", clearBookmarks: "Clear Bookmarks", goBookmark: "Go to Bookmark",
 	fileType: "Override File Type", applyFileType: "Apply File Type", cancelFileType: "Cancel File Type",
 	loadMoreCommits: "Load More Commits", cancelLogLoading: "Cancel Log Loading",
@@ -106,6 +107,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isProjectSearchCommand(id) {
+		return a.projectSearchDisabled(id)
+	}
 	if isEditorMetadataCommand(id) {
 		return a.editorMetadataDisabled(id, target)
 	}
@@ -280,6 +284,10 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isProjectSearchCommand(id) {
+		a.runProjectSearch(id)
 		return
 	}
 	if isEditorMetadataCommand(id) {
@@ -561,6 +569,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case switchRepo:
 		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
 	case selectRepo:
+		a.closeProjectSearchDialog()
 		a.fileTypeDialog = nil
 		stopRead(&a.logRead)
 		a.stopSourceDecision()

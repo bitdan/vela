@@ -37,6 +37,7 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	a.closeProjectSearchDialog()
 	a.fileTypeDialog = nil
 	stopRead(&a.logRead)
 	a.stopSourceDecision()

@@ -92,7 +92,7 @@ func (a *Workspace) observeSearchShortcut(ev ui.InputEvent) {
 }
 
 func (a *Workspace) openSearch(category searchCategory) {
-	if a.settingsOpen || a.confirmExit || a.search.open {
+	if a.settingsOpen || a.confirmExit || a.search.open || a.projectSearch != nil {
 		return
 	}
 	a.search = searchState{open: true, category: category, previousEditor: a.focusedEditor}
@@ -194,7 +194,7 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 			closeTab, openProject, openShelf, toggleConsole, showLog, refreshLog, showSettings, showLoading, showError, retryHistory,
 			goToFile, showRecentFiles, focusProject, manageRemotes, openLocalRepository, newBranch, fetch, pull, push, updateProject,
 			mergeBranch, rebaseBranch, cherryPick, revertCommit, continueMerge, abortMerge, continueRebase, skipRebase, abortRebase,
-			continueSequence, skipSequence, abortSequence, toggleBookmark, nextBookmark, previousBookmark, clearBookmarks, fileType} {
+			continueSequence, skipSequence, abortSequence, toggleBookmark, nextBookmark, previousBookmark, clearBookmarks, fileType, findInProject} {
 			label := sequenceActionLabel(a.Model.Active().Repository, id)
 			target := commandTarget{}
 			if isEditorMetadataCommand(id) {
@@ -331,6 +331,8 @@ func (a *Workspace) searchDialog(c *ui.Context, p tokens) {
 				placeholder = "Filter recent files"
 			} else if category == searchFiles {
 				placeholder = "Search by file name or path"
+			} else if category == searchText {
+				placeholder = "Search loaded text · use Find in Files for the full project"
 			}
 			ui.Row(c).FillWidth().Padding(gap, inset).Children(func() {
 				input = ui.TextInput(c, &s.query).Placeholder(placeholder).
