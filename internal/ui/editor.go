@@ -75,6 +75,7 @@ func (a *Workspace) openCode(source string, f domain.File) {
 			current.code.Select(cursor, cursor)
 			current.code.SetScrollY(scroll)
 			current.file = f
+			applyEditorFileType(current)
 			if split := a.repo().split; split != nil && split.code != nil && split.code.Buffer == buffer {
 				split.file = f
 				split.code.ReadOnly = current.code.ReadOnly
@@ -90,7 +91,8 @@ func (a *Workspace) openCode(source string, f domain.File) {
 	r := a.repo()
 	r.active = len(r.tabs)
 	r.tabs = append(r.tabs, tab{id: id, title: path.Base(f.Path), path: f.Path, source: source, context: "Editor · " + source, file: f,
-		code: &editor.State{Buffer: buffer, ReadOnly: a.sourceReadOnly(source, f)}})
+		document: &editorDocument{},
+		code:     &editor.State{Buffer: buffer, ReadOnly: a.sourceReadOnly(source, f)}})
 	if strings.HasPrefix(source, "blame:") {
 		r.tabs[r.active].title = "Blame · " + path.Base(f.Path)
 		r.tabs[r.active].context = "Blame · " + strings.TrimPrefix(source, "blame:")
@@ -142,6 +144,7 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	a.fileTypeDialog = nil
 	stopRead(&a.logRead)
 	if a.repositoryWrite != "" {
 		a.status = "Wait for the Git operation to finish"
@@ -306,6 +309,7 @@ func (a *Workspace) emptyEditor(c *ui.Context, p tokens) {
 func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 	heading(c, p, entry.path, entry.context)
 	if entry.code != nil {
+		a.prepareEditorMetadata(&entry, p)
 		if !entry.code.ReadOnly && a.Model.Active().Repository.Root != "" {
 			ui.Row(c).FillWidth().Height(headerHeight).Padding(0, gap).Gap(gap).AlignItems(ui.Center).Children(func() {
 				reason := a.disabledFor(saveSourceFile, commandTarget{tabID: entry.id})
@@ -315,6 +319,10 @@ func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 		}
 		entry.code.Font, entry.code.TabSize = a.editorPreferences()
 		entry.code.ContextMenu = func(m *ui.Menu) {
+			target := commandTarget{tabID: entry.id, editorState: entry.code}
+			a.editorBookmarkMenu(m, target)
+			a.menu(m, fileType, target)
+			m.Separator()
 			if a.Model.Active().Repository.Root != "" {
 				a.menu(m, saveSourceFile, commandTarget{tabID: entry.id})
 				a.menu(m, reloadProjectFile, commandTarget{tabID: entry.id})
@@ -331,6 +339,16 @@ func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 		}
 		if view.Shortcut(ui.Cmd, ui.KeyS) {
 			a.run(saveSourceFile, commandTarget{tabID: entry.id})
+		}
+		target := commandTarget{tabID: entry.id, editorState: entry.code}
+		if view.Shortcut(0, ui.KeyF11) {
+			a.run(toggleBookmark, target)
+		}
+		if view.Shortcut(0, ui.KeyF2) {
+			a.run(nextBookmark, target)
+		}
+		if view.Shortcut(ui.Shift, ui.KeyF2) {
+			a.run(previousBookmark, target)
 		}
 	} else {
 		entry.diff.Font, entry.diff.TabSize = a.editorPreferences()

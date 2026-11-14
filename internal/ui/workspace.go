@@ -26,6 +26,7 @@ type tab struct {
 	diff                             *editor.DiffState
 	file                             domain.File
 	pinned                           bool
+	document                         *editorDocument
 }
 
 type repoView struct {
@@ -117,6 +118,7 @@ type Workspace struct {
 	patchExport                *patchExportDialog
 	patchCopyRead              *readRequest
 	sourceDecision             *sourceFileDecision
+	fileTypeDialog             *fileTypeDialog
 	sourceRefreshes            map[string]*readRequest
 	CloneRepository            func(context.Context, string, string, func(string, error))
 	repositoryNavigation       uint64
@@ -312,6 +314,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.sourceDecision != nil {
 		a.sourceDecisionView(c, p)
+	}
+	if a.fileTypeDialog != nil {
+		a.fileTypeView(c, p)
 	}
 	if a.indexConfirmation != nil {
 		a.confirmIndexChange(c)

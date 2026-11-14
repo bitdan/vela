@@ -28,5 +28,7 @@ type TabSnapshot struct {
 	Code, Pinned bool
 	Cursor       int
 	ScrollY      float64
-	Unified      bool `json:",omitempty"`
+	Unified      bool   `json:",omitempty"`
+	Bookmarks    []int  `json:",omitempty"`
+	FileType     string `json:",omitempty"`
 }

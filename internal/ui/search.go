@@ -194,9 +194,13 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 			closeTab, openProject, openShelf, toggleConsole, showLog, refreshLog, showSettings, showLoading, showError, retryHistory,
 			goToFile, showRecentFiles, focusProject, manageRemotes, openLocalRepository, newBranch, fetch, pull, push, updateProject,
 			mergeBranch, rebaseBranch, cherryPick, revertCommit, continueMerge, abortMerge, continueRebase, skipRebase, abortRebase,
-			continueSequence, skipSequence, abortSequence} {
+			continueSequence, skipSequence, abortSequence, toggleBookmark, nextBookmark, previousBookmark, clearBookmarks, fileType} {
 			label := sequenceActionLabel(a.Model.Active().Repository, id)
-			if match(label) && a.disabledFor(id, commandTarget{}) == "" {
+			target := commandTarget{}
+			if isEditorMetadataCommand(id) {
+				target.editorState = a.search.previousEditor
+			}
+			if match(label) && a.disabledFor(id, target) == "" {
 				results = append(results, searchResult{title: label, detail: "Action", kind: searchActions, action: id})
 			}
 		}
@@ -243,7 +247,11 @@ func searchDeclarations(results []searchResult, doc searchDocument, category sea
 func (a *Workspace) chooseSearchResult(result searchResult, split bool) {
 	a.search.open = false
 	if result.kind == searchActions {
-		a.run(result.action, commandTarget{})
+		target := commandTarget{}
+		if isEditorMetadataCommand(result.action) {
+			target.editorState = a.search.previousEditor
+		}
+		a.run(result.action, target)
 		return
 	}
 	target := commandTarget{source: "project", file: result.document.file, tabID: result.document.tabID}

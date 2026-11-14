@@ -34,6 +34,10 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 				saved.ChangeKind, saved.OldPath = tab.file.Status, tab.file.OldPath
 			}
 			if tab.code != nil {
+				if tab.document != nil {
+					saved.Bookmarks = normalizeBookmarks(tab.document.bookmarks, tab.code.Buffer.LineCount())
+					saved.FileType = tab.document.fileType
+				}
 				saved.Cursor = tab.code.Cursor()
 				saved.ScrollY = tab.code.ScrollY()
 			} else {
@@ -46,6 +50,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 			if !slices.ContainsFunc(repo.Tabs, func(t application.TabSnapshot) bool {
 				return t.Source == pending.Source && t.Path == pending.Path && t.Code == pending.Code
 			}) {
+				pending.Bookmarks = slices.Clone(pending.Bookmarks)
 				repo.Tabs = append(repo.Tabs, pending)
 			}
 		}
@@ -59,7 +64,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 	}
 	for _, saved := range a.savedRepositories {
 		if !slices.ContainsFunc(out.Repositories, func(s application.RepositorySnapshot) bool { return s.Root == saved.Root }) {
-			out.Repositories = append(out.Repositories, saved)
+			out.Repositories = append(out.Repositories, cloneRepositorySnapshot(saved))
 		}
 	}
 	return out
@@ -70,7 +75,7 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 	a.savedRepositories = nil
 	for _, saved := range snapshot.Repositories {
 		if saved.Root != "" && !slices.ContainsFunc(a.savedRepositories, func(s application.RepositorySnapshot) bool { return s.Root == saved.Root }) {
-			a.savedRepositories = append(a.savedRepositories, saved)
+			a.savedRepositories = append(a.savedRepositories, cloneRepositorySnapshot(saved))
 		}
 	}
 	active := a.Model.Index
@@ -95,6 +100,7 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 			}
 			if entry.Code {
 				a.openCode(entry.Source, file)
+				a.restoreEditorMetadata(&r.tabs[r.active], entry)
 				code := r.tabs[r.active].code
 				cursor := max(0, min(entry.Cursor, len(file.New)))
 				code.Select(cursor, cursor)
@@ -111,6 +117,16 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 		a.activate(saved.ActiveTab)
 	}
 	a.Model.Switch(active)
+}
+
+func cloneRepositorySnapshot(saved application.RepositorySnapshot) application.RepositorySnapshot {
+	saved.Tabs = slices.Clone(saved.Tabs)
+	for i := range saved.Tabs {
+		saved.Tabs[i].Bookmarks = slices.Clone(saved.Tabs[i].Bookmarks)
+	}
+	saved.WorkingSelection = slices.Clone(saved.WorkingSelection)
+	saved.StagedSelection = slices.Clone(saved.StagedSelection)
+	return saved
 }
 
 func matchFile(files []domain.File, path string) (domain.File, bool) {

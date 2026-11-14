@@ -133,7 +133,7 @@ var deferredCommands = map[commandID]string{
 	pasteProjectFile: "Paste", findInProject: "Find in Files…", replaceInProject: "Replace in Files…", reloadProjectFile: "Reload from Disk",
 	shelveSilently: "Shelve Silently",
 	newTabWindow:   "Open Tab in New Window",
-	configureTabs:  "Configure Editor Tabs…", tabBookmarks: "Bookmarks", fileType: "Override File Type",
+	configureTabs:  "Configure Editor Tabs…",
 	openInExplorer: "Open In", localHistory: "Local History", renameFile: "Rename File…",
 	updateBranch: "Update", checkoutBranch: "Checkout", newBranch: "New Branch…", newWorktree: "New Worktree…",
 	renameBranch: "Rename…", rollback: "Rollback…", shelve: "Shelve Changes…",
@@ -183,6 +183,12 @@ func (a *Workspace) menuNamed(m *ui.Menu, id commandID, target commandTarget, la
 		}
 	} else {
 		switch id {
+		case toggleBookmark:
+			item.Shortcut(0, ui.KeyF11)
+		case nextBookmark:
+			item.Shortcut(0, ui.KeyF2)
+		case previousBookmark:
+			item.Shortcut(ui.Shift, ui.KeyF2)
 		case unshelve:
 			item.Shortcut(ui.Ctrl|ui.Shift, ui.KeyU)
 		case deleteShelf:

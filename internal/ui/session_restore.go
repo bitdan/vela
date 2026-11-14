@@ -134,6 +134,7 @@ func (a *Workspace) restoreLoadedRepository() {
 			} else {
 				if entry.Code {
 					a.openCode(entry.Source, file)
+					a.restoreEditorMetadata(&r.tabs[r.active], entry)
 				} else {
 					a.openDiff(entry.Source, file)
 				}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 	"vela/internal/application"
 	"vela/internal/domain"
 )
@@ -65,15 +66,18 @@ const (
 )
 
 type commandTarget struct {
-	remote  domain.Remote
-	index   int
-	tabID   string
-	preview bool
-	source  string
-	file    domain.File
+	remote      domain.Remote
+	index       int
+	tabID       string
+	preview     bool
+	source      string
+	file        domain.File
+	editorState *editor.State
 }
 
 var commands = map[commandID]string{
+	toggleBookmark: "Toggle Line Bookmark", nextBookmark: "Next Bookmark", previousBookmark: "Previous Bookmark", clearBookmarks: "Clear Bookmarks", goBookmark: "Go to Bookmark",
+	fileType: "Override File Type", applyFileType: "Apply File Type", cancelFileType: "Cancel File Type",
 	loadMoreCommits: "Load More Commits", cancelLogLoading: "Cancel Log Loading",
 	saveCloseSource: "Save and Close Source", discardCloseSource: "Discard and Close Source", confirmReloadSource: "Reload Source File",
 	savePatchFile:       "Save Patch File",
@@ -102,6 +106,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isEditorMetadataCommand(id) {
+		return a.editorMetadataDisabled(id, target)
+	}
 	if id == loadMoreCommits || id == cancelLogLoading {
 		return a.commitLogDisabled(id)
 	}
@@ -273,6 +280,10 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isEditorMetadataCommand(id) {
+		a.runEditorMetadata(id, target)
 		return
 	}
 	switch id {
@@ -550,6 +561,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case switchRepo:
 		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
 	case selectRepo:
+		a.fileTypeDialog = nil
 		stopRead(&a.logRead)
 		a.stopSourceDecision()
 		a.stopPatchExports()
