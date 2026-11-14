@@ -20,6 +20,9 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 		repo := application.RepositorySnapshot{Name: s.Repository.Name, Root: s.Repository.Root,
 			Message: s.Message, Working: s.Working, Staged: s.Staged, Branch: s.Branch, Historical: s.Historical}
 		repo.WorkingSelection = slices.Sorted(r.workingChosen.All())
+		lists := application.CloneChangelists(s.Changelists)
+		lists.Normalize(s.Repository)
+		repo.Changelists = &lists
 		repo.StagedSelection = slices.Sorted(r.stagedChosen.All())
 		if s.Commit >= 0 && s.Commit < len(s.Repository.History) {
 			repo.Commit = s.Repository.History[s.Commit].Hash
@@ -120,6 +123,10 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 }
 
 func cloneRepositorySnapshot(saved application.RepositorySnapshot) application.RepositorySnapshot {
+	if saved.Changelists != nil {
+		lists := application.CloneChangelists(*saved.Changelists)
+		saved.Changelists = &lists
+	}
 	saved.Tabs = slices.Clone(saved.Tabs)
 	for i := range saved.Tabs {
 		saved.Tabs[i].Bookmarks = slices.Clone(saved.Tabs[i].Bookmarks)
@@ -140,6 +147,15 @@ func matchFile(files []domain.File, path string) (domain.File, bool) {
 
 func findFile(repo domain.Repository, source, path string) (domain.File, bool) {
 	source = strings.TrimPrefix(source, "revision:")
+	if strings.HasPrefix(source, "shelf:") || strings.HasPrefix(source, "shelf-index:") {
+		id := strings.TrimPrefix(strings.TrimPrefix(source, "shelf-index:"), "shelf:")
+		for _, entry := range repo.Shelf {
+			if entry.ID == id {
+				return matchFile(entry.Files, path)
+			}
+		}
+		return domain.File{}, false
+	}
 	if source == "project" {
 		return matchFile(projectFiles(repo), path)
 	}

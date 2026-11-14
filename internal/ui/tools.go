@@ -328,14 +328,21 @@ func (a *Workspace) shelfPanel(c *ui.Context, p tokens) {
 		}
 		if row.file != nil {
 			t := commandTarget{source: "shelf", file: *row.file, index: row.entry}
+			t.shelfID, t.shelfOID = shelves[row.entry].ID, shelves[row.entry].OID
 			a.menuGroup(m, t, previewDiff, openDiff, compareLocal, copyPath)
+			if a.Model.Active().Repository.Root != "" {
+				a.menu(m, previewShelfIndex, t)
+			}
 			m.Separator()
-			a.menu(m, unshelve, commandTarget{source: "shelf-file", file: *row.file, index: row.entry})
+			partial := t
+			partial.source = "shelf-file"
+			a.menu(m, unshelve, partial)
 			a.menu(m, createPatch, t)
 			return
 		}
 		entry := shelves[row.entry]
 		t := commandTarget{source: "shelf", index: row.entry}
+		t.shelfID, t.shelfOID = entry.ID, entry.OID
 		if len(entry.Files) > 0 {
 			t.file = entry.Files[0]
 		}
@@ -383,6 +390,7 @@ func (a *Workspace) shelfPanel(c *ui.Context, p tokens) {
 			return
 		}
 		t := commandTarget{source: "shelf", index: row.entry}
+		t.shelfID, t.shelfOID = shelves[row.entry].ID, shelves[row.entry].OID
 		if row.file != nil {
 			t.source, t.file = "shelf-file", *row.file
 		}
@@ -397,13 +405,13 @@ func (a *Workspace) shelfPanel(c *ui.Context, p tokens) {
 		}
 		if list.Submitted() {
 			if row.file != nil {
-				a.run(previewDiff, commandTarget{source: "shelf", file: *row.file})
+				a.run(previewDiff, t)
 			} else if entry := shelves[row.entry]; !entry.Deleted && len(entry.Files) > 0 {
 				r.shelfExpanded[row.entry] = !r.shelfExpanded[row.entry]
 			}
 		}
 		if row.file != nil && r.shelf.Shortcut(c, ui.Cmd, ui.KeyD) {
-			a.run(previewDiff, commandTarget{source: "shelf", file: *row.file})
+			a.run(previewDiff, t)
 		}
 	}
 }

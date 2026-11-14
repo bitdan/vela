@@ -30,6 +30,7 @@ type tab struct {
 }
 
 type repoView struct {
+	changelistFilter                                  string
 	pendingTabs                                       []application.TabSnapshot
 	pendingActiveTab                                  string
 	tabs                                              []tab
@@ -120,6 +121,7 @@ type Workspace struct {
 	sourceDecision             *sourceFileDecision
 	fileTypeDialog             *fileTypeDialog
 	projectSearch              *projectSearchDialog
+	changelistDialog           *changelistDialog
 	SearchProjectFiles         func(context.Context, application.ProjectSearchInput, func(application.ProjectSearchResult, error))
 	sourceRefreshes            map[string]*readRequest
 	CloneRepository            func(context.Context, string, string, func(string, error))
@@ -322,6 +324,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.projectSearch != nil {
 		a.projectSearchView(c, p)
+	}
+	if a.changelistDialog != nil {
+		a.changelistView(c, p)
 	}
 	if a.indexConfirmation != nil {
 		a.confirmIndexChange(c)

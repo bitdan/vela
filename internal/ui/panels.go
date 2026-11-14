@@ -17,6 +17,7 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 	ui.Column(c).Fill().Background(p.panel).Children(func() {
 		a.commitToolbar(c, p)
 		divider(c, p)
+		a.changelistControls(c, p)
 		if s.Repository.ResolvingConflicts() {
 			a.mergeControls(c, p)
 		}
@@ -24,6 +25,9 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 			a.bisectControls(c, p)
 		}
 		working := s.Repository.Working
+		if r.changelistFilter != "" {
+			working = slices.DeleteFunc(slices.Clone(working), func(f domain.File) bool { return s.Changelists.Owner(f.Path) != r.changelistFilter })
+		}
 		if r.showIgnored {
 			working = appendIgnored(working)
 		}
@@ -48,7 +52,11 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 	outline *folderOutline, index *int, selected *string, chosen *ui.Selection[string]) {
 	working := source == "working" || source == "staged"
 	if working {
-		heading(c, p, title, fileCount(len(files)))
+		detail := fileCount(len(files))
+		if source == "staged" && len(a.Model.Active().Changelists.Lists) > 1 {
+			detail += " · all lists"
+		}
+		heading(c, p, title, detail)
 	}
 	r := a.repo()
 	groupMode := r.commitGroup
@@ -156,6 +164,15 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 		}
 		if source == "working" && state.Shortcut(c, ui.Ctrl|ui.Alt, ui.KeyA) {
 			a.run(stageChanges, target)
+		}
+		if working && state.Shortcut(c, ui.Alt|ui.Shift, ui.KeyM) {
+			a.run(moveChangelist, target)
+		}
+		if working && state.Shortcut(c, 0, ui.KeyF2) {
+			a.run(editChangelist, target)
+		}
+		if working && state.Shortcut(c, ui.Ctrl|ui.Shift, ui.KeyH) {
+			a.run(shelve, target)
 		}
 		if working && state.Shortcut(c, ui.Ctrl|ui.Alt, ui.KeyP) {
 			a.run(groupDirectory, commandTarget{})

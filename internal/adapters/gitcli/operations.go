@@ -27,6 +27,8 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return err
 	}
 	switch op.Kind {
+	case domain.SaveShelf, domain.ApplyShelf, domain.RenameShelf, domain.DeleteShelf, domain.RestoreShelf, domain.PurgeShelf:
+		return g.shelfOperation(ctx, repo, index, op)
 	case domain.StageHunk, domain.UnstageHunk, domain.DiscardHunk:
 		return g.applyHunk(ctx, repo, op)
 	case domain.RenameBranch, domain.DeleteBranch, domain.CreateTag:

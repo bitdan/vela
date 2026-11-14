@@ -62,6 +62,10 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 	if err != nil {
 		return repo, err
 	}
+	repo.Shelf, err = g.readShelves(ctx, repo)
+	if err != nil {
+		return repo, err
+	}
 	repo.WorktreeVersion, err = g.worktreeVersion(ctx, repo.Root)
 	if err != nil {
 		return repo, err

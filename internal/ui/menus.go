@@ -146,9 +146,8 @@ var deferredCommands = map[commandID]string{
 	cherryPickChanges: "Cherry-Pick Selected Changes", extractChanges: "Extract Selected Changes to Separate Commit…",
 	dropChanges: "Drop Selected Changes", getRevision: "Get from Revision",
 
-	addIgnore:      "Add to .gitignore",
-	moveChangelist: "Move to Another Changelist…", newChangelist: "New Changelist…", editChangelist: "Edit Changelist…",
-	addToVCS: "Add to VCS", deleteFile: "Delete…", compareRevision: "Compare with Revision…",
+	addIgnore: "Add to .gitignore",
+	addToVCS:  "Add to VCS", deleteFile: "Delete…", compareRevision: "Compare with Revision…",
 	compareBranch: "Compare with Branch or Tag…", historySelection: "Show History for Selection…",
 	mergeBranch: "Merge…", rebaseBranch: "Rebase…", stashChanges: "Stash Changes…", unstashChanges: "Unstash Changes…",
 	cloneRepo: "Clone…", deleteBranch: "Delete Branch…",
@@ -399,6 +398,9 @@ func (a *Workspace) shelfMenu(m *ui.Menu, t commandTarget) {
 	a.menuGroup(m, t, createPatch, copyPatch, importPatch)
 	m.Separator()
 	a.menuGroup(m, t, renameShelf, deleteShelf)
+	if a.Model.Active().Repository.Root != "" {
+		a.menu(m, purgeShelf, t)
+	}
 }
 
 func (a *Workspace) branchMenu(m *ui.Menu, name string) {

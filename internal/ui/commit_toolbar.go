@@ -98,6 +98,7 @@ func (a *Workspace) commitToolbar(c *ui.Context, p tokens) {
 			}
 		}
 		commitIcon(c, viewChangeOptions, "View Options").Tooltip("View Options").Menu(func(m *ui.Menu) {
+			m.Submenu("Changelists", a.changelistMenu)
 			m.Item("Group By").Disabled(true)
 			for _, id := range []commandID{groupDirectory, groupRepository, groupModule} {
 				item := m.Item(commandLabel(id)).ID(string(id)).Radio(r.commitGroup == id || (r.commitGroup == "" && id == groupRepository))

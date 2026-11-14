@@ -66,16 +66,19 @@ const (
 )
 
 type commandTarget struct {
-	remote      domain.Remote
-	index       int
-	tabID       string
-	preview     bool
-	source      string
-	file        domain.File
-	editorState *editor.State
+	shelfID, shelfOID string
+	remote            domain.Remote
+	index             int
+	tabID             string
+	preview           bool
+	source            string
+	file              domain.File
+	editorState       *editor.State
 }
 
 var commands = map[commandID]string{
+	purgeShelf: "Delete Shelf Permanently…", previewShelfIndex: "Show Shelved Index Diff",
+	newChangelist: "New Changelist…", editChangelist: "Edit Changelist…", moveChangelist: "Move to Another Changelist…", setActiveChangelist: "Set Active Changelist", removeChangelist: "Remove Changelist…", applyChangelist: "Apply Changelist", cancelChangelist: "Cancel Changelist", filterChangelist: "Filter Working Changelist",
 	findInProject: "Find in Files…", startProjectSearch: "Find Project Text", cancelProjectSearch: "Cancel Project Search", openProjectSearchResult: "Open Search Result", closeProjectSearch: "Close Find in Files",
 	toggleBookmark: "Toggle Line Bookmark", nextBookmark: "Next Bookmark", previousBookmark: "Previous Bookmark", clearBookmarks: "Clear Bookmarks", goBookmark: "Go to Bookmark",
 	fileType: "Override File Type", applyFileType: "Apply File Type", cancelFileType: "Cancel File Type",
@@ -107,6 +110,12 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if a.Model.Active().Repository.Root != "" && isRealShelfCommand(id) {
+		return a.realShelfDisabled(id, target)
+	}
+	if isChangelistCommand(id) {
+		return a.changelistDisabled(id, target)
+	}
 	if isProjectSearchCommand(id) {
 		return a.projectSearchDisabled(id)
 	}
@@ -284,6 +293,14 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if a.Model.Active().Repository.Root != "" && isRealShelfCommand(id) {
+		a.runRealShelf(id, target)
+		return
+	}
+	if isChangelistCommand(id) {
+		a.runChangelist(id, target)
 		return
 	}
 	if isProjectSearchCommand(id) {
@@ -569,6 +586,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case switchRepo:
 		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
 	case selectRepo:
+		a.changelistDialog = nil
 		a.closeProjectSearchDialog()
 		a.fileTypeDialog = nil
 		stopRead(&a.logRead)

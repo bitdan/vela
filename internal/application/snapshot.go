@@ -8,7 +8,8 @@ type WorkspaceSnapshot struct {
 }
 
 type RepositorySnapshot struct {
-	WorkingSelection, StagedSelection []string `json:",omitempty"`
+	Changelists                       *ChangelistState `json:",omitempty"`
+	WorkingSelection, StagedSelection []string         `json:",omitempty"`
 	Name                              string
 	Root                              string `json:",omitempty"`
 	Message                           string `json:",omitempty"`

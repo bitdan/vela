@@ -37,6 +37,10 @@ func (a *Workspace) restoreRepositorySelections(saved application.RepositorySnap
 	s := a.Model.Active()
 	r := a.repo()
 	s.Message, s.Branch = saved.Message, saved.Branch
+	if saved.Changelists != nil {
+		s.Changelists = application.CloneChangelists(*saved.Changelists)
+	}
+	s.Changelists.Normalize(s.Repository)
 	if s.Branch == "" {
 		s.Branch = s.Repository.CurrentBranch
 	}

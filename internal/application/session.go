@@ -11,6 +11,7 @@ const (
 )
 
 type Session struct {
+	Changelists                         ChangelistState
 	Repository                          domain.Repository
 	Working, Staged, Branch, Historical string
 	Commit                              int
@@ -28,6 +29,7 @@ func New() *App {
 	app := &App{}
 	for _, repo := range domain.MockRepositories() {
 		app.Sessions = append(app.Sessions, Session{Repository: repo, Branch: repo.CurrentBranch})
+		app.Sessions[len(app.Sessions)-1].Changelists.Normalize(repo)
 	}
 	return app
 }
