@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -104,11 +106,15 @@ func (a *Workspace) applyIndexChange(change *indexChange) {
 	if change.stage {
 		verb, done = "Staging", "Staged"
 	}
-	a.beginRepositoryWrite(change.root, fmt.Sprintf("%s %d file(s)…", verb, len(change.files)))
-	a.UpdateRepositoryIndex(change.repo, change.stage, change.files, func(repo domain.Repository, writeErr, refreshErr error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	a.beginRepositoryWrite(change.root, fmt.Sprintf("%s %d file(s)…", verb, len(change.files)), cancel)
+	a.UpdateRepositoryIndex(ctx, change.repo, change.stage, change.files, func(repo domain.Repository, writeErr, refreshErr error) {
 		message := fmt.Sprintf("%s %d file(s)", done, len(change.files))
 		if writeErr != nil {
 			message = verb + " failed · " + writeErr.Error()
+			if errors.Is(writeErr, context.Canceled) || errors.Is(writeErr, context.DeadlineExceeded) {
+				message = "Git did not confirm the index operation · " + writeErr.Error()
+			}
 		}
 		a.finishRepositoryWrite(change.root, repo, refreshErr, message)
 	})

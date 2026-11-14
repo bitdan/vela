@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -18,15 +19,20 @@ const (
 )
 
 type settingsDraft struct {
-	vcs                  application.VersionControlSettings
-	appearance           application.AppearanceSettings
-	editor               application.EditorSettings
-	dark                 bool
-	query, page          string
-	color                int
-	colorPicker          bool
-	versionControlClosed bool
-	searchGroupClosed    bool
+	keymap                                      map[string]string
+	keymapRow                                   int
+	keymapList                                  ui.ListState
+	keymapCommand, keymapBinding, keymapMessage string
+	shortcutReference                           bool
+	vcs                                         application.VersionControlSettings
+	appearance                                  application.AppearanceSettings
+	editor                                      application.EditorSettings
+	dark                                        bool
+	query, page                                 string
+	color                                       int
+	colorPicker                                 bool
+	versionControlClosed                        bool
+	searchGroupClosed                           bool
 }
 
 var settingsPages = []string{"Changelists", "Commit", "Confirmation", "Directory Mappings", "File Status Colors", "Log", "Shelf", "Git"}
@@ -42,12 +48,17 @@ func (a *Workspace) openSettings() {
 		page = appearancePage
 	}
 	a.settings = settingsDraft{vcs: a.Layout.VersionControl, dark: a.Layout.Dark, page: page,
-		appearance: a.Layout.Appearance, editor: a.Layout.Editor}
+		appearance: a.Layout.Appearance, editor: a.Layout.Editor, keymap: maps.Clone(layoutKeymap(a.Layout))}
 	a.settingsOpen = true
 }
 
 func (a *Workspace) applySettings() {
 	draft := a.settings
+	bindings, err := application.NormalizeKeymap(draft.keymap)
+	if err != nil {
+		a.settings.keymapMessage = err.Error()
+		return
+	}
 	if draft.vcs.Log != a.Layout.VersionControl.Log {
 		for i := range a.repos {
 			applyLogSettings(&a.repos[i], draft.vcs.Log)
@@ -55,6 +66,10 @@ func (a *Workspace) applySettings() {
 	}
 	a.Layout.VersionControl, a.Layout.Dark = draft.vcs, draft.dark
 	a.Layout.Appearance, a.Layout.Editor = draft.appearance, draft.editor
+	a.Layout.Keymap = nil
+	if len(bindings) > 0 {
+		a.Layout.Keymap = &application.KeymapSettings{Bindings: maps.Clone(bindings)}
+	}
 }
 
 func applyLogSettings(r *repoView, settings application.LogSettings) {
@@ -102,9 +117,10 @@ func (a *Workspace) settingsDialog(c *ui.Context, p tokens) {
 			divider(c, p)
 			ui.Row(c).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Box(c).Grow(1)
-				invalid := a.settings.invalidColor()
+				_, keymapErr := application.NormalizeKeymap(a.settings.keymap)
+				invalid := a.settings.invalidColor() || keymapErr != nil
 				changed := a.settings.vcs != a.Layout.VersionControl || a.settings.dark != a.Layout.Dark ||
-					a.settings.appearance != a.Layout.Appearance || a.settings.editor != a.Layout.Editor
+					a.settings.appearance != a.Layout.Appearance || a.settings.editor != a.Layout.Editor || !maps.Equal(a.settings.keymap, layoutKeymap(a.Layout))
 				ui.PrimaryButton(c, "OK").Width(76).Disabled(invalid).OnClick(func() { a.applySettings(); a.settingsOpen = false })
 				ui.Button(c, "Cancel").Width(76).OnClick(func() { a.settingsOpen = false })
 				ui.Button(c, "Apply").Width(76).Disabled(invalid || !changed).OnClick(a.applySettings)
@@ -208,7 +224,7 @@ func (a *Workspace) settingsPage(c *ui.Context, p tokens) {
 	case aboutPage:
 		aboutSettings(c, p)
 	case shortcutHelpPage:
-		shortcutHelp(c, p)
+		a.keymapSettings(c, p)
 	case "Changelists":
 		ui.Checkbox(c, &s.Changelists.AutoCreate, "Create changelists automatically")
 		ui.Checkbox(c, &s.Changelists.SplitFileChanges, "Allow changes within a file in different changelists")
@@ -235,7 +251,7 @@ func (a *Workspace) settingsPage(c *ui.Context, p tokens) {
 			unavailable := false
 			ui.Checkbox(c.Key(label), &unavailable, label).Disabled(true).Tooltip("Requires IDE code tooling")
 		}
-		future("Commit inspections apply to Mock previews.")
+		future("Message inspections apply to real commits and Mock previews. TODO checks inspect added staged lines; fix the finding or disable the check to commit.")
 	case "Confirmation":
 		settingsSection(c, p, "Confirmation")
 		for _, field := range []struct {

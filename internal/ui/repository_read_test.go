@@ -51,6 +51,10 @@ func TestOpenLocalRepositoryAndPreview(t *testing.T) {
 		resolved, err := git.ReadFile(ctx, root, source, file)
 		done(resolved, err)
 	}
+	a.ReadRepositoryFileHistory = func(ctx context.Context, root, revision, path string, offset, limit int, done func(domain.FileHistoryPage, error)) {
+		page, err := git.ReadFileHistory(ctx, root, revision, path, offset, limit)
+		done(page, err)
+	}
 	tt := native.NewTester(a.View, 1440, 900)
 	if err := tt.Click("Switch repository"); err != nil {
 		t.Fatal(err)
@@ -84,9 +88,10 @@ func TestOpenLocalRepositoryAndPreview(t *testing.T) {
 	}
 	a.run(fileHistory, target)
 	tt.Frame()
-	if a.repo().logHistoryPath != "preview.txt" || !tt.HasText("Add preview fixture") {
+	if a.fileHistory == nil || a.fileHistory.path != "preview.txt" || len(a.fileHistory.commits) != 1 || a.fileHistory.commits[0].Subject != "Add preview fixture" || !tt.HasText("Add preview fixture") {
 		t.Fatal("file history did not match the real commit")
 	}
+	a.run(closeFileHistory, commandTarget{})
 	a.run(openCode, target)
 	entry := a.activeDocument()
 	if entry == nil || entry.code == nil || !entry.code.ReadOnly {
@@ -99,7 +104,7 @@ func TestOpenLocalRepositoryAndPreview(t *testing.T) {
 	if entry := a.activeDocument(); entry == nil || entry.path != "preview.txt" {
 		t.Fatal("refresh lost the open editor tab")
 	}
-	a.UpdateRepositoryIndex = func(repo domain.Repository, stage bool, files []domain.File, done func(domain.Repository, error, error)) {
+	a.UpdateRepositoryIndex = func(ctx context.Context, repo domain.Repository, stage bool, files []domain.File, done func(domain.Repository, error, error)) {
 		err := git.UpdateIndex(context.Background(), repo, stage, files)
 		updated, refreshErr := git.ReadRepository(context.Background(), repo.Root)
 		done(updated, err, refreshErr)

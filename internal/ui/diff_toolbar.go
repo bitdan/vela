@@ -81,6 +81,17 @@ func (a *Workspace) diffToolbar(c *ui.Context, p tokens, entry *tab) {
 			button("→", "Next changed file", index == len(files)-1, func() { navigate(index + 1) })
 		}
 		button("＋", "Keep Diff in New Tab", false, func() { a.run(openDiff, commandTarget{source: entry.source, file: entry.file}) })
+		if real && (entry.source == "working" || entry.source == "staged") {
+			target := commandTarget{source: entry.source, file: entry.file}
+			id := stageHunk
+			if entry.source == "staged" {
+				id = unstageHunk
+			}
+			button("±", commandLabel(id), a.disabledFor(id, target) != "", func() { a.run(id, target) })
+			if entry.source == "working" {
+				button("↶", commandLabel(discardHunk), a.disabledFor(discardHunk, target) != "", func() { a.run(discardHunk, target) })
+			}
+		}
 		ui.Box(c).Grow(1)
 		ui.Text(c, fmt.Sprintf("%d differences", len(hunks))).FontSize(p.textSize(smallText))
 		button("◫", "Side-by-side Diff", diff.Layout == editor.DiffSplit, func() { diff.Layout = editor.DiffSplit })

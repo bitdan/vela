@@ -47,11 +47,18 @@ func run(layoutPath string) error {
 	initial := workspace.SessionSnapshot()
 	git := gitcli.New()
 	var initializer application.RepositoryInitializer = git
+	var cloner application.RepositoryCloner = git
 	var reader application.RepositoryReader = git
 	var index application.IndexWriter = git
 	var commits application.CommitWriter = git
 	var operator application.RepositoryOperator = git
 	var mergeDocuments application.MergeDocumentReader = git
+	var blameReader application.RepositoryBlameReader = git
+	var fileWriter application.RepositoryFileWriter = git
+	var patchReader application.RepositoryPatchReader = git
+	var fileHistoryReader application.RepositoryFileHistoryReader = git
+	var patchExporter application.RepositoryPatchExporter = git
+	var patchFiles application.PatchFileWriter = adapters.PatchFiles{}
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -67,6 +74,12 @@ func run(layoutPath string) error {
 				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
 			}()
 		}
+		workspace.CloneRepository = func(ctx context.Context, source, target string, done func(string, error)) {
+			go func() {
+				path, err := cloner.Clone(ctx, source, target)
+				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
+			}()
+		}
 		workspace.PickRepositoryDirectory = func(done func(string, error)) {
 			go func() {
 				dirs, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: window, Directory: true, Title: "Choose Repository Directory"})
@@ -75,6 +88,25 @@ func run(layoutPath string) error {
 					path = dirs[0]
 				}
 				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
+			}()
+		}
+		workspace.PickPatchDestination = func(done func(string, error)) {
+			go func() {
+				path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: window, Title: "Export Git Patch", DefaultPath: "changes.patch", ButtonLabel: "Create", Message: "Choose a new .patch or .diff file. Existing files are kept.", Filters: []mygo.FileFilter{{Name: "Git Patch", Extensions: []string{"patch", "diff"}}}})
+				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryChangesPatch = func(ctx context.Context, repo domain.Repository, source string, files []domain.File, done func(domain.PatchExport, error)) {
+			go func() {
+				doc, err := patchExporter.ReadChangesPatch(ctx, repo, source, files)
+				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
+			}()
+		}
+		workspace.WritePatchFile = func(ctx context.Context, repo domain.Repository, path, text string, done func(domain.Repository, error, error)) {
+			go func() {
+				err := patchFiles.SaveNewPatch(ctx, repo, path, text)
+				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.ReadRepository = func(ctx context.Context, directory string, done func(domain.Repository, error)) {
@@ -95,16 +127,42 @@ func run(layoutPath string) error {
 				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
 			}()
 		}
-		workspace.UpdateRepositoryIndex = func(repo domain.Repository, stage bool, files []domain.File, done func(domain.Repository, error, error)) {
+		workspace.ReadRepositoryBlame = func(ctx context.Context, root, revision, path string, done func(domain.BlameDocument, error)) {
 			go func() {
-				err := index.UpdateIndex(context.Background(), repo, stage, files)
+				doc, err := blameReader.ReadBlame(ctx, root, revision, path)
+				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryPatch = func(ctx context.Context, repo domain.Repository, source, path string, done func(domain.PatchDocument, error)) {
+			go func() {
+				doc, err := patchReader.ReadPatch(ctx, repo, source, path)
+				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryFileHistory = func(ctx context.Context, root, revision, path string, offset, limit int, done func(domain.FileHistoryPage, error)) {
+			go func() {
+				page, err := fileHistoryReader.ReadFileHistory(ctx, root, revision, path, offset, limit)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
+			}()
+		}
+		workspace.SaveRepositoryFile = func(ctx context.Context, repo domain.Repository, file domain.File, text string, done func(domain.Repository, domain.File, error, error)) {
+			go func() {
+				saved, err := fileWriter.SaveFile(ctx, repo, file, text)
+				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				mygo.RunOnMain(func() { done(updated, saved, err, refreshErr); window.Invalidate() })
+			}()
+		}
+		workspace.UpdateRepositoryIndex = func(ctx context.Context, repo domain.Repository, stage bool, files []domain.File, done func(domain.Repository, error, error)) {
+			go func() {
+				err := index.UpdateIndex(ctx, repo, stage, files)
 				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
-		workspace.CommitRepository = func(repo domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
+		workspace.CommitRepository = func(ctx context.Context, repo domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
+			policy := application.CommitPolicy{Inspections: workspace.Layout.VersionControl.Commit}
 			go func() {
-				err := commits.Commit(context.Background(), repo, message, amend)
+				err := commits.Commit(ctx, repo, message, amend, policy)
 				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
@@ -117,6 +175,7 @@ func run(layoutPath string) error {
 			}()
 		}
 		workspace.CloseWindow = func() { go mygo.RunOnMain(window.Close) }
+		workspace.StartSessionRestore()
 		window.OnClose(func(e *mygo.CloseEvent) {
 			if !workspace.RequestClose() {
 				e.PreventDefault()

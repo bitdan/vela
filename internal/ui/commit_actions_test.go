@@ -55,7 +55,7 @@ func TestCommitFormAndAmendConfirmation(t *testing.T) {
 	a := New(application.New(), layout)
 	a.Model.Switch(a.installRepository(repo))
 	failNext := true
-	a.CommitRepository = func(repo domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
+	a.CommitRepository = func(ctx context.Context, repo domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
 		if failNext {
 			failNext = false
 			done(repo, errors.New("fixture commit error"), nil)

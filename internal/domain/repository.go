@@ -8,6 +8,7 @@ import (
 type File struct {
 	Path, Status, Old, New string
 	OldPath                string
+	DiskVersion            string
 }
 
 type Commit struct {
@@ -29,31 +30,32 @@ type Shelf struct {
 }
 
 type Repository struct {
-	Name, CurrentBranch string
-	Root                string
-	Head, IndexVersion  string
-	WorktreeVersion     string
-	StashVersion        string
-	Stashes             []StashEntry
-	GitDir, CommonDir   string
-	WorktreesVersion    string
-	Worktrees           []Worktree
-	Bisect              BisectState
-	HeadMessage         string
-	Project             []File
-	RemoteBranches      map[string]bool
-	Refs                map[string]string
-	Upstreams           map[string]Upstream
-	RemoteVersion       string
-	MergeHeads          []string
-	Rebase              RebaseState
-	Sequencer           SequencerState
-	Conflicts           []MergeConflict
-	Branches            []string
-	Remotes             []Remote
-	Working, Staged     []File
-	History             []Commit
-	Shelf               []Shelf
+	Name, CurrentBranch     string
+	Root                    string
+	Head, IndexVersion      string
+	WorktreeVersion         string
+	StashVersion            string
+	Stashes                 []StashEntry
+	GitDir, CommonDir       string
+	WorktreesVersion        string
+	Worktrees               []Worktree
+	Bisect                  BisectState
+	HeadMessage             string
+	Project                 []File
+	RemoteBranches          map[string]bool
+	Refs                    map[string]string
+	Upstreams               map[string]Upstream
+	RemoteVersion           string
+	RemoteManagementVersion string
+	MergeHeads              []string
+	Rebase                  RebaseState
+	Sequencer               SequencerState
+	Conflicts               []MergeConflict
+	Branches                []string
+	Remotes                 []Remote
+	Working, Staged         []File
+	History                 []Commit
+	Shelf                   []Shelf
 }
 
 func (r Repository) ResolvingConflicts() bool {

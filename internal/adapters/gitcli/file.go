@@ -26,6 +26,15 @@ func (g *Executor) ReadFile(ctx context.Context, root, source string, file domai
 	if source == "merge-conflict" {
 		return g.readMergeDiff(ctx, root, file)
 	}
+	if revision, ok := strings.CutPrefix(source, "revision:"); ok {
+		if !validObjectID(revision) {
+			return file, errors.New("invalid Git commit ID")
+		}
+		file.Old, file.DiskVersion = "", ""
+		var err error
+		file.New, err = g.readBlob(ctx, root, revision+":"+file.Path)
+		return file, err
+	}
 	if mode, revision, ok := strings.Cut(source, ":"); ok && (mode == "local" || mode == "before") {
 		if !validObjectID(revision) {
 			return file, errors.New("invalid Git commit ID")
@@ -52,6 +61,9 @@ func (g *Executor) ReadFile(ctx context.Context, root, source string, file domai
 	if source == "project" {
 		text, err := readWorkingFile(root, file.Path)
 		file.New = text
+		if err == nil {
+			file.DiskVersion, err = projectFileVersion(root, file.Path, text)
+		}
 		return file, err
 	}
 	if file.Status == "U" {

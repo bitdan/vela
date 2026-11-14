@@ -2,12 +2,34 @@ package domain
 
 import (
 	"net/url"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
 )
 
 type Remote struct {
 	Name, URL string
+}
+
+var remoteName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+func ValidRemoteName(name string) bool { return remoteName.MatchString(name) }
+
+// ValidRemoteLocation permits supported credential-free transports or an
+// absolute local repository path. It never enables arbitrary remote helpers.
+func ValidRemoteLocation(raw string) bool {
+	if strings.ContainsAny(raw, "\x00\r\n") {
+		return false
+	}
+	if !strings.Contains(raw, "://") && strings.Contains(raw, "::") {
+		return false
+	}
+	if filepath.IsAbs(raw) && !strings.Contains(raw, "://") {
+		return true
+	}
+	_, ok := RemoteAddress(raw)
+	return ok
 }
 
 // RemoteAddress accepts web URLs, SSH URLs and Git's scp-style SSH addresses.

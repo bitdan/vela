@@ -16,8 +16,11 @@ type IndexWriter interface {
 }
 
 type CommitWriter interface {
-	Commit(context.Context, domain.Repository, string, bool) error
+	Commit(context.Context, domain.Repository, string, bool, ...CommitPolicy) error
 }
+
+// CommitPolicy is copied before dispatch so background work never reads UI state.
+type CommitPolicy struct{ Inspections CommitSettings }
 
 type RepositoryOperator interface {
 	ExecuteRepositoryOperation(context.Context, domain.Repository, domain.RepositoryOperation) error
@@ -30,4 +33,32 @@ type MergeDocumentReader interface {
 // RepositoryInitializer is the application port for creating a local repository.
 type RepositoryInitializer interface {
 	Initialize(ctx context.Context, directory, branch string) (string, error)
+}
+
+type RepositoryCloner interface {
+	Clone(context.Context, string, string) (string, error)
+}
+
+type RepositoryBlameReader interface {
+	ReadBlame(context.Context, string, string, string) (domain.BlameDocument, error)
+}
+
+type RepositoryFileWriter interface {
+	SaveFile(context.Context, domain.Repository, domain.File, string) (domain.File, error)
+}
+
+type RepositoryPatchReader interface {
+	ReadPatch(context.Context, domain.Repository, string, string) (domain.PatchDocument, error)
+}
+
+type RepositoryFileHistoryReader interface {
+	ReadFileHistory(ctx context.Context, root, revision, path string, offset, limit int) (domain.FileHistoryPage, error)
+}
+
+type RepositoryPatchExporter interface {
+	ReadChangesPatch(context.Context, domain.Repository, string, []domain.File) (domain.PatchExport, error)
+}
+
+type PatchFileWriter interface {
+	SaveNewPatch(context.Context, domain.Repository, string, string) error
 }

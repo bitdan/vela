@@ -37,6 +37,11 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	a.stopSourceDecision()
+	a.stopPatchExports()
+	a.closeFileHistoryDialog()
+	a.repositoryNavigation++
+	stopRead(&a.sessionRestore)
 	stopRead(&a.repositoryRead)
 	stopRead(&a.repositoryFileRead)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -53,6 +58,12 @@ func (a *Workspace) loadRepository(directory string, refresh bool) {
 			a.record("Could not load repository · " + err.Error())
 			return
 		}
+		// The reader returns Git's canonical root (including Windows long paths).
+		for i := range a.savedRepositories {
+			if a.savedRepositories[i].Root == directory {
+				a.savedRepositories[i].Root = repo.Root
+			}
+		}
 		if writeAtStart != "" && writeAtStart == repo.Root {
 			for i, session := range a.Model.Sessions {
 				if session.Repository.Root == repo.Root {
@@ -68,6 +79,7 @@ func (a *Workspace) loadRepository(directory string, refresh bool) {
 		} else {
 			a.status = "Opened " + repo.Name
 		}
+		a.restoreLoadedRepository()
 	})
 }
 
@@ -84,6 +96,8 @@ func (a *Workspace) installRepository(repo domain.Repository) int {
 		session.Message = previous.Message
 		session.Amend = previous.Amend && previous.Repository.Head == repo.Head
 		view.tabs, view.closed, view.active = oldView.tabs, oldView.closed, oldView.active
+		view.pendingTabs = oldView.pendingTabs
+		view.pendingActiveTab = oldView.pendingActiveTab
 		view.mergeDrafts, view.mergeActive = oldView.mergeDrafts, oldView.mergeActive
 		view.split, view.splitMoved, view.splitSize, view.splitVertical = oldView.split, oldView.splitMoved, oldView.splitSize, oldView.splitVertical
 		view.toolPage, view.console, view.consoleOpen = oldView.toolPage, oldView.console, oldView.consoleOpen
@@ -106,10 +120,13 @@ func (a *Workspace) installRepository(repo domain.Repository) int {
 }
 
 func (a *Workspace) readFileForCommand(id commandID, target commandTarget) {
+	a.cancelSessionNavigation()
 	root := a.Model.Active().Repository.Root
 	source := strings.TrimPrefix(target.source, "revision:")
 	file := target.file
 	switch id {
+	case showBlame:
+		source = "blame:" + a.blameRevision(target)
 	case openCode, openRightSplit:
 		if id == openRightSplit && target.tabID != "" && a.repo().tabIndex(target.tabID) >= 0 {
 			a.splitTab(target.tabID, false, false)
@@ -138,7 +155,11 @@ func (a *Workspace) readFileForCommand(id commandID, target commandTarget) {
 	request := &readRequest{cancel: cancel}
 	a.repositoryFileRead = request
 	a.status = "Loading " + file.Path + "…"
-	a.ReadRepositoryFile(ctx, root, source, file, func(resolved domain.File, err error) {
+	readSource := source
+	if id == openRevision {
+		readSource = "revision:" + source
+	}
+	a.readFileSource(ctx, root, readSource, file, func(resolved domain.File, err error) {
 		if a.repositoryFileRead != request {
 			return
 		}
@@ -152,6 +173,8 @@ func (a *Workspace) readFileForCommand(id commandID, target commandTarget) {
 			resolved.New = strings.ReplaceAll(resolved.New, "\r\n", "\n")
 		}
 		switch id {
+		case showBlame:
+			a.openCode(source, resolved)
 		case openCode:
 			a.openCode("project", resolved)
 		case openRevision:

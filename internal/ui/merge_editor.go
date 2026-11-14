@@ -187,7 +187,7 @@ func (a *Workspace) saveMergeDraft(d *mergeEditorState) {
 	op := domain.RepositoryOperation{Kind: domain.SaveMergeResult, Source: path, Result: text,
 		WorktreeVersion: d.doc.WorktreeVersion, Conflict: d.doc.Conflict}
 	ctx, cancel := context.WithCancel(context.Background())
-	a.beginRepositoryWrite(repo.Root, "Applying merge result…")
+	a.beginRepositoryWrite(repo.Root, "Applying merge result…", cancel)
 	a.OperateRepository(ctx, repo, op, func(updated domain.Repository, err, refreshErr error) {
 		cancel()
 		message := "Staged merge result · " + path

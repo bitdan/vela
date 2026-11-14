@@ -88,7 +88,7 @@ func TestRepositoryOperationDialogs(t *testing.T) {
 	session := a.Model.Active()
 	session.Message = "Commit before push"
 	session.Repository.Staged = []domain.File{{Path: "demo.txt", Status: "M"}}
-	a.CommitRepository = func(snapshot domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
+	a.CommitRepository = func(ctx context.Context, snapshot domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
 		updated := snapshot
 		updated.Head = strings.Repeat("a", 40)
 		updated.Staged = nil

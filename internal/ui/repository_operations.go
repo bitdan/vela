@@ -57,7 +57,7 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 	}
 	if repo.Bisect.Active() {
 		switch id {
-		case resetRevision, stashChanges, unstashChanges, dropStash, newBranch, checkoutBranch, pull, updateBranch, updateProject, mergeBranch, rebaseBranch, cherryPick, revertCommit:
+		case resetRevision, stashChanges, unstashChanges, dropStash, newBranch, checkoutBranch, pull, updateBranch, updateProject, mergeBranch, rebaseBranch, cherryPick, revertCommit, renameBranch, deleteBranch, newTag:
 			return "End Bisect before running this operation"
 		}
 	}
@@ -65,6 +65,32 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 		branch = repo.CurrentBranch
 	}
 	switch id {
+	case renameBranch, deleteBranch, newTag:
+		if repo.ResolvingConflicts() {
+			return "Finish the current Git operation first"
+		}
+		if id == newTag {
+			if operationRef(repo, target.source) == "" {
+				return "Select a branch, tag or commit"
+			}
+		} else {
+			ref := localBranchRef(repo, target.source)
+			if ref == "" {
+				return "Select a local branch"
+			}
+			if id == deleteBranch && strings.TrimPrefix(ref, "refs/heads/") == repo.CurrentBranch {
+				return "Cannot delete the current branch"
+			}
+			for _, w := range repo.Worktrees {
+				if w.Branch == ref && w.Path != repo.Root {
+					return "The branch is checked out in another worktree"
+				}
+			}
+		}
+	case addRemote, editRemote, removeRemote:
+		if id != addRemote && !remoteConfigured(repo, target.source) {
+			return "Select a configured remote"
+		}
 	case newWorktree, showWorktrees, removeWorktree:
 		if id == newWorktree && repo.Head == "" {
 			return "Create a commit before adding a worktree"
@@ -190,6 +216,10 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 		remoteBranch = branch
 	}
 	switch id {
+	case renameBranch, deleteBranch, newTag:
+		s.configureRef(repo, id, target)
+	case addRemote, editRemote, removeRemote:
+		s.configureRemote(id, target)
 	case startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, createBisectWorktree:
 		s.configureBisect(repo, id)
 	case newWorktree, showWorktrees, removeWorktree:
@@ -256,6 +286,7 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 				a.stashFields(c, s, busy)
 				a.worktreeFields(c, s, busy)
 				bisectFields(c, s, busy)
+				refFields(c, s, busy)
 				if op.Kind == domain.ResetRevision {
 					ui.Text(c, op.Source)
 					ui.Text(c, repo.CurrentBranch)
@@ -318,9 +349,10 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 						s.open = false
 					}
 				})
-				needsBranch := op.Kind == domain.CreateBranch || (op.Kind == domain.CheckoutBranch && strings.HasPrefix(op.Source, "refs/remotes/"))
+				needsBranch := op.Kind == domain.CreateBranch || op.Kind == domain.RenameBranch || (op.Kind == domain.CheckoutBranch && strings.HasPrefix(op.Source, "refs/remotes/"))
 				needsTarget := op.Kind == domain.PullBranch || op.Kind == domain.PushBranch
 				disabled := busy || a.repositoryWrite != "" || a.repositoryRead != nil || repo.Root != s.root || repo.IndexVersion == "" ||
+					refFieldsDisabled(s) ||
 					worktreeCommandDisabled(s) ||
 					bisectNeedsRange(*op) ||
 					((op.Kind == domain.ApplyStash || op.Kind == domain.DropStash) && len(s.choices) == 0) ||
@@ -376,7 +408,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		op.Source = operationRef(snapshot, s.mergeSource)
 	}
 	op.Branch, op.Target = strings.TrimSpace(op.Branch), strings.TrimSpace(op.Target)
-	a.beginRepositoryWrite(s.root, s.label+"…")
+	a.beginRepositoryWrite(s.root, s.label+"…", cancel)
 	a.OperateRepository(ctx, snapshot, op, func(repo domain.Repository, err, refreshErr error) {
 		cancel()
 		s.cancel = nil

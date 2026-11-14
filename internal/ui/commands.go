@@ -13,6 +13,7 @@ import (
 type commandID string
 
 const (
+	cancelGitTask      commandID = "workspace.cancel-git-task"
 	selectRepo         commandID = "workspace.select-repository"
 	selectBranch       commandID = "mock.inspect-branch"
 	selectCommit       commandID = "mock.inspect-commit"
@@ -24,6 +25,7 @@ const (
 	toggleMainMenu     commandID = "workspace.toggle-main-menu"
 	toggleBranches     commandID = "workspace.toggle-branches"
 	toggleDetails      commandID = "workspace.toggle-details"
+	restoreLayout      commandID = "workspace.restore-default-layout"
 	showLoading        commandID = "mock.history-loading"
 	showError          commandID = "mock.history-error"
 	retryHistory       commandID = "mock.history-retry"
@@ -63,6 +65,7 @@ const (
 )
 
 type commandTarget struct {
+	remote  domain.Remote
 	index   int
 	tabID   string
 	preview bool
@@ -71,6 +74,11 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	saveCloseSource: "Save and Close Source", discardCloseSource: "Discard and Close Source", confirmReloadSource: "Reload Source File",
+	savePatchFile:       "Save Patch File",
+	loadMoreFileHistory: "Load More File History", closeFileHistory: "Close File History", openFileHistoryRevision: "Open Historical Version", openFileHistoryDiff: "Show Historical Diff",
+	stageHunk: "Stage Hunk…", unstageHunk: "Unstage Hunk…", discardHunk: "Discard Hunk…",
+	restoreLayout:        "Restore Default Layout",
 	createBisectWorktree: "Create Candidate Worktree…",
 	startBisect:          "Start Bisect…", bisectGood: "Mark Good", bisectBad: "Mark Bad", bisectSkip: "Skip Candidate", resetBisect: "End Bisect…", showBisectCandidate: "Show Candidate in Log",
 	dropStash: "Drop Stash…", removeWorktree: "Remove Worktree…", openWorktree: "Open Worktree",
@@ -93,6 +101,57 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if id == saveCloseSource || id == discardCloseSource || id == confirmReloadSource {
+		return a.sourceDecisionDisabled(id)
+	}
+	if id == reloadProjectFile && a.Model.Active().Repository.Root != "" {
+		return a.sourceReloadDisabled(target)
+	}
+	if id == savePatchFile {
+		return a.patchSaveDisabled()
+	}
+	if (id == copyPatch || id == createPatch) && a.Model.Active().Repository.Root != "" {
+		return a.patchExportDisabled(id, target)
+	}
+	if id == loadMoreFileHistory || id == closeFileHistory || id == openFileHistoryRevision || id == openFileHistoryDiff {
+		return a.fileHistoryDisabled(id)
+	}
+	if isHunkCommand(id) {
+		return a.hunkDisabled(id, target)
+	}
+	if id == saveSourceFile {
+		return a.sourceSaveDisabled(target)
+	}
+	if id == showBlame {
+		if a.Model.Active().Repository.Root == "" || a.ReadRepositoryBlame == nil {
+			return "Open a local Git repository"
+		}
+		if target.file.Path == "" || a.blameRevision(target) == "" {
+			return "Select a committed file"
+		}
+		if target.file.Status == "?" {
+			return "Untracked files have no committed Blame"
+		}
+		return ""
+	}
+	if id == cloneRepo {
+		if a.CloneRepository == nil {
+			return "Repository cloning is unavailable"
+		}
+		if a.repositoryWrite != "" || a.repositoryClone != nil || a.repositoryInit != nil || a.repositoryOperation != nil {
+			return "Wait for the current repository operation"
+		}
+		return ""
+	}
+	if id == cancelGitTask {
+		if (a.repositoryWriteCancel == nil || a.repositoryCancelRequested) && a.patchCopyRead == nil {
+			return "No cancellable Git task"
+		}
+		return ""
+	}
+	if id == openRecentRepository && (a.ReadRepository == nil || target.source == "") {
+		return "Select an available repository"
+	}
 	switch id {
 	case openMergeEditor, previousConflict, nextConflict, applyCurrentBlock, applyIncomingBlock, saveMergeResult, closeMergeEditor:
 		return a.mergeEditorDisabled(id, target)
@@ -109,6 +168,9 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 	}
 	if id == fileHistory && (!real || target.file.Path == "") {
 		return "Select a file in a local Git repository"
+	}
+	if id == fileHistory && (a.ReadRepositoryFileHistory == nil || a.blameRevision(target) == "" || a.repositoryWrite != "") {
+		return "Connect the file history reader and select a committed file"
 	}
 	if real {
 		switch id {
@@ -127,6 +189,8 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 			}
 			return ""
 		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
+			addRemote, editRemote, removeRemote,
+			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
 			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,
 			newWorktree, showWorktrees, removeWorktree, startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, createBisectWorktree:
@@ -208,6 +272,12 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		return
 	}
 	switch id {
+	case saveCloseSource, discardCloseSource, confirmReloadSource:
+		a.runSourceDecision(id)
+		return
+	case reloadProjectFile:
+		a.requestSourceReload(target)
+		return
 	case openMergeEditor:
 		a.loadMergeEditor(target.file.Path)
 		return
@@ -217,6 +287,15 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	}
 	if a.Model.Active().Repository.Root != "" {
 		switch id {
+		case copyPatch, createPatch:
+			a.requestPatchExport(id, target)
+			return
+		case showBlame:
+			a.readFileForCommand(id, target)
+			return
+		case fileHistory:
+			a.openFileHistory(target)
+			return
 		case showBisectCandidate:
 			a.selectBisectCandidate()
 			return
@@ -224,6 +303,8 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 			a.loadRepository(target.source, false)
 			return
 		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
+			addRemote, editRemote, removeRemote,
+			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
 			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,
 			newWorktree, showWorktrees, removeWorktree, startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, createBisectWorktree:
@@ -248,6 +329,34 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		}
 	}
 	switch id {
+	case savePatchFile:
+		a.choosePatchDestination()
+		return
+	case loadMoreFileHistory, closeFileHistory, openFileHistoryRevision, openFileHistoryDiff:
+		a.runFileHistory(id)
+		return
+	case saveSourceFile:
+		a.saveSource(target)
+		return
+	case stageHunk, unstageHunk, discardHunk:
+		a.openHunkDialog(id, target)
+		return
+	case cloneRepo:
+		a.repositoryClone = &repositoryCloneDialog{open: true}
+		return
+	case cancelGitTask:
+		if a.repositoryWriteCancel == nil {
+			stopRead(&a.patchCopyRead)
+			a.status = "Patch copy canceled"
+			return
+		}
+		a.repositoryCancelRequested = true
+		a.repositoryWriteCancel()
+		a.status = "Cancellation requested · waiting for Git and refresh"
+		return
+	case openRecentRepository:
+		a.loadRepository(target.source, false)
+		return
 	case newScratch:
 		r := a.repo()
 		r.projectScratch++
@@ -370,7 +479,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		if id == copyHash {
 			value = target.source
 		}
-		a.clipboard = &value
+		a.queueClipboard(value, "")
 	case goParent, goChild:
 		a.run(clearLogFilters, commandTarget{})
 		r := a.repo()
@@ -404,7 +513,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case openRemoteRepository:
 		a.browserURL = target.source
 	case copyRemoteRepository:
-		a.clipboard = &target.source
+		a.queueClipboard(target.source, "")
 	case goToFile:
 		a.openSearch(searchFiles)
 	case showRecentFiles:
@@ -416,6 +525,12 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		a.Layout.HideBranches = !a.Layout.HideBranches
 	case toggleDetails:
 		a.Layout.HideDetails = !a.Layout.HideDetails
+	case restoreLayout:
+		defaults := application.DefaultLayout()
+		a.Layout.Top, a.Layout.Commit, a.Layout.Branches, a.Layout.Log, a.Layout.Files = defaults.Top, defaults.Commit, defaults.Branches, defaults.Log, defaults.Files
+		a.Layout.HideCommit, a.Layout.HideGit, a.Layout.HideBranches, a.Layout.HideDetails = false, false, false, false
+		a.repo().toolPage, a.repo().consoleOpen = "", false
+		a.record("Default layout restored")
 	case showLoading:
 		a.Model.Active().HistoryState = application.HistoryLoading
 	case showError:
@@ -425,6 +540,11 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case switchRepo:
 		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
 	case selectRepo:
+		a.stopSourceDecision()
+		a.stopPatchExports()
+		a.closeFileHistoryDialog()
+		a.repositoryNavigation++
+		stopRead(&a.sessionRestore)
 		a.indexConfirmation = nil
 		a.commitConfirmation = nil
 		if a.repositoryOperation != nil && a.repositoryOperation.cancel == nil {
@@ -452,7 +572,9 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case toggleTheme:
 		a.Layout.Dark = !a.darkTheme()
 		a.Layout.Appearance.FollowSystem = false
-	case closeTab, closeOthers, closeAllTabs, closeUnmodified, closeLeft, closeRight, closeReadOnly:
+	case closeTab:
+		a.requestCloseSource(target)
+	case closeOthers, closeAllTabs, closeUnmodified, closeLeft, closeRight, closeReadOnly:
 		a.closeTabs(id, target)
 	case pinTab:
 		if target.preview {

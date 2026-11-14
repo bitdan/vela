@@ -8,11 +8,15 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
 func (a *Workspace) activate(id string) bool {
-	r := a.repo()
+	return a.repo().activate(id)
+}
+
+func (r *repoView) activate(id string) bool {
 	for i, existing := range r.tabs {
 		if existing.id == id {
 			r.active = i
@@ -56,25 +60,45 @@ func (a *Workspace) openCode(source string, f domain.File) {
 	if a.activate(id) {
 		current := &a.repo().tabs[a.repo().active]
 		if a.Model.Active().Repository.Root != "" && current.file != f {
-			buffer := editor.NewBuffer(f.New)
+			if current.code.Buffer.Modified() {
+				return
+			}
+			buffer := current.code.Buffer
+			cursor, scroll := current.code.Cursor(), current.code.ScrollY()
+			buffer.Reset(f.New)
 			buffer.SetLanguage(editor.LanguageFor(f.Path))
-			state := &editor.State{Buffer: buffer, ReadOnly: true}
-			cursor := min(current.code.Cursor(), len(f.New))
-			state.Select(cursor, cursor)
-			state.SetScrollY(current.code.ScrollY())
-			current.code, current.file = state, f
+			if strings.HasPrefix(source, "blame:") {
+				buffer.SetLanguage(nil)
+			}
+			current.code.ReadOnly = a.sourceReadOnly(source, f)
+			cursor = min(cursor, len(f.New))
+			current.code.Select(cursor, cursor)
+			current.code.SetScrollY(scroll)
+			current.file = f
+			if split := a.repo().split; split != nil && split.code != nil && split.code.Buffer == buffer {
+				split.file = f
+				split.code.ReadOnly = current.code.ReadOnly
+			}
 		}
 		return
 	}
 	buffer := editor.NewBuffer(f.New)
 	buffer.SetLanguage(editor.LanguageFor(f.Path))
+	if strings.HasPrefix(source, "blame:") {
+		buffer.SetLanguage(nil)
+	}
 	r := a.repo()
 	r.active = len(r.tabs)
 	r.tabs = append(r.tabs, tab{id: id, title: path.Base(f.Path), path: f.Path, source: source, context: "Editor · " + source, file: f,
-		code: &editor.State{Buffer: buffer, ReadOnly: strings.HasPrefix(source, "revision:") || a.Model.Active().Repository.Root != ""}})
+		code: &editor.State{Buffer: buffer, ReadOnly: a.sourceReadOnly(source, f)}})
+	if strings.HasPrefix(source, "blame:") {
+		r.tabs[r.active].title = "Blame · " + path.Base(f.Path)
+		r.tabs[r.active].context = "Blame · " + strings.TrimPrefix(source, "blame:")
+	}
 }
 
 func (a *Workspace) splitTab(id string, vertical, move bool) {
+	a.cancelSessionNavigation()
 	r := a.repo()
 	index := r.tabIndex(id)
 	entry := r.tabs[index]
@@ -123,7 +147,16 @@ func (a *Workspace) RequestClose() bool {
 		return false
 	}
 	stopRead(&a.repositoryRead)
+	stopRead(&a.sessionRestore)
 	stopRead(&a.repositoryFileRead)
+	a.stopSourceRefreshes()
+	a.closeFileHistoryDialog()
+	a.stopPatchExports()
+	a.stopSourceDecision()
+	if s := a.patchDialog; s != nil && s.cancel != nil {
+		s.cancel()
+		a.patchDialog = nil
+	}
 	if s := a.repositoryInit; s != nil && s.cancel != nil {
 		s.cancel()
 		return false
@@ -175,10 +208,13 @@ func (a *Workspace) editor(c *ui.Context, p tokens) {
 							ui.ButtonBase(c).Height(controlHeight).Padding(0, gap).Center().Label(entry.title).Tooltip(entry.id).
 								ContextMenu(func(m *ui.Menu) { a.tabMenu(m, entry, false) }).
 								Children(func() { ui.Text(c, label).SingleLine() }).
-								OnClick(func() { r.preview = nil; r.active = i })
+								OnClick(func() { a.cancelSessionNavigation(); r.preview = nil; r.active = i })
 							target := commandTarget{tabID: entry.id}
 							reason := a.disabledFor(closeTab, target)
-							tip := "Close (Ctrl+F4)"
+							tip := "Close"
+							if keys, _ := application.EffectiveShortcut(a.Layout.Keymap, string(closeTab)); keys != "" {
+								tip += " (" + keys + ")"
+							}
 							if reason != "" {
 								tip = reason
 							}
@@ -253,6 +289,9 @@ func (a *Workspace) emptyEditor(c *ui.Context, p tokens) {
 				{focusProject, "Alt+Home"},
 			} {
 				label := commandLabel(item.id)
+				if keys, known := application.EffectiveShortcut(a.Layout.Keymap, string(item.id)); known {
+					item.keys = keys
+				}
 				ui.ButtonBase(c.Key(string(item.id))).Height(headerHeight+4).Padding(0, gap).
 					Row().Gap(gap).AlignItems(ui.Center).Label(label).Children(func() {
 					ui.Text(c, label).FontSize(p.textSize(emptyEditorText)).TextColor(p.theme.TextMuted)
@@ -266,8 +305,19 @@ func (a *Workspace) emptyEditor(c *ui.Context, p tokens) {
 func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 	heading(c, p, entry.path, entry.context)
 	if entry.code != nil {
+		if !entry.code.ReadOnly && a.Model.Active().Repository.Root != "" {
+			ui.Row(c).FillWidth().Height(headerHeight).Padding(0, gap).Gap(gap).AlignItems(ui.Center).Children(func() {
+				reason := a.disabledFor(saveSourceFile, commandTarget{tabID: entry.id})
+				ui.Button(c, "Save").Label("Save Source File").Height(controlHeight).Disabled(reason != "").Tooltip(reason).OnClick(func() { a.run(saveSourceFile, commandTarget{tabID: entry.id}) })
+				ui.Text(c, "Ctrl+S").TextColor(p.theme.TextMuted).FontSize(p.textSize(smallText))
+			})
+		}
 		entry.code.Font, entry.code.TabSize = a.editorPreferences()
 		entry.code.ContextMenu = func(m *ui.Menu) {
+			if a.Model.Active().Repository.Root != "" {
+				a.menu(m, saveSourceFile, commandTarget{tabID: entry.id})
+				a.menu(m, reloadProjectFile, commandTarget{tabID: entry.id})
+			}
 			m.Submenu("Git", func(g *ui.Menu) { a.editorGitMenu(g, commandTarget{source: entry.source, file: entry.file}) })
 		}
 		view := editor.View(c.Key(entry.id), entry.code).Label("Source editor").Grow(1).FillWidth()
@@ -277,6 +327,9 @@ func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 		}
 		if view.FocusWithin() {
 			a.focusedEditor = entry.code
+		}
+		if view.Shortcut(ui.Cmd, ui.KeyS) {
+			a.run(saveSourceFile, commandTarget{tabID: entry.id})
 		}
 	} else {
 		entry.diff.Font, entry.diff.TabSize = a.editorPreferences()

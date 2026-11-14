@@ -9,18 +9,29 @@ import (
 	"strings"
 	"time"
 
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
 var ErrPublishedAmend = errors.New("the last commit is reachable from a remote-tracking branch")
 
 // Commit writes the current index using the repository's normal hooks and signing configuration.
-func (g *Executor) Commit(ctx context.Context, snapshot domain.Repository, message string, amend bool) error {
+func (g *Executor) Commit(ctx context.Context, snapshot domain.Repository, message string, amend bool, policies ...application.CommitPolicy) error {
 	if strings.TrimSpace(message) == "" || strings.ContainsRune(message, 0) {
 		return errors.New("enter a valid commit message")
 	}
 	if snapshot.Root == "" || snapshot.IndexVersion == "" {
 		return errors.New("refresh the repository before committing")
+	}
+	if len(policies) > 1 {
+		return errors.New("provide a single commit policy")
+	}
+	var policy application.CommitPolicy
+	if len(policies) > 0 {
+		policy = policies[0]
+	}
+	if warning := policy.Inspections.Inspect(message); warning != "" {
+		return fmt.Errorf("commit inspection: %s", warning)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -35,6 +46,24 @@ func (g *Executor) Commit(ctx context.Context, snapshot domain.Repository, messa
 	}
 	if err := g.checkCommitState(ctx, current.Root, index); err != nil {
 		return err
+	}
+	if policy.Inspections.CheckTODO {
+		diff, err := g.read(ctx, current.Root, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "--unified=0", "--ignore-submodules=none", "--")
+		if err != nil {
+			return err
+		}
+		inHunk := false
+		for _, line := range strings.Split(diff, "\n") {
+			if strings.HasPrefix(line, "diff --git ") {
+				inHunk = false
+			}
+			if strings.HasPrefix(line, "@@ ") {
+				inHunk = true
+			}
+			if inHunk && strings.HasPrefix(line, "+") && strings.Contains(line, "TODO") {
+				return errors.New("commit inspection: staged additions contain TODO; resolve it or disable the TODO check in Settings")
+			}
+		}
 	}
 	if amend {
 		if current.Head == "" {
