@@ -109,6 +109,9 @@ func TestSettingsNavigationAndShortcutHelp(t *testing.T) {
 	if err := tt.Click("Settings Shortcuts"); err != nil {
 		t.Fatal(err)
 	}
+	if err := tt.Click("Show default shortcut reference"); err != nil {
+		t.Fatal(err)
+	}
 	for _, label := range []string{"Windows Shortcuts", "General", "Show All Commands", "Ctrl+Alt+S", "Ctrl+Shift+P", "Ctrl+Alt+Shift+C", "Alt+0"} {
 		if !tt.HasText(label) {
 			t.Fatalf("shortcut help missing %q", label)

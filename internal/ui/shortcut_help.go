@@ -27,6 +27,7 @@ var shortcutHelpGroups = []struct {
 		{"Move Focus", "Interface Controls", []string{"Tab", "Shift+Tab"}},
 	}},
 	{"Files and Diff", []shortcutHelpItem{
+		{"Save Source or Merge Result", "Editable Editor", []string{"Ctrl+S"}},
 		{"Close Current Tab or Diff Preview", "Editor", []string{"Ctrl+W", "Ctrl+F4"}},
 		{"Close Diff Preview", "Diff Preview", []string{"Esc"}},
 		{"Show Diff for Selected File", "File Lists", []string{"Ctrl+D"}},

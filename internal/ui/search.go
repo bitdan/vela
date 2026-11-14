@@ -116,7 +116,7 @@ func (a *Workspace) searchDocuments(recent bool) []searchDocument {
 	seen := make(map[string]bool)
 	r := a.repo()
 	addTab := func(entry tab) {
-		if entry.code == nil || strings.HasPrefix(entry.source, "revision:") || seen[entry.path] {
+		if entry.code == nil || strings.HasPrefix(entry.source, "revision:") || strings.HasPrefix(entry.source, "blame:") || seen[entry.path] {
 			return
 		}
 		file := entry.file
@@ -190,7 +190,7 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 		}
 	}
 	if category == searchActions || (category == searchAll && query != "") {
-		for _, id := range []commandID{switchRepo, toggleCommit, toggleGit, toggleBranches, toggleDetails, toggleTheme,
+		for _, id := range []commandID{reloadProjectFile, copyPatch, createPatch, stageHunk, unstageHunk, discardHunk, saveSourceFile, cloneRepo, cancelGitTask, newTag, renameBranch, deleteBranch, switchRepo, toggleCommit, toggleGit, toggleBranches, toggleDetails, restoreLayout, toggleTheme,
 			closeTab, openProject, openShelf, toggleConsole, showLog, refreshLog, showSettings, showLoading, showError, retryHistory,
 			goToFile, showRecentFiles, focusProject, manageRemotes, openLocalRepository, newBranch, fetch, pull, push, updateProject,
 			mergeBranch, rebaseBranch, cherryPick, revertCommit, continueMerge, abortMerge, continueRebase, skipRebase, abortRebase,

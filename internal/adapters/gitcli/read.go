@@ -136,6 +136,10 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 		return repo, err
 	}
 	repo.RemoteVersion = repoVersion
+	repo.RemoteManagementVersion, err = g.remoteManagementVersion(ctx, repo.Root)
+	if err != nil {
+		return repo, err
+	}
 	for _, row := range nulFields(remoteConfig) {
 		key, address, ok := strings.Cut(row, "\n")
 		if !ok || !strings.HasSuffix(key, ".url") {

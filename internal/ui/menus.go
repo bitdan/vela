@@ -99,6 +99,10 @@ const (
 )
 
 var extraCommands = map[commandID]string{
+	saveSourceFile: "Save Source File",
+	showBlame:      "Show Blame",
+	cancelGitTask:  "Cancel Git Task",
+	addRemote:      "Add Remote", editRemote: "Edit Remote", removeRemote: "Remove Remote",
 	newScratch:        "Scratch File",
 	historyToRevision: "History Up to Here", expandHistorical: "Expand Historical Files", collapseHistorical: "Collapse Historical Files",
 	compareCurrentBranch: "Compare with Current Branch", missingBranchCommits: "Show Missing Commits",
@@ -173,59 +177,55 @@ func (a *Workspace) menuNamed(m *ui.Menu, id commandID, target commandTarget, la
 		reason = a.disabledFor(id, target)
 	}
 	item := m.Item(label).ID(string(id) + ":" + target.source + ":" + target.file.Path + ":" + strconv.Itoa(target.index)).Disabled(reason != "").Tooltip(reason)
-	switch id {
-	case showCommit:
-		item.Shortcut(ui.Cmd, ui.KeyK)
-	case push:
-		item.Shortcut(ui.Cmd|ui.Shift, ui.KeyK)
-	case updateProject:
-		item.Shortcut(ui.Cmd, ui.KeyT)
-	case newBranch:
-		item.Shortcut(ui.Ctrl|ui.Alt, ui.KeyN)
-	case unshelve:
-		item.Shortcut(ui.Ctrl|ui.Shift, ui.KeyU)
-	case deleteShelf:
-		item.Shortcut(0, ui.KeyDelete)
-	case rollback:
-		item.Shortcut(ui.Ctrl|ui.Alt, ui.KeyZ)
-	case moveChangelist:
-		item.Shortcut(ui.Alt|ui.Shift, ui.KeyM)
-	case addToVCS, stageChanges:
-		item.Shortcut(ui.Ctrl|ui.Alt, ui.KeyA)
-	case editChangelist:
-		item.Shortcut(0, ui.KeyF2)
-	case cutProjectFile:
-		item.Shortcut(ui.Cmd, ui.KeyX)
-	case copyProjectFile:
-		item.Shortcut(ui.Cmd, ui.KeyC)
-	case pasteProjectFile:
-		item.Shortcut(ui.Cmd, ui.KeyV)
-	case findInProject:
-		item.Shortcut(ui.Cmd|ui.Shift, ui.KeyF)
-	case replaceInProject:
-		item.Shortcut(ui.Cmd|ui.Shift, ui.KeyR)
-	case renameFile:
-		item.Shortcut(ui.Shift, ui.KeyF6)
-	case deleteFile:
-		item.Shortcut(0, ui.KeyDelete)
-	case closeTab:
-		item.Shortcut(ui.Ctrl, ui.KeyF4)
-	case newTabWindow:
-		item.Shortcut(ui.Shift, ui.KeyF4)
-	case openRightSplit:
-		item.Shortcut(ui.Shift, ui.KeyEnter)
-	case previewDiff:
-		item.Shortcut(ui.Cmd, ui.KeyD)
-	case openCode:
-		item.Shortcut(0, ui.KeyF4)
-	case copyHash:
-		item.Shortcut(ui.Cmd|ui.Alt|ui.Shift, ui.KeyC)
-	case renameBranch, renameShelf, editCommit:
-		item.Shortcut(0, ui.KeyF2)
-	case goParent:
-		item.Shortcut(0, ui.KeyRight)
-	case goChild:
-		item.Shortcut(0, ui.KeyLeft)
+	if mods, key, known := a.nativeWorkspaceShortcut(id); known {
+		if key != ui.KeyUnknown {
+			item.Shortcut(mods, key)
+		}
+	} else {
+		switch id {
+		case unshelve:
+			item.Shortcut(ui.Ctrl|ui.Shift, ui.KeyU)
+		case deleteShelf:
+			item.Shortcut(0, ui.KeyDelete)
+		case rollback:
+			item.Shortcut(ui.Ctrl|ui.Alt, ui.KeyZ)
+		case moveChangelist:
+			item.Shortcut(ui.Alt|ui.Shift, ui.KeyM)
+		case addToVCS, stageChanges:
+			item.Shortcut(ui.Ctrl|ui.Alt, ui.KeyA)
+		case editChangelist:
+			item.Shortcut(0, ui.KeyF2)
+		case cutProjectFile:
+			item.Shortcut(ui.Cmd, ui.KeyX)
+		case copyProjectFile:
+			item.Shortcut(ui.Cmd, ui.KeyC)
+		case pasteProjectFile:
+			item.Shortcut(ui.Cmd, ui.KeyV)
+		case findInProject:
+			item.Shortcut(ui.Cmd|ui.Shift, ui.KeyF)
+		case replaceInProject:
+			item.Shortcut(ui.Cmd|ui.Shift, ui.KeyR)
+		case renameFile:
+			item.Shortcut(ui.Shift, ui.KeyF6)
+		case deleteFile:
+			item.Shortcut(0, ui.KeyDelete)
+		case newTabWindow:
+			item.Shortcut(ui.Shift, ui.KeyF4)
+		case openRightSplit:
+			item.Shortcut(ui.Shift, ui.KeyEnter)
+		case previewDiff:
+			item.Shortcut(ui.Cmd, ui.KeyD)
+		case openCode:
+			item.Shortcut(0, ui.KeyF4)
+		case copyHash:
+			item.Shortcut(ui.Cmd|ui.Alt|ui.Shift, ui.KeyC)
+		case renameBranch, renameShelf, editCommit:
+			item.Shortcut(0, ui.KeyF2)
+		case goParent:
+			item.Shortcut(0, ui.KeyRight)
+		case goChild:
+			item.Shortcut(0, ui.KeyLeft)
+		}
 	}
 	if item.Chosen() {
 		a.pending = func() { a.run(id, target) }
@@ -240,6 +240,15 @@ func (a *Workspace) menuGroup(m *ui.Menu, target commandTarget, ids ...commandID
 
 func (a *Workspace) fileMenu(m *ui.Menu, source string, f domain.File) {
 	t := commandTarget{source: source, file: f}
+	if a.Model.Active().Repository.Root != "" {
+		a.menu(m, showBlame, t)
+		if source == "working" {
+			a.menuGroup(m, t, stageHunk, discardHunk)
+		} else if source == "staged" {
+			a.menu(m, unstageHunk, t)
+		}
+		m.Separator()
+	}
 	if source == "working" && f.Status == "U" && a.Model.Active().Repository.ResolvingConflicts() {
 		if a.ReadMergeDocument != nil {
 			a.menu(m, openMergeEditor, t)
@@ -287,7 +296,7 @@ func (a *Workspace) fileMenu(m *ui.Menu, source string, f domain.File) {
 		a.menuNamed(m, openCode, t, "Edit Source", "")
 		a.menu(m, openRevision, t)
 		m.Separator()
-		a.menuGroup(m, t, revertChanges, cherryPickChanges, extractChanges, dropChanges, createPatch, getRevision, historyToRevision)
+		a.menuGroup(m, t, revertChanges, cherryPickChanges, extractChanges, dropChanges, copyPatch, createPatch, getRevision, historyToRevision)
 		item := m.Item(commandLabel(showChangesToParents)).ID(string(showChangesToParents)).Checked(!a.repo().hideChangesToParents).
 			Disabled(a.disabledFor(showChangesToParents, t) != "")
 		if item.Chosen() {
@@ -341,7 +350,7 @@ func (a *Workspace) editorGitMenu(m *ui.Menu, t commandTarget) {
 	m.Separator()
 	a.menuGroup(m, t, previewDiff, compareRevision)
 	a.branchCompareMenu(m, t)
-	a.menuGroup(m, t, fileHistory, historySelection)
+	a.menuGroup(m, t, fileHistory, showBlame, historySelection)
 	a.menuNamed(m, openRevision, t, "Show Current Revision", "")
 	a.menu(m, rollback, t)
 	m.Separator()

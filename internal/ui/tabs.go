@@ -2,6 +2,7 @@ package ui
 
 import (
 	"slices"
+	"vela/internal/application"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -107,6 +108,12 @@ func (a *Workspace) tabDisabled(id commandID, t commandTarget) string {
 		return ""
 	case closeTab:
 		if !t.preview && r.tabs[index].modified() {
+			if a.canDecideSourceClose(&r.tabs[index]) {
+				if a.repositoryWrite != "" || a.sourceDecision != nil {
+					return "Wait for the current file task"
+				}
+				return ""
+			}
 			return "This tab has unsaved changes"
 		}
 		return ""
@@ -123,8 +130,19 @@ func (a *Workspace) tabDisabled(id commandID, t commandTarget) string {
 }
 
 func (a *Workspace) closeTabs(id commandID, target commandTarget) {
-	r := a.repo()
+	a.cancelSessionNavigation()
+	a.repo().closeTabs(id, target)
+}
+
+func (r *repoView) closeTabs(id commandID, target commandTarget) {
 	index := r.tabTargetIndex(target)
+	var pending []application.TabSnapshot
+	for i, entry := range r.pendingTabs {
+		if !shouldClose(id, len(r.tabs)+i, index, tab{pinned: entry.Pinned}) {
+			pending = append(pending, entry)
+		}
+	}
+	r.pendingTabs = pending
 	active := ""
 	if len(r.tabs) > 0 {
 		active = r.tabs[r.active].id
@@ -153,7 +171,7 @@ func (a *Workspace) closeTabs(id commandID, target commandTarget) {
 		r.emptyEditorFocus = true
 	}
 	r.active = max(0, min(next, len(kept)-1))
-	a.activate(active)
+	r.activate(active)
 	if len(r.closed) > 20 {
 		copy(r.closed, r.closed[len(r.closed)-20:])
 		clear(r.closed[20:])
@@ -166,6 +184,7 @@ func (a *Workspace) reopenClosedTab() {
 }
 
 func (a *Workspace) reopenClosedTabAt(index int) {
+	a.cancelSessionNavigation()
 	r := a.repo()
 	entry := r.closed[index]
 	r.closed = slices.Delete(r.closed, index, index+1)
@@ -178,6 +197,10 @@ func (a *Workspace) reopenClosedTabAt(index int) {
 
 func (a *Workspace) tabMenu(m *ui.Menu, entry tab, preview bool) {
 	t := commandTarget{source: entry.source, file: entry.file, tabID: entry.id, preview: preview}
+	if entry.code != nil && !entry.code.ReadOnly && a.Model.Active().Repository.Root != "" {
+		a.menu(m, saveSourceFile, t)
+		m.Separator()
+	}
 	a.menuNamed(m, closeTab, t, "Close", "")
 	a.menuGroup(m, t, closeOthers, closeAllTabs, closeUnmodified, closeLeft, closeRight, closeReadOnly)
 	m.Separator()

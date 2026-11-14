@@ -54,7 +54,7 @@ func (a *Workspace) mainGitMenu(m *ui.Menu) {
 	m.Submenu("Current File", func(sub *ui.Menu) {
 		if entry := a.activeDocument(); entry != nil {
 			target := commandTarget{file: entry.file, source: entry.source}
-			a.menuGroup(sub, target, previewDiff, openDiff, fileHistory, copyPath)
+			a.menuGroup(sub, target, previewDiff, openDiff, fileHistory, showBlame,copyPath)
 		} else {
 			sub.Item("Open a file to see its Git actions").Disabled(true)
 		}

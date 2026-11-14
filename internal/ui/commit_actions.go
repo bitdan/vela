@@ -74,6 +74,9 @@ func (a *Workspace) commitDisabled() string {
 			return "Resolve the index conflicts before committing"
 		}
 	}
+	if warning := a.Layout.VersionControl.Commit.Inspect(s.Message); warning != "" {
+		return warning
+	}
 	return ""
 }
 
@@ -107,8 +110,9 @@ func (a *Workspace) applyCommit(change *commitChange) {
 	if change.amend {
 		progress, success, failure = "Amending commit…", "Amended commit", "Amend failed"
 	}
-	a.beginRepositoryWrite(root, progress)
-	a.CommitRepository(change.repo, change.message, change.amend, func(repo domain.Repository, err, refreshErr error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	a.beginRepositoryWrite(root, progress, cancel)
+	a.CommitRepository(ctx, change.repo, change.message, change.amend, func(repo domain.Repository, err, refreshErr error) {
 		message := success
 		if err != nil {
 			message = failure + " · " + err.Error()

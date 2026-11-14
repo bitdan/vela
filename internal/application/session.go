@@ -67,6 +67,7 @@ type Layout struct {
 	VersionControl                                       VersionControlSettings
 	Appearance                                           AppearanceSettings
 	Editor                                               EditorSettings
+	Keymap                                               *KeymapSettings `json:",omitempty"`
 }
 
 const SystemFont = "System Default"

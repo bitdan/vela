@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -31,7 +32,29 @@ func (g *Executor) runInput(ctx context.Context, directory, input string, args .
 	return g.runInputWithEnv(ctx, directory, input, nil, args...)
 }
 
-func (*Executor) runInputWithEnv(ctx context.Context, directory, input string, env []string, args ...string) (result, error) {
+func (g *Executor) runInputWithEnv(ctx context.Context, directory, input string, env []string, args ...string) (result, error) {
+	return g.runInputWithEnvLimit(ctx, directory, input, env, 0, args...)
+}
+
+var errOutputLimit = errors.New("Git output exceeded the requested limit")
+
+type boundedOutput struct {
+	buffer   *bytes.Buffer
+	limit    int
+	exceeded bool
+}
+
+func (b *boundedOutput) Write(p []byte) (int, error) {
+	left := b.limit - b.buffer.Len()
+	if len(p) > left {
+		b.exceeded = true
+		n, _ := b.buffer.Write(p[:left])
+		return n, errOutputLimit
+	}
+	return b.buffer.Write(p)
+}
+
+func (*Executor) runInputWithEnvLimit(ctx context.Context, directory, input string, env []string, stdoutLimit int, args ...string) (result, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = directory
 	cmd.Stdin = strings.NewReader(input)
@@ -39,7 +62,13 @@ func (*Executor) runInputWithEnv(ctx context.Context, directory, input string, e
 	cmd.Env = append(repositoryEnvironment(), "GIT_OPTIONAL_LOCKS=0", "GIT_NO_LAZY_FETCH=1")
 	cmd.Env = append(cmd.Env, env...)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	var capture io.Writer = &stdout
+	var bounded *boundedOutput
+	if stdoutLimit > 0 {
+		bounded = &boundedOutput{buffer: &stdout, limit: stdoutLimit}
+		capture = bounded
+	}
+	cmd.Stdout, cmd.Stderr = capture, &stderr
 	err := cmd.Run()
 	output := result{stdout: stdout.String(), stderr: stderr.String(), exitCode: -1}
 	if cmd.ProcessState != nil {
@@ -47,6 +76,9 @@ func (*Executor) runInputWithEnv(ctx context.Context, directory, input string, e
 	}
 	if ctx.Err() != nil {
 		return output, ctx.Err()
+	}
+	if bounded != nil && bounded.exceeded {
+		return output, errOutputLimit
 	}
 	if errors.Is(err, exec.ErrWaitDelay) && output.exitCode == 0 {
 		return output, nil

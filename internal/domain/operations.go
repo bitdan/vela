@@ -42,6 +42,15 @@ const (
 	BisectBad
 	BisectSkip
 	ResetBisect
+	AddRemote
+	EditRemote
+	RemoveRemote
+	RenameBranch
+	DeleteBranch
+	CreateTag
+	StageHunk
+	UnstageHunk
+	DiscardHunk
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.
@@ -78,5 +87,7 @@ type RepositoryOperation struct {
 	Message                        string
 	Path                           string
 	BisectVersion                  string
+	PatchVersion                   string
+	HunkIndex                      int
 	IncludeUntracked, RestoreIndex bool
 }

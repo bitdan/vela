@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 
@@ -23,7 +22,6 @@ type remoteEditor struct {
 	item  domain.Remote
 }
 
-var remoteNamePattern = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9._-]*$")
 var remoteMinusIcon = changeIcon("M2 8h12")
 var remoteEditIcon = changeIcon("M2.5 13.5l.7-3.5 8.6-8.6 2.8 2.8L6 12.8zM10.5 2.8l2.8 2.8")
 
@@ -38,6 +36,8 @@ func (a *Workspace) openRemotes() {
 func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 	s := &a.remotes
 	repo := &a.Model.Sessions[s.repository].Repository
+	real := repo.Root != ""
+	busy := real && (a.OperateRepository == nil || a.repositoryWrite != "" || a.repositoryRead != nil || repo.IndexVersion == "" || a.Model.Index != s.repository)
 	width, height := c.Size()
 	ui.DialogBase(c, &s.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, .28))
@@ -52,13 +52,17 @@ func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 					}
 				}
 				ui.Row(c).FillWidth().Gap(3).Children(func() {
-					remoteTool(c, p, "Add remote", commitIcons[projectNewIcon], s.editor != nil || repo.Root != "",
+					remoteTool(c, p, "Add remote", commitIcons[projectNewIcon], s.editor != nil || busy,
 						func() { s.editor = &remoteEditor{index: -1} })
-					remoteTool(c, p, "Remove remote", remoteMinusIcon, s.editor != nil || !selection() || repo.Root != "", func() {
+					remoteTool(c, p, "Remove remote", remoteMinusIcon, s.editor != nil || !selection() || busy, func() {
+						if real {
+							a.confirmRemote(removeRemote, s.items[s.selected].Name, s.items[s.selected])
+							return
+						}
 						s.items = slices.Delete(s.items, s.selected, s.selected+1)
 						s.selected = min(s.selected, len(s.items)-1)
 					})
-					remoteTool(c, p, "Edit remote", remoteEditIcon, s.editor != nil || !selection() || repo.Root != "", edit)
+					remoteTool(c, p, "Edit remote", remoteEditIcon, s.editor != nil || !selection() || busy, edit)
 				})
 				s.table.Selected = &s.selected
 				s.table.Key = func(i int) any { return s.items[i].Name }
@@ -71,14 +75,14 @@ func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 					}
 					ui.Text(c, value).Height(rowHeight).SingleLine().Ellipsis("…").Tooltip(value)
 				}).Grow(1).FillWidth().Border(1, p.theme.Border).Label("Remotes table")
-				if table.Submitted() && s.editor == nil && repo.Root == "" {
+				if table.Submitted() && s.editor == nil && !busy {
 					edit()
 				}
 				if len(s.items) == 0 {
 					table.Children(func() { ui.Text(c, "No remotes configured").Padding(inset).TextColor(p.theme.TextMuted) })
 				}
 				if s.editor != nil {
-					s.remoteForm(c, p)
+					a.remoteForm(c, p, real, busy)
 				}
 			})
 			divider(c, p)
@@ -100,19 +104,20 @@ func remoteTool(c *ui.Context, p tokens, label string, icon *ui.SVG, disabled bo
 		Children(func() { ui.Icon(c, icon).Size(15, 15).TextColor(p.theme.TextMuted) }).OnClick(click)
 }
 
-func (s *remoteDialogState) remoteForm(c *ui.Context, p tokens) {
+func (a *Workspace) remoteForm(c *ui.Context, p tokens, real, busy bool) {
+	s := &a.remotes
 	edit := s.editor
 	ui.Column(c.Key("remote-editor")).FillWidth().Gap(gap).Children(func() {
 		ui.Row(c).FillWidth().Gap(gap).Children(func() {
-			ui.TextInput(c, &edit.item.Name).Width(150).Placeholder("Name").Label("Remote name").AutoFocus()
-			ui.TextInput(c, &edit.item.URL).Grow(1).Placeholder("HTTPS or SSH URL").Label("Remote URL")
+			ui.TextInput(c, &edit.item.Name).Width(150).Placeholder("Name").Label("Remote name").AutoFocus().Disabled(busy || real && edit.index >= 0)
+			ui.TextInput(c, &edit.item.URL).Grow(1).Placeholder("HTTPS, SSH or absolute local path").Label("Remote URL").Disabled(busy)
 		})
 		item := domain.Remote{Name: strings.TrimSpace(edit.item.Name), URL: strings.TrimSpace(edit.item.URL)}
 		var reason string
-		if !remoteNamePattern.MatchString(item.Name) {
+		if !domain.ValidRemoteName(item.Name) {
 			reason = "Enter a remote name using letters, digits, dots, hyphens or underscores."
-		} else if _, ok := domain.RemoteAddress(item.URL); !ok {
-			reason = "Enter a Git remote URL without embedded credentials."
+		} else if !domain.ValidRemoteLocation(item.URL) {
+			reason = "Enter a Git remote URL without embedded credentials or an absolute local path."
 		} else if duplicate := slices.IndexFunc(s.items, func(remote domain.Remote) bool { return remote.Name == item.Name }); duplicate >= 0 && duplicate != edit.index {
 			reason = "A remote with this name already exists."
 		}
@@ -121,7 +126,15 @@ func (s *remoteDialogState) remoteForm(c *ui.Context, p tokens) {
 		}
 		ui.Row(c).FillWidth().Gap(gap).Justify(ui.End).Children(func() {
 			ui.Button(c, "Cancel").Label("Cancel remote edit").OnClick(func() { s.editor = nil })
-			ui.Button(c, "Save").Label("Save remote").Disabled(reason != "").OnClick(func() {
+			ui.Button(c, "Save").Label("Save remote").Disabled(reason != "" || busy).OnClick(func() {
+				if real {
+					id, original := addRemote, ""
+					if edit.index >= 0 {
+						id, original = editRemote, s.items[edit.index].Name
+					}
+					a.confirmRemote(id, original, item)
+					return
+				}
 				if edit.index < 0 {
 					s.selected = len(s.items)
 					s.items = append(s.items, item)

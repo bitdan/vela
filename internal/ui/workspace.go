@@ -29,6 +29,8 @@ type tab struct {
 }
 
 type repoView struct {
+	pendingTabs                                       []application.TabSnapshot
+	pendingActiveTab                                  string
 	tabs                                              []tab
 	closed                                            []tab
 	split                                             *tab
@@ -88,40 +90,62 @@ type repoView struct {
 }
 
 type Workspace struct {
-	Model                     *application.App
-	Layout                    application.Layout
-	repos                     []repoView
-	status                    string
-	pending                   func()
-	search                    searchState
-	shiftTaps                 shiftGesture
-	searchFocus               *editor.State
-	focusedEditor             *editor.State
-	confirmExit, exitApproved bool
-	CloseWindow               func()
-	clipboard                 *string
-	browserURL                string
-	remotes                   remoteDialogState
-	settingsOpen              bool
-	settings                  settingsDraft
-	systemDark                bool
-	mainMenuExpanded          bool
-	repositoryInit            *repositoryInitDialog
-	InitializeRepository      func(context.Context, string, string, func(string, error))
-	PickRepositoryDirectory   func(func(string, error))
-	ReadRepository            func(context.Context, string, func(domain.Repository, error))
-	ReadRepositoryFile        func(context.Context, string, string, domain.File, func(domain.File, error))
-	ReadMergeDocument         func(context.Context, domain.Repository, string, func(domain.MergeDocument, error))
-	repositoryRead            *readRequest
-	repositoryFileRead        *readRequest
-	pickingRepository         bool
-	repositoryWrite           string
-	indexConfirmation         *indexChange
-	commitConfirmation        *commitChange
-	UpdateRepositoryIndex     func(domain.Repository, bool, []domain.File, func(domain.Repository, error, error))
-	CommitRepository          func(domain.Repository, string, bool, func(domain.Repository, error, error))
-	OperateRepository         func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error))
-	repositoryOperation       *repositoryOperationDialog
+	Model                      *application.App
+	Layout                     application.Layout
+	repos                      []repoView
+	status                     string
+	pending                    func()
+	search                     searchState
+	shiftTaps                  shiftGesture
+	searchFocus                *editor.State
+	focusedEditor              *editor.State
+	confirmExit, exitApproved  bool
+	CloseWindow                func()
+	clipboard                  *string
+	clipboardNotice            string
+	browserURL                 string
+	remotes                    remoteDialogState
+	settingsOpen               bool
+	settings                   settingsDraft
+	systemDark                 bool
+	mainMenuExpanded           bool
+	repositoryInit             *repositoryInitDialog
+	repositoryClone            *repositoryCloneDialog
+	patchDialog                *patchDialog
+	fileHistory                *fileHistoryDialog
+	patchExport                *patchExportDialog
+	patchCopyRead              *readRequest
+	sourceDecision             *sourceFileDecision
+	sourceRefreshes            map[string]*readRequest
+	CloneRepository            func(context.Context, string, string, func(string, error))
+	repositoryNavigation       uint64
+	InitializeRepository       func(context.Context, string, string, func(string, error))
+	PickRepositoryDirectory    func(func(string, error))
+	ReadRepository             func(context.Context, string, func(domain.Repository, error))
+	ReadRepositoryFile         func(context.Context, string, string, domain.File, func(domain.File, error))
+	ReadRepositoryBlame        func(context.Context, string, string, string, func(domain.BlameDocument, error))
+	ReadRepositoryPatch        func(context.Context, domain.Repository, string, string, func(domain.PatchDocument, error))
+	ReadRepositoryFileHistory  func(context.Context, string, string, string, int, int, func(domain.FileHistoryPage, error))
+	ReadRepositoryChangesPatch func(context.Context, domain.Repository, string, []domain.File, func(domain.PatchExport, error))
+	PickPatchDestination       func(func(string, error))
+	WritePatchFile             func(context.Context, domain.Repository, string, string, func(domain.Repository, error, error))
+	SaveRepositoryFile         func(context.Context, domain.Repository, domain.File, string, func(domain.Repository, domain.File, error, error))
+	ReadMergeDocument          func(context.Context, domain.Repository, string, func(domain.MergeDocument, error))
+	repositoryRead             *readRequest
+	repositoryFileRead         *readRequest
+	pickingRepository          bool
+	repositoryWrite            string
+	repositoryWriteCancel      context.CancelFunc
+	repositoryCancelRequested  bool
+	indexConfirmation          *indexChange
+	commitConfirmation         *commitChange
+	UpdateRepositoryIndex      func(context.Context, domain.Repository, bool, []domain.File, func(domain.Repository, error, error))
+	CommitRepository           func(context.Context, domain.Repository, string, bool, func(domain.Repository, error, error))
+	OperateRepository          func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error))
+	repositoryOperation        *repositoryOperationDialog
+	savedRepositories          []application.RepositorySnapshot
+	restoreRoot                string
+	sessionRestore             *readRequest
 }
 
 func New(model *application.App, layout application.Layout) *Workspace {
@@ -231,13 +255,18 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.clipboard != nil {
 		value := *a.clipboard
+		notice := a.clipboardNotice
+		a.clipboardNotice = ""
+		if notice == "" {
+			notice = "Copied " + value
+		}
 		a.clipboard = nil
 		c.WriteClipboardThen(value, func(err error) {
 			if err != nil {
 				a.record("Could not copy to clipboard")
 				return
 			}
-			a.record("Copied " + value)
+			a.record(notice)
 		})
 	}
 	if a.browserURL != "" {
@@ -258,6 +287,21 @@ func (a *Workspace) View(c *ui.Context) {
 	if a.repositoryInit != nil {
 		a.repositoryInitView(c, p)
 	}
+	if a.repositoryClone != nil {
+		a.repositoryCloneView(c, p)
+	}
+	if a.patchDialog != nil {
+		a.patchDialogView(c, p)
+	}
+	if a.fileHistory != nil {
+		a.fileHistoryView(c, p)
+	}
+	if a.patchExport != nil {
+		a.patchExportView(c, p)
+	}
+	if a.sourceDecision != nil {
+		a.sourceDecisionView(c, p)
+	}
 	if a.indexConfirmation != nil {
 		a.confirmIndexChange(c)
 	}
@@ -275,7 +319,7 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.confirmExit {
 		title, message := "Discard mock edits?", "Edited mock files are kept in memory for this session."
-		if a.hasUnsavedMergeDrafts() {
+		if a.hasUnsavedMergeDrafts() || a.hasUnsavedRealFiles() {
 			title, message = "Discard unsaved edits?", "Unsaved editor changes and merge drafts will be lost."
 		}
 		if ui.AlertDialog(c, &a.confirmExit, title, message, "Cancel", "Discard and Close") == 1 {
@@ -285,53 +329,7 @@ func (a *Workspace) View(c *ui.Context) {
 			}
 		}
 	}
-	if c.Shortcut(ui.Alt, ui.Key0) {
-		a.run(toggleGit, commandTarget{})
-	}
-	if c.Shortcut(ui.Alt, ui.Key1) {
-		a.run(toggleCommit, commandTarget{})
-	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyT) {
-		a.run(toggleTheme, commandTarget{})
-	}
-	if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyS) {
-		a.run(showSettings, commandTarget{})
-	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {
-		a.run(showSearchActions, commandTarget{})
-	}
-	if c.Shortcut(ui.Cmd, ui.KeyK) {
-		a.run(showCommit, commandTarget{})
-	}
-	if a.Model.Active().Repository.Root != "" {
-		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyK) {
-			a.run(push, commandTarget{})
-		}
-		if c.Shortcut(ui.Cmd, ui.KeyT) {
-			a.run(updateProject, commandTarget{})
-		}
-		if c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyN) {
-			a.run(newBranch, commandTarget{})
-		}
-	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN) {
-		a.run(goToFile, commandTarget{})
-	}
-	if c.Shortcut(ui.Cmd, ui.KeyE) {
-		a.run(showRecentFiles, commandTarget{})
-	}
-	if c.Shortcut(ui.Alt, ui.KeyHome) {
-		a.run(focusProject, commandTarget{})
-	}
-	if c.Shortcut(ui.Cmd, ui.KeyW) || c.Shortcut(ui.Ctrl, ui.KeyF4) {
-		id := closeTab
-		if a.repo().mergeActive != "" {
-			id = closeMergeEditor
-		} else if a.repo().preview != nil {
-			id = closePreview
-		}
-		a.run(id, commandTarget{})
-	}
+	a.dispatchWorkspaceShortcuts(c)
 }
 
 func (a *Workspace) upper(c *ui.Context, p tokens) {
@@ -378,6 +376,7 @@ func (a *Workspace) toolbar(c *ui.Context, p tokens) {
 						a.pending = func() { a.run(selectRepo, commandTarget{index: i}) }
 					}
 				}
+				a.recentRepositoryMenu(m)
 			})
 			flatToolMenu(c, p, "Current branch", s.Repository.CurrentBranch, branchIcon, func(m *ui.Menu) {
 				a.branchMenu(m, s.Repository.CurrentBranch)
@@ -400,6 +399,8 @@ func (a *Workspace) mainMenuBar(c *ui.Context, p tokens) {
 		}{
 			{"View", func(m *ui.Menu) {
 				a.menuGroup(m, commandTarget{}, openProject, showCommit, openShelf, showLog, toggleConsole)
+				m.Separator()
+				a.menu(m, restoreLayout, commandTarget{})
 			}},
 			{"Git", a.mainGitMenu},
 		} {
@@ -478,6 +479,10 @@ func (a *Workspace) statusBar(c *ui.Context, p tokens) {
 		}
 		ui.Text(c, context).FontSize(p.textSize(smallText)).SingleLine().Ellipsis("…")
 		ui.Text(c, a.status).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		if a.repositoryWriteCancel != nil || a.patchCopyRead != nil {
+			ui.ButtonBase(c.Key("cancel-git-task")).Height(statusHeight-2).Padding(0, gap).Center().Label("Cancel Git Task").Tooltip("Cancel Git task in " + a.repositoryWrite).
+				Disabled(a.repositoryCancelRequested).Children(func() { ui.Text(c, "Cancel Task").FontSize(p.textSize(smallText)) }).OnClick(func() { a.run(cancelGitTask, commandTarget{}) })
+		}
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, branchIcon).Size(13, 13).TextColor(p.theme.TextMuted)
 			ui.Text(c, s.Repository.CurrentBranch).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted)
