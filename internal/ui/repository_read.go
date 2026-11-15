@@ -37,6 +37,8 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	a.stopHistoryComparison()
+	a.closeRevisionBrowser()
 	a.changelistDialog = nil
 	a.closeProjectSearchDialog()
 	a.fileTypeDialog = nil

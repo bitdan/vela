@@ -18,6 +18,7 @@ import (
 const maxPreviewBytes = 2 << 20
 
 func (g *Executor) ReadFile(ctx context.Context, root, source string, file domain.File) (domain.File, error) {
+	ctx = canonicalHistory(ctx)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if !validGitPath(file.Path) || (file.OldPath != "" && !validGitPath(file.OldPath)) {

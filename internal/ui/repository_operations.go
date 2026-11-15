@@ -24,6 +24,7 @@ type repositoryOperationDialog struct {
 	choice                       string
 	choices                      []string
 	management                   bool
+	historyChanges               *historyChangeSelection
 }
 
 func operationRef(repo domain.Repository, source string) string {
@@ -311,8 +312,11 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 				}
 				if len(s.mainlines) > 0 {
 					ui.Text(c, "Mainline parent")
-					ui.Select(c, &s.mainline, s.mainlines).Label("Choose mainline parent").Disabled(busy)
+					if ui.Select(c, &s.mainline, s.mainlines).Label("Choose mainline parent").Disabled(busy).Changed() && s.historyChanges != nil {
+						a.pending = func() { a.loadHistoryComparison(s) }
+					}
 				}
+				a.historyOperationFields(c, s)
 				if op.Kind == domain.CreateBranch || (op.Kind == domain.CheckoutBranch && strings.HasPrefix(op.Source, "refs/remotes/")) {
 					ui.Text(c, "Local branch")
 					ui.TextInput(c, &op.Branch).Label("Local branch name").FillWidth().AutoFocus().Disabled(busy)
@@ -356,6 +360,7 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 				needsTarget := op.Kind == domain.PullBranch || op.Kind == domain.PushBranch
 				disabled := busy || a.repositoryWrite != "" || a.repositoryRead != nil || repo.Root != s.root || repo.IndexVersion == "" ||
 					refFieldsDisabled(s) ||
+					historyComparisonDisabled(s) ||
 					shelfFieldsDisabled(s) ||
 					worktreeCommandDisabled(s) ||
 					bisectNeedsRange(*op) ||
@@ -376,12 +381,28 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 			s.cancel()
 			s.open = true
 		} else {
+			if s.historyChanges != nil {
+				stopRead(&s.historyChanges.request)
+			}
 			a.repositoryOperation = nil
 		}
 	}
 }
 
 func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
+	if historyComparisonDisabled(s) {
+		return
+	}
+	if isHistoryWrite(s.op.Kind) {
+		if a.Model.Active().Repository.Root != s.root {
+			s.message = "Return to the target repository"
+			return
+		}
+		if reason := a.historyDirtyReason(s.op.Kind, s.op.Paths); reason != "" {
+			s.message = reason
+			return
+		}
+	}
 	if s.op.Kind == domain.SaveShelf || s.op.Kind == domain.ApplyShelf {
 		for _, path := range s.op.Paths {
 			if a.hasDirtySource(path) {
@@ -428,7 +449,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		paused := op.Kind == domain.StartMerge && refreshErr == nil && len(repo.MergeHeads) > 0
 		rebasePaused := (op.Kind == domain.StartRebase || op.Kind == domain.ContinueRebase || op.Kind == domain.SkipRebase) &&
 			refreshErr == nil && repo.Rebase.Active() && repo.Rebase != snapshot.Rebase
-		sequencePaused := (op.Kind == domain.StartCherryPick || op.Kind == domain.StartRevert || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence) &&
+		sequencePaused := (op.Kind == domain.StartCherryPick || op.Kind == domain.StartRevert || op.Kind == domain.CherryPickSelected || op.Kind == domain.RevertSelected || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence) &&
 			refreshErr == nil && repo.Sequencer.Active() && repo.Sequencer != snapshot.Sequencer
 		unchanged := refreshErr == nil && errors.Is(err, domain.ErrRevertUnchanged)
 		stashConflicts := (op.Kind == domain.ApplyStash || op.Kind == domain.ApplyShelf) && refreshErr == nil && len(repo.Conflicts) > 0
@@ -474,6 +495,9 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 			s.message = message
 		}
 		a.finishRepositoryWrite(s.root, repo, refreshErr, message)
+		if refreshErr == nil && (isHistoryWrite(op.Kind) || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence || op.Kind == domain.AbortSequence) {
+			a.refreshHistoricalWriteViews(s.root, op)
+		}
 		if refreshErr == nil && (op.Kind == domain.SaveShelf || op.Kind == domain.ApplyShelf) {
 			for _, path := range op.Paths {
 				a.refreshOpenFileViews(s.root, path)

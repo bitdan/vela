@@ -605,6 +605,10 @@ func (a *Workspace) commitDetails(c *ui.Context, p tokens) {
 		return
 	}
 	entry := history[s.Commit]
+	if r.historicalSelectionRevision != entry.Hash {
+		r.historicalChosen.Clear()
+		r.historicalSelectionRevision = entry.Hash
+	}
 	files := entry.Files
 	if r.hideChangesToParents && len(entry.Parents) > 1 {
 		parent := history[entry.Parents[0]]
@@ -622,7 +626,7 @@ func (a *Workspace) commitDetails(c *ui.Context, p tokens) {
 	filePanel := func() {
 		ui.Column(c).Fill().Children(func() {
 			a.historicalToolbar(c, p, entry.Hash, files)
-			a.fileList(c.Key(entry.Hash), p, "Changed Files", entry.Hash, "No changed files", files, &r.files, &r.fileIndex, &s.Historical, nil)
+			a.fileList(c.Key(entry.Hash), p, "Changed Files", entry.Hash, "No changed files", files, &r.files, &r.fileIndex, &s.Historical, &r.historicalChosen)
 		})
 	}
 	if r.historyHideDetails {

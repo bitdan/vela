@@ -77,6 +77,9 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	checkoutRevision: "Checkout Revision", showRepositoryRevision: "Show Repository at Revision",
+	getRevision: "Get from Revision", cherryPickChanges: "Cherry-Pick Selected Changes", revertChanges: "Revert Selected Changes",
+	openRevisionEntry: "Open Historical Entry", restoreRevisionEntry: "Restore Historical File", revisionParent: "Parent Historical Directory", reloadRevisionTree: "Reload Historical Directory", closeRevisionTree: "Close Historical Repository",
 	purgeShelf: "Delete Shelf Permanently…", previewShelfIndex: "Show Shelved Index Diff",
 	newChangelist: "New Changelist…", editChangelist: "Edit Changelist…", moveChangelist: "Move to Another Changelist…", setActiveChangelist: "Set Active Changelist", removeChangelist: "Remove Changelist…", applyChangelist: "Apply Changelist", cancelChangelist: "Cancel Changelist", filterChangelist: "Filter Working Changelist",
 	findInProject: "Find in Files…", startProjectSearch: "Find Project Text", cancelProjectSearch: "Cancel Project Search", openProjectSearchResult: "Open Search Result", closeProjectSearch: "Close Find in Files",
@@ -110,6 +113,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isAdvancedHistoryCommand(id) {
+		return a.advancedHistoryDisabled(id, target)
+	}
 	if a.Model.Active().Repository.Root != "" && isRealShelfCommand(id) {
 		return a.realShelfDisabled(id, target)
 	}
@@ -293,6 +299,10 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isAdvancedHistoryCommand(id) {
+		a.runAdvancedHistory(id, target)
 		return
 	}
 	if a.Model.Active().Repository.Root != "" && isRealShelfCommand(id) {
@@ -586,6 +596,8 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case switchRepo:
 		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
 	case selectRepo:
+		a.stopHistoryComparison()
+		a.closeRevisionBrowser()
 		a.changelistDialog = nil
 		a.closeProjectSearchDialog()
 		a.fileTypeDialog = nil

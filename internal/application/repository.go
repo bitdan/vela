@@ -16,6 +16,11 @@ type RepositoryReader interface {
 	ReadFile(context.Context, string, string, domain.File) (domain.File, error)
 }
 
+type RepositoryRevisionTreeReader interface {
+	ReadRevisionTree(context.Context, string, string, string) (domain.RevisionTree, error)
+	ReadRevisionChanges(context.Context, string, string, int) ([]domain.File, error)
+}
+
 type IndexWriter interface {
 	UpdateIndex(context.Context, domain.Repository, bool, []domain.File) error
 }

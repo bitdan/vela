@@ -57,6 +57,10 @@ const (
 	DeleteShelf
 	RestoreShelf
 	PurgeShelf
+	CheckoutRevision
+	RestoreRevisionFiles
+	CherryPickSelected
+	RevertSelected
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.

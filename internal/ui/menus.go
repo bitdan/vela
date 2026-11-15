@@ -466,6 +466,9 @@ func (a *Workspace) logMenu(m *ui.Menu, index int, entry domain.Commit) {
 		t.file = entry.Files[0]
 	}
 	a.menuGroup(m, t, copyHash, createPatch, cherryPick)
+	if entry.Merge {
+		a.menuGroup(m, t, cherryPickChanges, revertChanges)
+	}
 	m.Separator()
 	a.menuGroup(m, t, checkoutRevision, showRepositoryRevision, compareLocal)
 	m.Separator()

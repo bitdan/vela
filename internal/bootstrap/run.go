@@ -49,6 +49,7 @@ func run(layoutPath string) error {
 	var initializer application.RepositoryInitializer = git
 	var cloner application.RepositoryCloner = git
 	var reader application.RepositoryReader = git
+	var revisionTreeReader application.RepositoryRevisionTreeReader = git
 	var logReader application.RepositoryLogReader = git
 	var index application.IndexWriter = git
 	var commits application.CommitWriter = git
@@ -157,6 +158,18 @@ func run(layoutPath string) error {
 			go func() {
 				page, err := fileHistoryReader.ReadFileHistory(ctx, root, revision, path, offset, limit)
 				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryRevisionTree = func(ctx context.Context, root, revision, directory string, done func(domain.RevisionTree, error)) {
+			go func() {
+				page, err := revisionTreeReader.ReadRevisionTree(ctx, root, revision, directory)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryRevisionChanges = func(ctx context.Context, root, revision string, mainline int, done func([]domain.File, error)) {
+			go func() {
+				files, err := revisionTreeReader.ReadRevisionChanges(ctx, root, revision, mainline)
+				mygo.RunOnMain(func() { done(files, err); window.Invalidate() })
 			}()
 		}
 		workspace.SaveRepositoryFile = func(ctx context.Context, repo domain.Repository, file domain.File, text string, done func(domain.Repository, domain.File, error, error)) {
