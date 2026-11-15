@@ -37,6 +37,10 @@ func (a *Workspace) restoreRepositorySelections(saved application.RepositorySnap
 	s := a.Model.Active()
 	r := a.repo()
 	s.Message, s.Branch = saved.Message, saved.Branch
+	if saved.Changelists != nil {
+		s.Changelists = application.CloneChangelists(*saved.Changelists)
+	}
+	s.Changelists.Normalize(s.Repository)
 	if s.Branch == "" {
 		s.Branch = s.Repository.CurrentBranch
 	}
@@ -113,7 +117,8 @@ func (a *Workspace) restoreLoadedRepository() {
 		if !ok {
 			file, ok = findFile(a.Model.Active().Repository, strings.TrimPrefix(lookup, "blame:"), entry.Path)
 		}
-		if !ok && fixedObjectID(strings.TrimPrefix(strings.TrimPrefix(lookup, "revision:"), "blame:")) {
+		_, _, comparison := domain.ParseComparisonSource(lookup)
+		if !ok && (fixedObjectID(strings.TrimPrefix(strings.TrimPrefix(lookup, "revision:"), "blame:")) || comparison) {
 			file = domain.File{Path: entry.Path, Status: entry.ChangeKind, OldPath: entry.OldPath}
 			ok = true
 		}
@@ -134,6 +139,7 @@ func (a *Workspace) restoreLoadedRepository() {
 			} else {
 				if entry.Code {
 					a.openCode(entry.Source, file)
+					a.restoreEditorMetadata(&r.tabs[r.active], entry)
 				} else {
 					a.openDiff(entry.Source, file)
 				}

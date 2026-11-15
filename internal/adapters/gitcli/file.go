@@ -18,10 +18,17 @@ import (
 const maxPreviewBytes = 2 << 20
 
 func (g *Executor) ReadFile(ctx context.Context, root, source string, file domain.File) (domain.File, error) {
+	ctx = canonicalHistory(ctx)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if !validGitPath(file.Path) || (file.OldPath != "" && !validGitPath(file.OldPath)) {
 		return file, errors.New("invalid repository file path")
+	}
+	if strings.HasPrefix(source, "compare:") {
+		return g.readComparisonFile(ctx, root, source, file)
+	}
+	if strings.HasPrefix(source, "shelf:") || strings.HasPrefix(source, "shelf-index:") {
+		return g.readShelfFile(ctx, root, source, file)
 	}
 	if source == "merge-conflict" {
 		return g.readMergeDiff(ctx, root, file)

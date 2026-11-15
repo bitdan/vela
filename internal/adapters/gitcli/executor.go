@@ -24,6 +24,12 @@ type result struct {
 	exitCode       int
 }
 
+type canonicalHistoryKey struct{}
+
+func canonicalHistory(ctx context.Context) context.Context {
+	return context.WithValue(ctx, canonicalHistoryKey{}, true)
+}
+
 func (g *Executor) run(ctx context.Context, directory string, args ...string) (result, error) {
 	return g.runInput(ctx, directory, "", args...)
 }
@@ -61,6 +67,9 @@ func (*Executor) runInputWithEnvLimit(ctx context.Context, directory, input stri
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Env = append(repositoryEnvironment(), "GIT_OPTIONAL_LOCKS=0", "GIT_NO_LAZY_FETCH=1")
 	cmd.Env = append(cmd.Env, env...)
+	if ctx.Value(canonicalHistoryKey{}) == true {
+		cmd.Env = append(cmd.Env, "GIT_NO_REPLACE_OBJECTS=1")
+	}
 	var stdout, stderr bytes.Buffer
 	var capture io.Writer = &stdout
 	var bounded *boundedOutput

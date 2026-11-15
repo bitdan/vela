@@ -16,6 +16,7 @@ var shortcutHelpGroups = []struct {
 	{"General", []shortcutHelpItem{
 		{"Search Everywhere", "Global", []string{"Double Shift"}},
 		{"Go to File", "Global", []string{"Ctrl+Shift+N"}},
+		{"Find in Files", "Global", []string{"Ctrl+Shift+F"}},
 		{"Recent Files", "Global", []string{"Ctrl+E"}},
 		{"Project Navigation", "Global", []string{"Alt+Home"}},
 		{"Show All Commands", "Global", []string{"Ctrl+Shift+P"}},

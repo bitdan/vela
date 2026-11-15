@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -61,6 +62,10 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 	if err != nil {
 		return repo, err
 	}
+	repo.Shelf, err = g.readShelves(ctx, repo)
+	if err != nil {
+		return repo, err
+	}
 	repo.WorktreeVersion, err = g.worktreeVersion(ctx, repo.Root)
 	if err != nil {
 		return repo, err
@@ -97,7 +102,7 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 			seen[file] = true
 		}
 	}
-	refOutput, err := g.read(ctx, repo.Root, "for-each-ref", "--sort=refname", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(symref)%00%(upstream:remotename)%00%(upstream:remoteref)", "refs/heads", "refs/remotes", "refs/tags")
+	refOutput, err := g.read(ctx, repo.Root, "for-each-ref", "--sort=refname", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(symref)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(objecttype)%00%(*objecttype)", "refs/heads", "refs/remotes", "refs/tags")
 	if err != nil {
 		return repo, err
 	}
@@ -107,7 +112,7 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 	repo.Upstreams = make(map[string]domain.Upstream)
 	for _, row := range strings.Split(strings.TrimSuffix(refOutput, "\n"), "\n") {
 		fields := strings.Split(row, "\x00")
-		if len(fields) != 6 || fields[3] != "" {
+		if len(fields) != 8 || fields[3] != "" {
 			continue
 		}
 		name, hash := fields[0], fields[1]
@@ -130,6 +135,9 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 		}
 		repo.Branches = append(repo.Branches, name)
 		refs[hash] = append(refs[hash], name)
+		if fields[6] == "commit" || fields[7] == "commit" {
+			repo.LogSnapshot.Tips = append(repo.LogSnapshot.Tips, hash)
+		}
 	}
 	remoteConfig, repoVersion, err := g.readRemoteConfig(ctx, repo.Root)
 	if err != nil {
@@ -151,11 +159,8 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 		}
 		repo.Remotes = append(repo.Remotes, domain.Remote{Name: strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".url"), URL: address})
 	}
-	logArgs := []string{"log", "--branches", "--remotes", "--tags", "--topo-order", "-n", "10000", "--encoding=UTF-8",
-		"--format=tformat:%x00%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b",
-		"--name-status", "-z", "--root", "--diff-merges=first-parent", "--no-ext-diff", "--no-textconv", "-M", "--no-notes", "--no-show-signature"}
 	if repo.Head != "" {
-		logArgs = append(logArgs, repo.Head)
+		repo.LogSnapshot.Tips = append(repo.LogSnapshot.Tips, repo.Head)
 		repo.HeadMessage, err = g.read(ctx, repo.Root, "show", "-s", "--format=format:%B", "--encoding=UTF-8",
 			"--no-notes", "--no-show-signature", repo.Head, "--")
 		if err != nil {
@@ -165,11 +170,15 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 			refs[repo.Head] = append(refs[repo.Head], repo.CurrentBranch)
 		}
 	}
-	log, err := g.read(ctx, repo.Root, append(logArgs, "--")...)
+	slices.Sort(repo.LogSnapshot.Tips)
+	repo.LogSnapshot.Tips = slices.Compact(repo.LogSnapshot.Tips)
+	repo.LogSnapshot.Refs = refs
+	repo.LogSnapshot.Boundary, err = commitLogBoundary(repo.CommonDir)
 	if err != nil {
 		return repo, err
 	}
-	repo.History, err = parseHistory(log, refs)
+	page, err := g.ReadCommitLog(ctx, repo.Root, repo.LogSnapshot, 0, commitLogPageSize)
+	repo.History, repo.LogHasMore = page.Commits, page.HasMore
 	return repo, err
 }
 

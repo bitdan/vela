@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 	"vela/internal/application"
 	"vela/internal/domain"
 )
@@ -65,15 +66,28 @@ const (
 )
 
 type commandTarget struct {
-	remote  domain.Remote
-	index   int
-	tabID   string
-	preview bool
-	source  string
-	file    domain.File
+	shelfID, shelfOID string
+	remote            domain.Remote
+	index             int
+	tabID             string
+	preview           bool
+	source            string
+	file              domain.File
+	editorState       *editor.State
 }
 
 var commands = map[commandID]string{
+	closeBranchComparison: "Close Branch Comparison", reloadBranchComparison: "Reload Branch Comparison", loadMoreComparisonCommits: "Load More Missing Commits", cancelBranchComparison: "Cancel Branch Comparison", openComparisonEntry: "Open Branch Comparison Diff", browseComparisonCommit: "Browse Missing Commit",
+	openDemo: "Open Demo Workspace", leaveDemo: "Leave Demo Workspace",
+	checkoutRevision: "Checkout Revision", showRepositoryRevision: "Show Repository at Revision",
+	getRevision: "Get from Revision", cherryPickChanges: "Cherry-Pick Selected Changes", revertChanges: "Revert Selected Changes",
+	openRevisionEntry: "Open Historical Entry", restoreRevisionEntry: "Restore Historical File", revisionParent: "Parent Historical Directory", reloadRevisionTree: "Reload Historical Directory", closeRevisionTree: "Close Historical Repository",
+	purgeShelf: "Delete Shelf Permanently…", previewShelfIndex: "Show Shelved Index Diff",
+	newChangelist: "New Changelist…", editChangelist: "Edit Changelist…", moveChangelist: "Move to Another Changelist…", setActiveChangelist: "Set Active Changelist", removeChangelist: "Remove Changelist…", applyChangelist: "Apply Changelist", cancelChangelist: "Cancel Changelist", filterChangelist: "Filter Working Changelist",
+	findInProject: "Find in Files…", startProjectSearch: "Find Project Text", cancelProjectSearch: "Cancel Project Search", openProjectSearchResult: "Open Search Result", closeProjectSearch: "Close Find in Files",
+	toggleBookmark: "Toggle Line Bookmark", nextBookmark: "Next Bookmark", previousBookmark: "Previous Bookmark", clearBookmarks: "Clear Bookmarks", goBookmark: "Go to Bookmark",
+	fileType: "Override File Type", applyFileType: "Apply File Type", cancelFileType: "Cancel File Type",
+	loadMoreCommits: "Load More Commits", cancelLogLoading: "Cancel Log Loading",
 	saveCloseSource: "Save and Close Source", discardCloseSource: "Discard and Close Source", confirmReloadSource: "Reload Source File",
 	savePatchFile:       "Save Patch File",
 	loadMoreFileHistory: "Load More File History", closeFileHistory: "Close File History", openFileHistoryRevision: "Open Historical Version", openFileHistoryDiff: "Show Historical Diff",
@@ -101,6 +115,39 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isBranchComparisonCommand(id) && (a.Model.Active().Repository.Root != "" || !isBranchComparisonEntry(id)) {
+		return a.branchComparisonDisabled(id, target)
+	}
+	if id == openDemo || id == leaveDemo {
+		if a.repositoryWrite != "" || a.repositoryOperation != nil || a.repositoryClone != nil || a.repositoryInit != nil {
+			return "Finish the current repository operation"
+		}
+		return ""
+	}
+	if a.welcomeActive() && !welcomeCommandAllowed(id) {
+		return "Open a repository or explicitly enter Demo Mode"
+	}
+	if id == selectRepo && !a.canSelectSession(target.index) {
+		return "Choose a real repository or explicitly enter Demo Mode"
+	}
+	if isAdvancedHistoryCommand(id) {
+		return a.advancedHistoryDisabled(id, target)
+	}
+	if a.Model.Active().Repository.Root != "" && isRealShelfCommand(id) {
+		return a.realShelfDisabled(id, target)
+	}
+	if isChangelistCommand(id) {
+		return a.changelistDisabled(id, target)
+	}
+	if isProjectSearchCommand(id) {
+		return a.projectSearchDisabled(id)
+	}
+	if isEditorMetadataCommand(id) {
+		return a.editorMetadataDisabled(id, target)
+	}
+	if id == loadMoreCommits || id == cancelLogLoading {
+		return a.commitLogDisabled(id)
+	}
 	if id == saveCloseSource || id == discardCloseSource || id == confirmReloadSource {
 		return a.sourceDecisionDisabled(id)
 	}
@@ -271,9 +318,47 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
 		return
 	}
+	if isBranchComparisonCommand(id) && (a.Model.Active().Repository.Root != "" || !isBranchComparisonEntry(id)) {
+		a.runBranchComparison(id, target)
+		return
+	}
+	if id == openDemo {
+		a.enterDemo()
+		return
+	}
+	if id == leaveDemo {
+		a.exitDemo()
+		return
+	}
+	if isAdvancedHistoryCommand(id) {
+		a.runAdvancedHistory(id, target)
+		return
+	}
+	if a.Model.Active().Repository.Root != "" && isRealShelfCommand(id) {
+		a.runRealShelf(id, target)
+		return
+	}
+	if isChangelistCommand(id) {
+		a.runChangelist(id, target)
+		return
+	}
+	if isProjectSearchCommand(id) {
+		a.runProjectSearch(id)
+		return
+	}
+	if isEditorMetadataCommand(id) {
+		a.runEditorMetadata(id, target)
+		return
+	}
 	switch id {
 	case saveCloseSource, discardCloseSource, confirmReloadSource:
 		a.runSourceDecision(id)
+		return
+	case loadMoreCommits:
+		a.loadMoreCommits()
+		return
+	case cancelLogLoading:
+		stopRead(&a.logRead)
 		return
 	case reloadProjectFile:
 		a.requestSourceReload(target)
@@ -538,22 +623,15 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case retryHistory:
 		a.Model.Active().HistoryState = application.HistoryReady
 	case switchRepo:
-		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
-	case selectRepo:
-		a.stopSourceDecision()
-		a.stopPatchExports()
-		a.closeFileHistoryDialog()
-		a.repositoryNavigation++
-		stopRead(&a.sessionRestore)
-		a.indexConfirmation = nil
-		a.commitConfirmation = nil
-		if a.repositoryOperation != nil && a.repositoryOperation.cancel == nil {
-			a.repositoryOperation = nil
+		for step := 1; step <= len(a.Model.Sessions); step++ {
+			index := (a.Model.Index + step) % len(a.Model.Sessions)
+			if a.canSelectSession(index) {
+				a.run(selectRepo, commandTarget{index: index})
+				break
+			}
 		}
-		stopRead(&a.repositoryRead)
-		stopRead(&a.repositoryFileRead)
-		a.Model.Switch(target.index)
-		a.status = "Switched to " + a.Model.Active().Repository.Name
+	case selectRepo:
+		a.selectRepository(target.index)
 	case selectBranch:
 		a.Model.Active().Branch = target.source
 		a.status = "Selected branch " + target.source

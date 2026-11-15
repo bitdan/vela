@@ -232,7 +232,7 @@ func (a *Workspace) settingsPage(c *ui.Context, p tokens) {
 		ui.Checkbox(c, &s.Changelists.HighlightInactive, "Highlight files from inactive changelists")
 		ui.Checkbox(c, &s.Changelists.WarnInactive, "Show dialog before editing inactive changes").Disabled(!s.Changelists.HighlightInactive)
 		settingsSelect(c, "When an empty changelist becomes inactive", &s.Changelists.EmptyInactive, "Show options", "Keep", "Remove")
-		future("Changelist preferences are stored for a later phase.")
+		future("Whole-file lists, membership and active list are implemented. Automatic creation, hunk splitting and inactive-edit policies remain unapplied.")
 	case "Commit":
 		ui.Checkbox(c, &s.Commit.ClearMessage, "Clear commit message after preview")
 		settingsSection(c, p, "Commit message inspections")
@@ -294,8 +294,12 @@ func (a *Workspace) settingsPage(c *ui.Context, p tokens) {
 	case "Shelf":
 		ui.Checkbox(c, &s.Shelf.RemoveApplied, "Remove successfully applied files from the shelf")
 		ui.Checkbox(c, &s.Shelf.StoreBase, "Shelve base revisions of files").Disabled(true).
-			Tooltip("Mock entries already contain a base version")
-		future("Shelf location: in-memory Mock workspace")
+			Tooltip("Base revisions are always kept for safe unshelve")
+		if a.Model.Active().Repository.Root != "" {
+			future("Shelf location: local Git objects, separate from Git Stash. Successful removal moves whole entries to Recently Deleted.")
+		} else {
+			future("Shelf location: in-memory Mock workspace")
+		}
 	case "Git":
 		a.gitSettings(c, p)
 	}

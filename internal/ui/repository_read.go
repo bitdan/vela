@@ -37,6 +37,13 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	a.closeBranchComparisonDialog()
+	a.stopHistoryComparison()
+	a.closeRevisionBrowser()
+	a.changelistDialog = nil
+	a.closeProjectSearchDialog()
+	a.fileTypeDialog = nil
+	stopRead(&a.logRead)
 	a.stopSourceDecision()
 	a.stopPatchExports()
 	a.closeFileHistoryDialog()
@@ -84,6 +91,9 @@ func (a *Workspace) loadRepository(directory string, refresh bool) {
 }
 
 func (a *Workspace) installRepository(repo domain.Repository) int {
+	if a.Model.Active().Repository.Root == repo.Root {
+		stopRead(&a.logRead)
+	}
 	index := slices.IndexFunc(a.Model.Sessions, func(s application.Session) bool { return s.Repository.Root == repo.Root })
 	view := newRepoView(repo, a.Layout)
 	session := application.Session{Repository: repo, Branch: repo.CurrentBranch}
@@ -94,6 +104,7 @@ func (a *Workspace) installRepository(repo domain.Repository) int {
 	} else {
 		previous, oldView := a.Model.Sessions[index], a.repos[index]
 		session.Message = previous.Message
+		session.Changelists = application.CloneChangelists(previous.Changelists)
 		session.Amend = previous.Amend && previous.Repository.Head == repo.Head
 		view.tabs, view.closed, view.active = oldView.tabs, oldView.closed, oldView.active
 		view.pendingTabs = oldView.pendingTabs
@@ -103,6 +114,7 @@ func (a *Workspace) installRepository(repo domain.Repository) int {
 		view.toolPage, view.console, view.consoleOpen = oldView.toolPage, oldView.console, oldView.consoleOpen
 		view.project, view.projectReady, view.projectShowPaths = oldView.project, oldView.projectReady, oldView.projectShowPaths
 		view.commitGroup, view.historyGroup = oldView.commitGroup, oldView.historyGroup
+		view.changelistFilter = oldView.changelistFilter
 		view.historyHideDetails, view.historyPreview = oldView.historyHideDetails, oldView.historyPreview
 		view.logQuery, view.logAuthor, view.logRef, view.logPath = oldView.logQuery, oldView.logAuthor, oldView.logRef, oldView.logPath
 		view.logHistoryPath, view.logDate = oldView.logHistoryPath, oldView.logDate
@@ -116,6 +128,7 @@ func (a *Workspace) installRepository(repo domain.Repository) int {
 		}
 		a.Model.Sessions[index], a.repos[index] = session, view
 	}
+	a.Model.Sessions[index].Changelists.Normalize(repo)
 	return index
 }
 
@@ -124,6 +137,14 @@ func (a *Workspace) readFileForCommand(id commandID, target commandTarget) {
 	root := a.Model.Active().Repository.Root
 	source := strings.TrimPrefix(target.source, "revision:")
 	file := target.file
+	if source == "shelf" || source == "shelf-file" {
+		entry, ok := a.realShelfEntry(target)
+		if !ok {
+			a.record("Shelf changed; refresh before previewing")
+			return
+		}
+		source = "shelf:" + entry.ID
+	}
 	switch id {
 	case showBlame:
 		source = "blame:" + a.blameRevision(target)

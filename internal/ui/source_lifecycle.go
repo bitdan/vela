@@ -242,6 +242,7 @@ func (a *Workspace) reloadDecidedSource(s *sourceFileDecision) {
 			entry.code.Select(cursor, cursor)
 			entry.code.ReadOnly = a.sourceReadOnly("project", file)
 			entry.file = file
+			applyEditorFileType(entry)
 		}
 		for i := range r.tabs {
 			update(&r.tabs[i])

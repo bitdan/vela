@@ -24,9 +24,10 @@ type Commit struct {
 }
 
 type Shelf struct {
-	Deleted bool
-	Title   string
-	Files   []File
+	ID, OID, Base, Index string
+	Deleted              bool
+	Title                string
+	Files                []File
 }
 
 type Repository struct {
@@ -55,6 +56,8 @@ type Repository struct {
 	Remotes                 []Remote
 	Working, Staged         []File
 	History                 []Commit
+	LogSnapshot             CommitLogSnapshot
+	LogHasMore              bool
 	Shelf                   []Shelf
 }
 

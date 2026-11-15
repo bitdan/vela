@@ -51,6 +51,16 @@ const (
 	StageHunk
 	UnstageHunk
 	DiscardHunk
+	SaveShelf
+	ApplyShelf
+	RenameShelf
+	DeleteShelf
+	RestoreShelf
+	PurgeShelf
+	CheckoutRevision
+	RestoreRevisionFiles
+	CherryPickSelected
+	RevertSelected
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.
@@ -77,6 +87,8 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	Paths                          []string
+	RemoveApplied                  bool
 	Kind                           RepositoryOperationKind
 	Branch, Source, Remote, Target string
 	Checkout, SetUpstream          bool

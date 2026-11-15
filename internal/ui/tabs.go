@@ -23,7 +23,6 @@ const (
 	closeSplit      commandID = "editor.close-split"
 	newTabWindow    commandID = "editor.open-tab-window"
 	configureTabs   commandID = "editor.configure-tabs"
-	tabBookmarks    commandID = "editor.bookmarks"
 	fileType        commandID = "editor.override-file-type"
 	openInExplorer  commandID = "editor.open-in-explorer"
 	localHistory    commandID = "editor.local-history"
@@ -196,7 +195,7 @@ func (a *Workspace) reopenClosedTabAt(index int) {
 }
 
 func (a *Workspace) tabMenu(m *ui.Menu, entry tab, preview bool) {
-	t := commandTarget{source: entry.source, file: entry.file, tabID: entry.id, preview: preview}
+	t := commandTarget{source: entry.source, file: entry.file, tabID: entry.id, preview: preview, editorState: entry.code}
 	if entry.code != nil && !entry.code.ReadOnly && a.Model.Active().Repository.Root != "" {
 		a.menu(m, saveSourceFile, t)
 		m.Separator()
@@ -217,7 +216,8 @@ func (a *Workspace) tabMenu(m *ui.Menu, entry tab, preview bool) {
 	m.Separator()
 	a.menu(m, reopenTab, t)
 	m.Separator()
-	a.menuGroup(m, t, tabBookmarks, fileType, openInExplorer, localHistory)
+	a.editorBookmarkMenu(m, t)
+	a.menuGroup(m, t, fileType, openInExplorer, localHistory)
 	m.Submenu("Git", func(g *ui.Menu) { a.editorGitMenu(g, t) })
 	a.menu(m, renameFile, t)
 }

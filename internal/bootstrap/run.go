@@ -36,7 +36,7 @@ func run(layoutPath string) error {
 	if err != nil {
 		log.Printf("Using default layout: %v", err)
 	}
-	workspace := ui.New(application.New(), layout)
+	workspace := ui.New(application.NewWorkspace(), layout)
 	sessionPath := filepath.Join(filepath.Dir(layoutPath), "workspace.json")
 	session, sessionErr := adapters.LoadSession(sessionPath)
 	if sessionErr != nil {
@@ -49,6 +49,9 @@ func run(layoutPath string) error {
 	var initializer application.RepositoryInitializer = git
 	var cloner application.RepositoryCloner = git
 	var reader application.RepositoryReader = git
+	var comparisonReader application.RepositoryComparisonReader = git
+	var revisionTreeReader application.RepositoryRevisionTreeReader = git
+	var logReader application.RepositoryLogReader = git
 	var index application.IndexWriter = git
 	var commits application.CommitWriter = git
 	var operator application.RepositoryOperator = git
@@ -59,6 +62,7 @@ func run(layoutPath string) error {
 	var fileHistoryReader application.RepositoryFileHistoryReader = git
 	var patchExporter application.RepositoryPatchExporter = git
 	var patchFiles application.PatchFileWriter = adapters.PatchFiles{}
+	var projectSearch application.ProjectSearcher = adapters.ProjectFiles{}
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -115,10 +119,22 @@ func run(layoutPath string) error {
 				mygo.RunOnMain(func() { done(repo, err); window.Invalidate() })
 			}()
 		}
+		workspace.ReadRepositoryLog = func(ctx context.Context, root string, snapshot domain.CommitLogSnapshot, offset, limit int, done func(domain.CommitLogPage, error)) {
+			go func() {
+				page, err := logReader.ReadCommitLog(ctx, root, snapshot, offset, limit)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
+			}()
+		}
 		workspace.ReadRepositoryFile = func(ctx context.Context, root, source string, file domain.File, done func(domain.File, error)) {
 			go func() {
 				file, err := reader.ReadFile(ctx, root, source, file)
 				mygo.RunOnMain(func() { done(file, err); window.Invalidate() })
+			}()
+		}
+		workspace.SearchProjectFiles = func(ctx context.Context, input application.ProjectSearchInput, done func(application.ProjectSearchResult, error)) {
+			go func() {
+				result, err := projectSearch.SearchProject(ctx, input)
+				mygo.RunOnMain(func() { done(result, err); window.Invalidate() })
 			}()
 		}
 		workspace.ReadMergeDocument = func(ctx context.Context, repo domain.Repository, path string, done func(domain.MergeDocument, error)) {
@@ -142,6 +158,36 @@ func run(layoutPath string) error {
 		workspace.ReadRepositoryFileHistory = func(ctx context.Context, root, revision, path string, offset, limit int, done func(domain.FileHistoryPage, error)) {
 			go func() {
 				page, err := fileHistoryReader.ReadFileHistory(ctx, root, revision, path, offset, limit)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryRevisionTree = func(ctx context.Context, root, revision, directory string, done func(domain.RevisionTree, error)) {
+			go func() {
+				page, err := revisionTreeReader.ReadRevisionTree(ctx, root, revision, directory)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryRevisionChanges = func(ctx context.Context, root, revision string, mainline int, done func([]domain.File, error)) {
+			go func() {
+				files, err := revisionTreeReader.ReadRevisionChanges(ctx, root, revision, mainline)
+				mygo.RunOnMain(func() { done(files, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryComparison = func(ctx context.Context, repo domain.Repository, ref, mode string, done func(domain.RevisionComparison, error)) {
+			go func() {
+				var result domain.RevisionComparison
+				var err error
+				if mode == "missing" {
+					result, err = comparisonReader.ReadMissingBranchComparison(ctx, repo, ref)
+				} else {
+					result, err = comparisonReader.ReadBranchComparison(ctx, repo, ref, mode == "working")
+				}
+				mygo.RunOnMain(func() { done(result, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryComparisonCommits = func(ctx context.Context, root string, comparison domain.RevisionComparison, offset, limit int, done func(domain.CommitLogPage, error)) {
+			go func() {
+				page, err := comparisonReader.ReadComparisonCommits(ctx, root, comparison, offset, limit)
 				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
 			}()
 		}

@@ -8,6 +8,8 @@ import (
 )
 
 func (a *Workspace) beginRepositoryWrite(root, message string, cancel context.CancelFunc) {
+	a.closeBranchComparisonDialog()
+	stopRead(&a.logRead)
 	a.stopSourceRefreshes()
 	a.closeFileHistoryDialog()
 	a.stopPatchExports()

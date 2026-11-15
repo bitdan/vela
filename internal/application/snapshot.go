@@ -8,7 +8,8 @@ type WorkspaceSnapshot struct {
 }
 
 type RepositorySnapshot struct {
-	WorkingSelection, StagedSelection []string `json:",omitempty"`
+	Changelists                       *ChangelistState `json:",omitempty"`
+	WorkingSelection, StagedSelection []string         `json:",omitempty"`
 	Name                              string
 	Root                              string `json:",omitempty"`
 	Message                           string `json:",omitempty"`
@@ -28,5 +29,7 @@ type TabSnapshot struct {
 	Code, Pinned bool
 	Cursor       int
 	ScrollY      float64
-	Unified      bool `json:",omitempty"`
+	Unified      bool   `json:",omitempty"`
+	Bookmarks    []int  `json:",omitempty"`
+	FileType     string `json:",omitempty"`
 }

@@ -15,11 +15,23 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 		out.ActiveRepository = ""
 		out.ActiveRoot = a.Model.Active().Repository.Root
 	}
+	if a.Model.Production {
+		out.ActiveRepository = ""
+		if out.ActiveRoot == "" {
+			out.ActiveRoot = a.lastRealRoot
+		}
+	}
 	for i, s := range a.Model.Sessions {
+		if a.Model.Production && s.Repository.Root == "" {
+			continue
+		}
 		r := &a.repos[i]
 		repo := application.RepositorySnapshot{Name: s.Repository.Name, Root: s.Repository.Root,
 			Message: s.Message, Working: s.Working, Staged: s.Staged, Branch: s.Branch, Historical: s.Historical}
 		repo.WorkingSelection = slices.Sorted(r.workingChosen.All())
+		lists := application.CloneChangelists(s.Changelists)
+		lists.Normalize(s.Repository)
+		repo.Changelists = &lists
 		repo.StagedSelection = slices.Sorted(r.stagedChosen.All())
 		if s.Commit >= 0 && s.Commit < len(s.Repository.History) {
 			repo.Commit = s.Repository.History[s.Commit].Hash
@@ -30,10 +42,15 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 			for _, prefix := range []string{"revision:", "local:", "before:"} {
 				identitySource = strings.TrimPrefix(identitySource, prefix)
 			}
-			if s.Repository.Root != "" && fixedObjectID(identitySource) {
+			_, _, comparison := domain.ParseComparisonSource(tab.source)
+			if s.Repository.Root != "" && (fixedObjectID(identitySource) || comparison) {
 				saved.ChangeKind, saved.OldPath = tab.file.Status, tab.file.OldPath
 			}
 			if tab.code != nil {
+				if tab.document != nil {
+					saved.Bookmarks = normalizeBookmarks(tab.document.bookmarks, tab.code.Buffer.LineCount())
+					saved.FileType = tab.document.fileType
+				}
 				saved.Cursor = tab.code.Cursor()
 				saved.ScrollY = tab.code.ScrollY()
 			} else {
@@ -46,6 +63,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 			if !slices.ContainsFunc(repo.Tabs, func(t application.TabSnapshot) bool {
 				return t.Source == pending.Source && t.Path == pending.Path && t.Code == pending.Code
 			}) {
+				pending.Bookmarks = slices.Clone(pending.Bookmarks)
 				repo.Tabs = append(repo.Tabs, pending)
 			}
 		}
@@ -59,7 +77,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 	}
 	for _, saved := range a.savedRepositories {
 		if !slices.ContainsFunc(out.Repositories, func(s application.RepositorySnapshot) bool { return s.Root == saved.Root }) {
-			out.Repositories = append(out.Repositories, saved)
+			out.Repositories = append(out.Repositories, cloneRepositorySnapshot(saved))
 		}
 	}
 	return out
@@ -67,14 +85,18 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 
 func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 	a.restoreRoot = snapshot.ActiveRoot
+	a.lastRealRoot = snapshot.ActiveRoot
 	a.savedRepositories = nil
 	for _, saved := range snapshot.Repositories {
 		if saved.Root != "" && !slices.ContainsFunc(a.savedRepositories, func(s application.RepositorySnapshot) bool { return s.Root == saved.Root }) {
-			a.savedRepositories = append(a.savedRepositories, saved)
+			a.savedRepositories = append(a.savedRepositories, cloneRepositorySnapshot(saved))
 		}
 	}
 	active := a.Model.Index
 	for i, session := range a.Model.Sessions {
+		if a.Model.Production && session.Repository.Root == "" {
+			continue
+		}
 		repo := session.Repository
 		if repo.Name == snapshot.ActiveRepository {
 			active = i
@@ -95,6 +117,7 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 			}
 			if entry.Code {
 				a.openCode(entry.Source, file)
+				a.restoreEditorMetadata(&r.tabs[r.active], entry)
 				code := r.tabs[r.active].code
 				cursor := max(0, min(entry.Cursor, len(file.New)))
 				code.Select(cursor, cursor)
@@ -113,6 +136,20 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 	a.Model.Switch(active)
 }
 
+func cloneRepositorySnapshot(saved application.RepositorySnapshot) application.RepositorySnapshot {
+	if saved.Changelists != nil {
+		lists := application.CloneChangelists(*saved.Changelists)
+		saved.Changelists = &lists
+	}
+	saved.Tabs = slices.Clone(saved.Tabs)
+	for i := range saved.Tabs {
+		saved.Tabs[i].Bookmarks = slices.Clone(saved.Tabs[i].Bookmarks)
+	}
+	saved.WorkingSelection = slices.Clone(saved.WorkingSelection)
+	saved.StagedSelection = slices.Clone(saved.StagedSelection)
+	return saved
+}
+
 func matchFile(files []domain.File, path string) (domain.File, bool) {
 	for _, file := range files {
 		if file.Path == path {
@@ -124,6 +161,15 @@ func matchFile(files []domain.File, path string) (domain.File, bool) {
 
 func findFile(repo domain.Repository, source, path string) (domain.File, bool) {
 	source = strings.TrimPrefix(source, "revision:")
+	if strings.HasPrefix(source, "shelf:") || strings.HasPrefix(source, "shelf-index:") {
+		id := strings.TrimPrefix(strings.TrimPrefix(source, "shelf-index:"), "shelf:")
+		for _, entry := range repo.Shelf {
+			if entry.ID == id {
+				return matchFile(entry.Files, path)
+			}
+		}
+		return domain.File{}, false
+	}
 	if source == "project" {
 		return matchFile(projectFiles(repo), path)
 	}

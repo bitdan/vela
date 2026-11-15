@@ -11,6 +11,7 @@ const (
 )
 
 type Session struct {
+	Changelists                         ChangelistState
 	Repository                          domain.Repository
 	Working, Staged, Branch, Historical string
 	Commit                              int
@@ -20,14 +21,26 @@ type Session struct {
 }
 
 type App struct {
-	Sessions []Session
-	Index    int
+	Production bool
+	Sessions   []Session
+	Index      int
 }
 
+// New retains the demo fixture constructor for existing component tests.
+// The desktop application starts with NewWorkspace.
 func New() *App {
+	return NewDemo()
+}
+
+// NewWorkspace creates the production startup model without allocating fixtures.
+func NewWorkspace() *App { return &App{Production: true, Sessions: []Session{{}}} }
+
+// NewDemo creates isolated, deterministic repositories for explicit demos/tests.
+func NewDemo() *App {
 	app := &App{}
 	for _, repo := range domain.MockRepositories() {
 		app.Sessions = append(app.Sessions, Session{Repository: repo, Branch: repo.CurrentBranch})
+		app.Sessions[len(app.Sessions)-1].Changelists.Normalize(repo)
 	}
 	return app
 }

@@ -17,6 +17,7 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 	ui.Column(c).Fill().Background(p.panel).Children(func() {
 		a.commitToolbar(c, p)
 		divider(c, p)
+		a.changelistControls(c, p)
 		if s.Repository.ResolvingConflicts() {
 			a.mergeControls(c, p)
 		}
@@ -24,6 +25,9 @@ func (a *Workspace) commit(c *ui.Context, p tokens) {
 			a.bisectControls(c, p)
 		}
 		working := s.Repository.Working
+		if r.changelistFilter != "" {
+			working = slices.DeleteFunc(slices.Clone(working), func(f domain.File) bool { return s.Changelists.Owner(f.Path) != r.changelistFilter })
+		}
 		if r.showIgnored {
 			working = appendIgnored(working)
 		}
@@ -48,7 +52,11 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 	outline *folderOutline, index *int, selected *string, chosen *ui.Selection[string]) {
 	working := source == "working" || source == "staged"
 	if working {
-		heading(c, p, title, fileCount(len(files)))
+		detail := fileCount(len(files))
+		if source == "staged" && len(a.Model.Active().Changelists.Lists) > 1 {
+			detail += " · all lists"
+		}
+		heading(c, p, title, detail)
 	}
 	r := a.repo()
 	groupMode := r.commitGroup
@@ -156,6 +164,15 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 		}
 		if source == "working" && state.Shortcut(c, ui.Ctrl|ui.Alt, ui.KeyA) {
 			a.run(stageChanges, target)
+		}
+		if working && state.Shortcut(c, ui.Alt|ui.Shift, ui.KeyM) {
+			a.run(moveChangelist, target)
+		}
+		if working && state.Shortcut(c, 0, ui.KeyF2) {
+			a.run(editChangelist, target)
+		}
+		if working && state.Shortcut(c, ui.Ctrl|ui.Shift, ui.KeyH) {
+			a.run(shelve, target)
 		}
 		if working && state.Shortcut(c, ui.Ctrl|ui.Alt, ui.KeyP) {
 			a.run(groupDirectory, commandTarget{})
@@ -344,6 +361,9 @@ func (a *Workspace) commitLog(c *ui.Context, p tokens) {
 	history := s.Repository.History
 	ui.Column(c).Fill().Label("Commit Log / Graph").Children(func() {
 		a.logFilters(c, p)
+		if s.Repository.Root != "" {
+			defer a.commitLogFooter(c, p)
+		}
 		switch s.HistoryState {
 		case application.HistoryLoading:
 			ui.Text(c, "Loading mock history…").Padding(inset).TextColor(p.theme.TextMuted)
@@ -585,6 +605,10 @@ func (a *Workspace) commitDetails(c *ui.Context, p tokens) {
 		return
 	}
 	entry := history[s.Commit]
+	if r.historicalSelectionRevision != entry.Hash {
+		r.historicalChosen.Clear()
+		r.historicalSelectionRevision = entry.Hash
+	}
 	files := entry.Files
 	if r.hideChangesToParents && len(entry.Parents) > 1 {
 		parent := history[entry.Parents[0]]
@@ -602,7 +626,7 @@ func (a *Workspace) commitDetails(c *ui.Context, p tokens) {
 	filePanel := func() {
 		ui.Column(c).Fill().Children(func() {
 			a.historicalToolbar(c, p, entry.Hash, files)
-			a.fileList(c.Key(entry.Hash), p, "Changed Files", entry.Hash, "No changed files", files, &r.files, &r.fileIndex, &s.Historical, nil)
+			a.fileList(c.Key(entry.Hash), p, "Changed Files", entry.Hash, "No changed files", files, &r.files, &r.fileIndex, &s.Historical, &r.historicalChosen)
 		})
 	}
 	if r.historyHideDetails {

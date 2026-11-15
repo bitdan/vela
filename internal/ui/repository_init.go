@@ -95,7 +95,9 @@ func (a *Workspace) initializeRepositoryFromDialog(s *repositoryInitDialog) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	s.message = ""
+	navigation := a.repositoryNavigation
 	a.InitializeRepository(ctx, strings.TrimSpace(s.directory), strings.TrimSpace(s.branch), func(path string, err error) {
+		cancelled := ctx.Err() != nil
 		cancel()
 		if a.repositoryInit != s {
 			return
@@ -110,5 +112,9 @@ func (a *Workspace) initializeRepositoryFromDialog(s *repositoryInitDialog) {
 		}
 		a.status = "Initialized Git repository · " + path
 		s.open = false
+		if !cancelled && navigation == a.repositoryNavigation && a.ReadRepository != nil {
+			a.repositoryInit = nil
+			a.loadRepository(path, false)
+		}
 	})
 }
