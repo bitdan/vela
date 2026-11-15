@@ -117,7 +117,8 @@ func (a *Workspace) restoreLoadedRepository() {
 		if !ok {
 			file, ok = findFile(a.Model.Active().Repository, strings.TrimPrefix(lookup, "blame:"), entry.Path)
 		}
-		if !ok && fixedObjectID(strings.TrimPrefix(strings.TrimPrefix(lookup, "revision:"), "blame:")) {
+		_, _, comparison := domain.ParseComparisonSource(lookup)
+		if !ok && (fixedObjectID(strings.TrimPrefix(strings.TrimPrefix(lookup, "revision:"), "blame:")) || comparison) {
 			file = domain.File{Path: entry.Path, Status: entry.ChangeKind, OldPath: entry.OldPath}
 			ok = true
 		}

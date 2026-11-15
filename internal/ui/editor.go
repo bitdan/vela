@@ -50,7 +50,15 @@ func diffTab(source string, f domain.File) tab {
 	lang := editor.LanguageFor(f.Path)
 	before.SetLanguage(lang)
 	after.SetLanguage(lang)
-	return tab{id: id, title: path.Base(f.Path), path: f.Path, source: source, context: "Diff · " + source, file: f,
+	context := "Diff · " + source
+	if left, right, ok := domain.ParseComparisonSource(source); ok {
+		label := "working snapshot"
+		if right != "" {
+			label = right[:10]
+		}
+		context = "Compare · " + left[:10] + " → " + label
+	}
+	return tab{id: id, title: path.Base(f.Path), path: f.Path, source: source, context: context, file: f,
 		diff: &editor.DiffState{Old: before, New: after, Layout: editor.DiffSplit}}
 }
 
@@ -144,6 +152,7 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	a.closeBranchComparisonDialog()
 	a.stopHistoryComparison()
 	a.closeRevisionBrowser()
 	a.changelistDialog = nil

@@ -95,71 +95,75 @@ type repoView struct {
 }
 
 type Workspace struct {
-	Model                         *application.App
-	Layout                        application.Layout
-	repos                         []repoView
-	status                        string
-	pending                       func()
-	search                        searchState
-	shiftTaps                     shiftGesture
-	searchFocus                   *editor.State
-	focusedEditor                 *editor.State
-	confirmExit, exitApproved     bool
-	CloseWindow                   func()
-	clipboard                     *string
-	clipboardNotice               string
-	browserURL                    string
-	remotes                       remoteDialogState
-	settingsOpen                  bool
-	settings                      settingsDraft
-	systemDark                    bool
-	mainMenuExpanded              bool
-	repositoryInit                *repositoryInitDialog
-	repositoryClone               *repositoryCloneDialog
-	patchDialog                   *patchDialog
-	fileHistory                   *fileHistoryDialog
-	patchExport                   *patchExportDialog
-	patchCopyRead                 *readRequest
-	sourceDecision                *sourceFileDecision
-	fileTypeDialog                *fileTypeDialog
-	projectSearch                 *projectSearchDialog
-	changelistDialog              *changelistDialog
-	revisionBrowser               *revisionBrowserDialog
-	ReadRepositoryRevisionTree    func(context.Context, string, string, string, func(domain.RevisionTree, error))
-	ReadRepositoryRevisionChanges func(context.Context, string, string, int, func([]domain.File, error))
-	SearchProjectFiles            func(context.Context, application.ProjectSearchInput, func(application.ProjectSearchResult, error))
-	sourceRefreshes               map[string]*readRequest
-	CloneRepository               func(context.Context, string, string, func(string, error))
-	repositoryNavigation          uint64
-	InitializeRepository          func(context.Context, string, string, func(string, error))
-	PickRepositoryDirectory       func(func(string, error))
-	ReadRepository                func(context.Context, string, func(domain.Repository, error))
-	ReadRepositoryLog             func(context.Context, string, domain.CommitLogSnapshot, int, int, func(domain.CommitLogPage, error))
-	ReadRepositoryFile            func(context.Context, string, string, domain.File, func(domain.File, error))
-	ReadRepositoryBlame           func(context.Context, string, string, string, func(domain.BlameDocument, error))
-	ReadRepositoryPatch           func(context.Context, domain.Repository, string, string, func(domain.PatchDocument, error))
-	ReadRepositoryFileHistory     func(context.Context, string, string, string, int, int, func(domain.FileHistoryPage, error))
-	ReadRepositoryChangesPatch    func(context.Context, domain.Repository, string, []domain.File, func(domain.PatchExport, error))
-	PickPatchDestination          func(func(string, error))
-	WritePatchFile                func(context.Context, domain.Repository, string, string, func(domain.Repository, error, error))
-	SaveRepositoryFile            func(context.Context, domain.Repository, domain.File, string, func(domain.Repository, domain.File, error, error))
-	ReadMergeDocument             func(context.Context, domain.Repository, string, func(domain.MergeDocument, error))
-	repositoryRead                *readRequest
-	logRead                       *readRequest
-	repositoryFileRead            *readRequest
-	pickingRepository             bool
-	repositoryWrite               string
-	repositoryWriteCancel         context.CancelFunc
-	repositoryCancelRequested     bool
-	indexConfirmation             *indexChange
-	commitConfirmation            *commitChange
-	UpdateRepositoryIndex         func(context.Context, domain.Repository, bool, []domain.File, func(domain.Repository, error, error))
-	CommitRepository              func(context.Context, domain.Repository, string, bool, func(domain.Repository, error, error))
-	OperateRepository             func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error))
-	repositoryOperation           *repositoryOperationDialog
-	savedRepositories             []application.RepositorySnapshot
-	restoreRoot                   string
-	sessionRestore                *readRequest
+	branchComparison                *branchComparisonDialog
+	ReadRepositoryComparison        func(context.Context, domain.Repository, string, string, func(domain.RevisionComparison, error))
+	ReadRepositoryComparisonCommits func(context.Context, string, domain.RevisionComparison, int, int, func(domain.CommitLogPage, error))
+	lastRealRoot                    string
+	Model                           *application.App
+	Layout                          application.Layout
+	repos                           []repoView
+	status                          string
+	pending                         func()
+	search                          searchState
+	shiftTaps                       shiftGesture
+	searchFocus                     *editor.State
+	focusedEditor                   *editor.State
+	confirmExit, exitApproved       bool
+	CloseWindow                     func()
+	clipboard                       *string
+	clipboardNotice                 string
+	browserURL                      string
+	remotes                         remoteDialogState
+	settingsOpen                    bool
+	settings                        settingsDraft
+	systemDark                      bool
+	mainMenuExpanded                bool
+	repositoryInit                  *repositoryInitDialog
+	repositoryClone                 *repositoryCloneDialog
+	patchDialog                     *patchDialog
+	fileHistory                     *fileHistoryDialog
+	patchExport                     *patchExportDialog
+	patchCopyRead                   *readRequest
+	sourceDecision                  *sourceFileDecision
+	fileTypeDialog                  *fileTypeDialog
+	projectSearch                   *projectSearchDialog
+	changelistDialog                *changelistDialog
+	revisionBrowser                 *revisionBrowserDialog
+	ReadRepositoryRevisionTree      func(context.Context, string, string, string, func(domain.RevisionTree, error))
+	ReadRepositoryRevisionChanges   func(context.Context, string, string, int, func([]domain.File, error))
+	SearchProjectFiles              func(context.Context, application.ProjectSearchInput, func(application.ProjectSearchResult, error))
+	sourceRefreshes                 map[string]*readRequest
+	CloneRepository                 func(context.Context, string, string, func(string, error))
+	repositoryNavigation            uint64
+	InitializeRepository            func(context.Context, string, string, func(string, error))
+	PickRepositoryDirectory         func(func(string, error))
+	ReadRepository                  func(context.Context, string, func(domain.Repository, error))
+	ReadRepositoryLog               func(context.Context, string, domain.CommitLogSnapshot, int, int, func(domain.CommitLogPage, error))
+	ReadRepositoryFile              func(context.Context, string, string, domain.File, func(domain.File, error))
+	ReadRepositoryBlame             func(context.Context, string, string, string, func(domain.BlameDocument, error))
+	ReadRepositoryPatch             func(context.Context, domain.Repository, string, string, func(domain.PatchDocument, error))
+	ReadRepositoryFileHistory       func(context.Context, string, string, string, int, int, func(domain.FileHistoryPage, error))
+	ReadRepositoryChangesPatch      func(context.Context, domain.Repository, string, []domain.File, func(domain.PatchExport, error))
+	PickPatchDestination            func(func(string, error))
+	WritePatchFile                  func(context.Context, domain.Repository, string, string, func(domain.Repository, error, error))
+	SaveRepositoryFile              func(context.Context, domain.Repository, domain.File, string, func(domain.Repository, domain.File, error, error))
+	ReadMergeDocument               func(context.Context, domain.Repository, string, func(domain.MergeDocument, error))
+	repositoryRead                  *readRequest
+	logRead                         *readRequest
+	repositoryFileRead              *readRequest
+	pickingRepository               bool
+	repositoryWrite                 string
+	repositoryWriteCancel           context.CancelFunc
+	repositoryCancelRequested       bool
+	indexConfirmation               *indexChange
+	commitConfirmation              *commitChange
+	UpdateRepositoryIndex           func(context.Context, domain.Repository, bool, []domain.File, func(domain.Repository, error, error))
+	CommitRepository                func(context.Context, domain.Repository, string, bool, func(domain.Repository, error, error))
+	OperateRepository               func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error))
+	repositoryOperation             *repositoryOperationDialog
+	savedRepositories               []application.RepositorySnapshot
+	restoreRoot                     string
+	sessionRestore                  *readRequest
 }
 
 func New(model *application.App, layout application.Layout) *Workspace {
@@ -255,6 +259,10 @@ func (a *Workspace) View(c *ui.Context) {
 		a.toolbar(c, p)
 		divider(c, p)
 		ui.Row(c).FillWidth().Grow(1).Children(func() {
+			if a.welcomeActive() {
+				a.welcomeView(c, p)
+				return
+			}
 			a.activity(c, p)
 			ui.Box(c).Width(1).FillHeight().Background(p.theme.Border)
 			if a.Layout.HideGit {
@@ -320,6 +328,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.revisionBrowser != nil {
 		a.revisionBrowserView(c, p)
+	}
+	if a.branchComparison != nil {
+		a.branchComparisonView(c, p)
 	}
 	if a.patchExport != nil {
 		a.patchExportView(c, p)
@@ -396,12 +407,19 @@ func (a *Workspace) toolbar(c *ui.Context, p tokens) {
 			if menu.Hovered() {
 				menu.Background(p.theme.SurfaceHover)
 			}
-			flatToolMenu(c, p, "Switch repository", s.Repository.Name, nil, func(m *ui.Menu) {
+			name := s.Repository.Name
+			if a.welcomeActive() {
+				name = "Open Repository"
+			}
+			flatToolMenu(c, p, "Switch repository", name, nil, func(m *ui.Menu) {
 				if a.PickRepositoryDirectory != nil && a.ReadRepository != nil {
 					a.menu(m, openLocalRepository, commandTarget{})
 					m.Separator()
 				}
 				for i, session := range a.Model.Sessions {
+					if !a.canSelectSession(i) {
+						continue
+					}
 					name := session.Repository.Name
 					if root := session.Repository.Root; root != "" {
 						name += " · " + root
@@ -411,10 +429,20 @@ func (a *Workspace) toolbar(c *ui.Context, p tokens) {
 					}
 				}
 				a.recentRepositoryMenu(m)
+				m.Separator()
+				a.menu(m, openDemo, commandTarget{})
+				if a.demoActive() {
+					a.menu(m, leaveDemo, commandTarget{})
+				}
 			})
-			flatToolMenu(c, p, "Current branch", s.Repository.CurrentBranch, branchIcon, func(m *ui.Menu) {
-				a.branchMenu(m, s.Repository.CurrentBranch)
-			})
+			if a.demoActive() && a.Model.Production {
+				ui.Text(c, "Demo Mode").TextColor(p.theme.TextMuted)
+			}
+			if !a.welcomeActive() {
+				flatToolMenu(c, p, "Current branch", s.Repository.CurrentBranch, branchIcon, func(m *ui.Menu) {
+					a.branchMenu(m, s.Repository.CurrentBranch)
+				})
+			}
 		}
 		ui.Box(c).Grow(1).FillHeight().DragWindow()
 		commitIcon(c, logSearchIcon, "Search Everywhere").Tooltip("Search Everywhere  Double Shift").
@@ -508,6 +536,9 @@ func (a *Workspace) statusBar(c *ui.Context, p tokens) {
 	}
 	ui.Row(c).Height(statusHeight).FillWidth().Padding(0, inset).Gap(inset).AlignItems(ui.Center).Background(p.chrome).Children(func() {
 		context := s.Repository.Name
+		if a.Model.Production && a.demoActive() {
+			context = "Demo Mode · " + context
+		}
 		if entry != nil {
 			context += " › " + strings.ReplaceAll(entry.path, "/", " › ")
 		}

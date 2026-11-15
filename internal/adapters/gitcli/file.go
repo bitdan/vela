@@ -24,6 +24,9 @@ func (g *Executor) ReadFile(ctx context.Context, root, source string, file domai
 	if !validGitPath(file.Path) || (file.OldPath != "" && !validGitPath(file.OldPath)) {
 		return file, errors.New("invalid repository file path")
 	}
+	if strings.HasPrefix(source, "compare:") {
+		return g.readComparisonFile(ctx, root, source, file)
+	}
 	if strings.HasPrefix(source, "shelf:") || strings.HasPrefix(source, "shelf-index:") {
 		return g.readShelfFile(ctx, root, source, file)
 	}

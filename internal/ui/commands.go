@@ -77,6 +77,8 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	closeBranchComparison: "Close Branch Comparison", reloadBranchComparison: "Reload Branch Comparison", loadMoreComparisonCommits: "Load More Missing Commits", cancelBranchComparison: "Cancel Branch Comparison", openComparisonEntry: "Open Branch Comparison Diff", browseComparisonCommit: "Browse Missing Commit",
+	openDemo: "Open Demo Workspace", leaveDemo: "Leave Demo Workspace",
 	checkoutRevision: "Checkout Revision", showRepositoryRevision: "Show Repository at Revision",
 	getRevision: "Get from Revision", cherryPickChanges: "Cherry-Pick Selected Changes", revertChanges: "Revert Selected Changes",
 	openRevisionEntry: "Open Historical Entry", restoreRevisionEntry: "Restore Historical File", revisionParent: "Parent Historical Directory", reloadRevisionTree: "Reload Historical Directory", closeRevisionTree: "Close Historical Repository",
@@ -113,6 +115,21 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isBranchComparisonCommand(id) && (a.Model.Active().Repository.Root != "" || !isBranchComparisonEntry(id)) {
+		return a.branchComparisonDisabled(id, target)
+	}
+	if id == openDemo || id == leaveDemo {
+		if a.repositoryWrite != "" || a.repositoryOperation != nil || a.repositoryClone != nil || a.repositoryInit != nil {
+			return "Finish the current repository operation"
+		}
+		return ""
+	}
+	if a.welcomeActive() && !welcomeCommandAllowed(id) {
+		return "Open a repository or explicitly enter Demo Mode"
+	}
+	if id == selectRepo && !a.canSelectSession(target.index) {
+		return "Choose a real repository or explicitly enter Demo Mode"
+	}
 	if isAdvancedHistoryCommand(id) {
 		return a.advancedHistoryDisabled(id, target)
 	}
@@ -299,6 +316,18 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isBranchComparisonCommand(id) && (a.Model.Active().Repository.Root != "" || !isBranchComparisonEntry(id)) {
+		a.runBranchComparison(id, target)
+		return
+	}
+	if id == openDemo {
+		a.enterDemo()
+		return
+	}
+	if id == leaveDemo {
+		a.exitDemo()
 		return
 	}
 	if isAdvancedHistoryCommand(id) {
@@ -594,28 +623,15 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	case retryHistory:
 		a.Model.Active().HistoryState = application.HistoryReady
 	case switchRepo:
-		a.run(selectRepo, commandTarget{index: (a.Model.Index + 1) % len(a.Model.Sessions)})
-	case selectRepo:
-		a.stopHistoryComparison()
-		a.closeRevisionBrowser()
-		a.changelistDialog = nil
-		a.closeProjectSearchDialog()
-		a.fileTypeDialog = nil
-		stopRead(&a.logRead)
-		a.stopSourceDecision()
-		a.stopPatchExports()
-		a.closeFileHistoryDialog()
-		a.repositoryNavigation++
-		stopRead(&a.sessionRestore)
-		a.indexConfirmation = nil
-		a.commitConfirmation = nil
-		if a.repositoryOperation != nil && a.repositoryOperation.cancel == nil {
-			a.repositoryOperation = nil
+		for step := 1; step <= len(a.Model.Sessions); step++ {
+			index := (a.Model.Index + step) % len(a.Model.Sessions)
+			if a.canSelectSession(index) {
+				a.run(selectRepo, commandTarget{index: index})
+				break
+			}
 		}
-		stopRead(&a.repositoryRead)
-		stopRead(&a.repositoryFileRead)
-		a.Model.Switch(target.index)
-		a.status = "Switched to " + a.Model.Active().Repository.Name
+	case selectRepo:
+		a.selectRepository(target.index)
 	case selectBranch:
 		a.Model.Active().Branch = target.source
 		a.status = "Selected branch " + target.source

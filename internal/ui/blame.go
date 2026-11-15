@@ -13,6 +13,12 @@ const showBlame commandID = "editor.show-blame"
 
 func (a *Workspace) blameRevision(target commandTarget) string {
 	source := target.source
+	if _, right, ok := domain.ParseComparisonSource(source); ok {
+		if right != "" {
+			return right
+		}
+		return a.Model.Active().Repository.Head
+	}
 	switch source {
 	case "", "project", "working", "staged", "editor":
 		return a.Model.Active().Repository.Head

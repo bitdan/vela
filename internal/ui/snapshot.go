@@ -15,7 +15,16 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 		out.ActiveRepository = ""
 		out.ActiveRoot = a.Model.Active().Repository.Root
 	}
+	if a.Model.Production {
+		out.ActiveRepository = ""
+		if out.ActiveRoot == "" {
+			out.ActiveRoot = a.lastRealRoot
+		}
+	}
 	for i, s := range a.Model.Sessions {
+		if a.Model.Production && s.Repository.Root == "" {
+			continue
+		}
 		r := &a.repos[i]
 		repo := application.RepositorySnapshot{Name: s.Repository.Name, Root: s.Repository.Root,
 			Message: s.Message, Working: s.Working, Staged: s.Staged, Branch: s.Branch, Historical: s.Historical}
@@ -33,7 +42,8 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 			for _, prefix := range []string{"revision:", "local:", "before:"} {
 				identitySource = strings.TrimPrefix(identitySource, prefix)
 			}
-			if s.Repository.Root != "" && fixedObjectID(identitySource) {
+			_, _, comparison := domain.ParseComparisonSource(tab.source)
+			if s.Repository.Root != "" && (fixedObjectID(identitySource) || comparison) {
 				saved.ChangeKind, saved.OldPath = tab.file.Status, tab.file.OldPath
 			}
 			if tab.code != nil {
@@ -75,6 +85,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 
 func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 	a.restoreRoot = snapshot.ActiveRoot
+	a.lastRealRoot = snapshot.ActiveRoot
 	a.savedRepositories = nil
 	for _, saved := range snapshot.Repositories {
 		if saved.Root != "" && !slices.ContainsFunc(a.savedRepositories, func(s application.RepositorySnapshot) bool { return s.Root == saved.Root }) {
@@ -83,6 +94,9 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 	}
 	active := a.Model.Index
 	for i, session := range a.Model.Sessions {
+		if a.Model.Production && session.Repository.Root == "" {
+			continue
+		}
 		repo := session.Repository
 		if repo.Name == snapshot.ActiveRepository {
 			active = i

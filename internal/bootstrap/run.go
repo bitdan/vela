@@ -36,7 +36,7 @@ func run(layoutPath string) error {
 	if err != nil {
 		log.Printf("Using default layout: %v", err)
 	}
-	workspace := ui.New(application.New(), layout)
+	workspace := ui.New(application.NewWorkspace(), layout)
 	sessionPath := filepath.Join(filepath.Dir(layoutPath), "workspace.json")
 	session, sessionErr := adapters.LoadSession(sessionPath)
 	if sessionErr != nil {
@@ -49,6 +49,7 @@ func run(layoutPath string) error {
 	var initializer application.RepositoryInitializer = git
 	var cloner application.RepositoryCloner = git
 	var reader application.RepositoryReader = git
+	var comparisonReader application.RepositoryComparisonReader = git
 	var revisionTreeReader application.RepositoryRevisionTreeReader = git
 	var logReader application.RepositoryLogReader = git
 	var index application.IndexWriter = git
@@ -170,6 +171,24 @@ func run(layoutPath string) error {
 			go func() {
 				files, err := revisionTreeReader.ReadRevisionChanges(ctx, root, revision, mainline)
 				mygo.RunOnMain(func() { done(files, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryComparison = func(ctx context.Context, repo domain.Repository, ref, mode string, done func(domain.RevisionComparison, error)) {
+			go func() {
+				var result domain.RevisionComparison
+				var err error
+				if mode == "missing" {
+					result, err = comparisonReader.ReadMissingBranchComparison(ctx, repo, ref)
+				} else {
+					result, err = comparisonReader.ReadBranchComparison(ctx, repo, ref, mode == "working")
+				}
+				mygo.RunOnMain(func() { done(result, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadRepositoryComparisonCommits = func(ctx context.Context, root string, comparison domain.RevisionComparison, offset, limit int, done func(domain.CommitLogPage, error)) {
+			go func() {
+				page, err := comparisonReader.ReadComparisonCommits(ctx, root, comparison, offset, limit)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
 			}()
 		}
 		workspace.SaveRepositoryFile = func(ctx context.Context, repo domain.Repository, file domain.File, text string, done func(domain.Repository, domain.File, error, error)) {

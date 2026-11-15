@@ -21,6 +21,12 @@ type RepositoryRevisionTreeReader interface {
 	ReadRevisionChanges(context.Context, string, string, int) ([]domain.File, error)
 }
 
+type RepositoryComparisonReader interface {
+	ReadMissingBranchComparison(context.Context, domain.Repository, string) (domain.RevisionComparison, error)
+	ReadBranchComparison(context.Context, domain.Repository, string, bool) (domain.RevisionComparison, error)
+	ReadComparisonCommits(context.Context, string, domain.RevisionComparison, int, int) (domain.CommitLogPage, error)
+}
+
 type IndexWriter interface {
 	UpdateIndex(context.Context, domain.Repository, bool, []domain.File) error
 }
