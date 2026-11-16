@@ -152,6 +152,7 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
 	a.stopHistoryComparison()
 	a.closeRevisionBrowser()

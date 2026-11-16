@@ -15,20 +15,23 @@ const (
 	cancelProjectSearch     commandID = "project.search-cancel"
 	openProjectSearchResult commandID = "project.search-open"
 	closeProjectSearch      commandID = "project.search-close"
+	applyProjectReplace     commandID = "project.replace-previewed"
 )
 
 type projectSearchDialog struct {
-	open, loading, matchCase bool
-	root, query, message     string
-	repository, selected     int
-	result                   application.ProjectSearchResult
-	list                     ui.ListState
-	request                  *readRequest
+	open, loading, matchCase                      bool
+	root, query, message                          string
+	repository, selected                          int
+	result                                        application.ProjectSearchResult
+	list                                          ui.ListState
+	request                                       *readRequest
+	regex, includeIgnored, replaceMode, confirmed bool
+	pathFilter, replacement                       string
 }
 
 func isProjectSearchCommand(id commandID) bool {
 	switch id {
-	case findInProject, startProjectSearch, cancelProjectSearch, openProjectSearchResult, closeProjectSearch:
+	case findInProject, replaceInProject, startProjectSearch, cancelProjectSearch, openProjectSearchResult, closeProjectSearch, applyProjectReplace:
 		return true
 	}
 	return false
@@ -45,6 +48,7 @@ func (a *Workspace) invalidateProjectSearch() {
 	if s := a.projectSearch; s != nil {
 		stopRead(&s.request)
 		s.loading = false
+		s.confirmed = false
 		s.result = application.ProjectSearchResult{}
 		s.selected = -1
 		s.message = "Press Find to search the project"
@@ -52,7 +56,13 @@ func (a *Workspace) invalidateProjectSearch() {
 }
 
 func (a *Workspace) projectSearchDisabled(id commandID) string {
-	if id == findInProject {
+	if id == findInProject || id == replaceInProject {
+		if a.repositoryWrite != "" || a.repositoryRead != nil {
+			return "Wait for the current repository operation"
+		}
+		if id == replaceInProject && (a.Model.Active().Repository.Root == "" || a.ReplaceProjectFiles == nil) {
+			return "Open a local repository to replace saved project files"
+		}
 		if a.Model.Active().Repository.Root != "" && a.SearchProjectFiles == nil {
 			return "Project search is unavailable"
 		}
@@ -63,6 +73,8 @@ func (a *Workspace) projectSearchDisabled(id commandID) string {
 		return "Open Find in Files"
 	}
 	switch id {
+	case applyProjectReplace:
+		return a.projectReplaceDisabled(s)
 	case startProjectSearch:
 		if s.loading {
 			return "Search task is running"
@@ -84,10 +96,12 @@ func (a *Workspace) projectSearchDisabled(id commandID) string {
 
 func (a *Workspace) runProjectSearch(id commandID) {
 	switch id {
-	case findInProject:
+	case findInProject, replaceInProject:
 		a.closeProjectSearchDialog()
 		a.search.open = false
-		a.projectSearch = &projectSearchDialog{open: true, root: a.Model.Active().Repository.Root, repository: a.Model.Index, selected: -1, message: "Press Find to search the project"}
+		a.projectSearch = &projectSearchDialog{open: true, root: a.Model.Active().Repository.Root, repository: a.Model.Index, selected: -1, replaceMode: id == replaceInProject, message: "Press Find to search the project"}
+	case applyProjectReplace:
+		a.applyProjectReplacement()
 	case closeProjectSearch:
 		a.closeProjectSearchDialog()
 	case cancelProjectSearch:
@@ -103,7 +117,7 @@ func (a *Workspace) runProjectSearch(id commandID) {
 }
 
 func (a *Workspace) projectSearchInput(s *projectSearchDialog) application.ProjectSearchInput {
-	input := application.ProjectSearchInput{Root: s.root, Query: application.ProjectSearchQuery{Text: s.query, MatchCase: s.matchCase}, Overlays: map[string]string{}}
+	input := application.ProjectSearchInput{Root: s.root, Query: application.ProjectSearchQuery{Text: s.query, MatchCase: s.matchCase, Regex: s.regex, PathFilter: s.pathFilter}, IncludeIgnored: s.includeIgnored, Replacement: s.replacement, Overlays: map[string]string{}}
 	seen := map[string]bool{}
 	add := func(path string) {
 		if !seen[path] {
@@ -140,6 +154,7 @@ func (a *Workspace) startProjectTextSearch() {
 	request := &readRequest{cancel: cancel}
 	s.request = request
 	s.loading = true
+	s.confirmed = false
 	s.message = "Searching project files…"
 	s.result = application.ProjectSearchResult{}
 	s.selected = -1
@@ -272,17 +287,32 @@ func (a *Workspace) projectSearchView(c *ui.Context, p tokens) {
 	s := a.projectSearch
 	width, height := c.Size()
 	ui.DialogBase(c, &s.open, func(_ ui.Element, panel ui.Element) {
-		panel.Size(min(width-32, 780), min(height-48, 460)).Background(p.panel).Border(1, p.theme.Border).Radius(6).Column().Label("Find in Files dialog").Children(func() {
-			heading(c, p, "Find in Files", "")
+		dialogHeight := float32(560)
+		if s.replaceMode {
+			dialogHeight = 680
+		}
+		panel.Size(min(width-32, 880), min(height-48, dialogHeight)).Background(p.panel).Border(1, p.theme.Border).Radius(6).Column().Label("Find in Files dialog").Children(func() {
+			title := "Find in Files"
+			if s.replaceMode {
+				title = "Replace in Files"
+			}
+			heading(c, p, title, "")
 			ui.Column(c).FillWidth().Padding(inset).Gap(gap).Children(func() {
-				ui.Text(c, "Project files and unsaved Project documents · literal text").TextColor(p.theme.TextMuted)
+				ui.Text(c, "Project files and unsaved Project documents").TextColor(p.theme.TextMuted)
 				input := ui.TextInput(c, &s.query).Label("Find in Files query").Placeholder("Text to find").FillWidth().AutoFocus().OnChange(a.invalidateProjectSearch)
 				ui.Row(c).FillWidth().Gap(gap).AlignItems(ui.Center).Children(func() {
 					ui.Checkbox(c, &s.matchCase, "Match case").OnChange(a.invalidateProjectSearch)
+					ui.Checkbox(c, &s.regex, "Regex").OnChange(a.invalidateProjectSearch)
+					ui.Checkbox(c, &s.includeIgnored, "Include ignored files").Disabled(s.root == "").OnChange(a.invalidateProjectSearch)
 					ui.Text(c, "").Grow(1)
 					ui.Button(c, "Find").Label("Find Project Text").Disabled(a.projectSearchDisabled(startProjectSearch) != "").OnClick(func() { a.run(startProjectSearch, commandTarget{}) })
 					ui.Button(c, "Cancel Search").Label("Cancel Project Search").Disabled(a.projectSearchDisabled(cancelProjectSearch) != "").OnClick(func() { a.run(cancelProjectSearch, commandTarget{}) })
 				})
+				ui.TextInput(c, &s.pathFilter).Label("Project path filter").Placeholder("Path masks: *.go;*.md;!vendor/ · empty means all").FillWidth().OnChange(a.invalidateProjectSearch)
+				if s.replaceMode {
+					ui.TextInput(c, &s.replacement).Label("Project replacement text").Placeholder("Replacement · Regex supports $1, ${name}, $$").FillWidth().OnChange(a.invalidateProjectSearch)
+					ui.Text(c, "Preview first. Replaces saved files only; save matching unsaved documents before searching.").FillWidth().TextColor(p.theme.TextMuted)
+				}
 				if input.Submitted() {
 					a.pending = func() { a.run(startProjectSearch, commandTarget{}) }
 				}
@@ -304,7 +334,11 @@ func (a *Workspace) projectSearchView(c *ui.Context, p tokens) {
 				m := matches[i]
 				ui.Row(c).Height(rowHeight).FillWidth().Padding(0, inset).Gap(gap).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, fmt.Sprintf("%s:%d:%d", m.Path, m.Line, m.Column)).Width(300).SingleLine().Ellipsis("…")
-					ui.Text(c, m.Preview).Grow(1).SingleLine().Ellipsis("…")
+					preview := m.Preview
+					if s.replaceMode {
+						preview += " → " + projectReplacementPreview(m.Replacement)
+					}
+					ui.Text(c, preview).Grow(1).SingleLine().Ellipsis("…")
 				})
 			}).Grow(1).FillWidth().Label("Find in Files results")
 			if list.Submitted() {
@@ -317,9 +351,16 @@ func (a *Workspace) projectSearchView(c *ui.Context, p tokens) {
 					summary += " · Limit reached"
 				}
 				ui.Text(c, summary).FillWidth().SingleLine().Ellipsis("…").TextColor(p.theme.TextMuted)
+				if s.replaceMode {
+					ui.Checkbox(c, &s.confirmed, "Replace all previewed matches in the saved files").Disabled(s.loading)
+				}
 				ui.Row(c).FillWidth().Gap(gap).Justify(ui.End).Children(func() {
 					ui.Button(c, "Close").Label("Close Find in Files").OnClick(func() { a.run(closeProjectSearch, commandTarget{}) })
 					ui.PrimaryButton(c, "Open Result").Label("Open Search Result").Disabled(a.projectSearchDisabled(openProjectSearchResult) != "").OnClick(func() { a.run(openProjectSearchResult, commandTarget{}) })
+					if s.replaceMode {
+						reason := a.projectSearchDisabled(applyProjectReplace)
+						ui.PrimaryButton(c, "Replace Previewed").Disabled(reason != "").Tooltip(reason).OnClick(func() { a.run(applyProjectReplace, commandTarget{}) })
+					}
 				})
 			})
 		})

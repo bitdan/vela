@@ -77,6 +77,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	replaceInProject: "Replace in Files…", applyProjectReplace: "Replace Previewed Matches",
 	closeBranchComparison: "Close Branch Comparison", reloadBranchComparison: "Reload Branch Comparison", loadMoreComparisonCommits: "Load More Missing Commits", cancelBranchComparison: "Cancel Branch Comparison", openComparisonEntry: "Open Branch Comparison Diff", browseComparisonCommit: "Browse Missing Commit",
 	openDemo: "Open Demo Workspace", leaveDemo: "Leave Demo Workspace",
 	checkoutRevision: "Checkout Revision", showRepositoryRevision: "Show Repository at Revision",
@@ -115,6 +116,15 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if a.projectReplaceWriting != "" && a.projectReplaceWriting == a.Model.Active().Repository.Root && id != cancelGitTask && id != selectRepo {
+		return "Wait for the project replacement to finish"
+	}
+	if a.projectFileWriting != "" && a.projectFileWriting == a.Model.Active().Repository.Root && id != cancelGitTask && id != selectRepo {
+		return "Wait for the project file operation to finish"
+	}
+	if isProjectFileCommand(id) {
+		return a.projectFileDisabled(id, target)
+	}
 	if isBranchComparisonCommand(id) && (a.Model.Active().Repository.Root != "" || !isBranchComparisonEntry(id)) {
 		return a.branchComparisonDisabled(id, target)
 	}
@@ -316,6 +326,10 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isProjectFileCommand(id) {
+		a.runProjectFile(id, target)
 		return
 	}
 	if isBranchComparisonCommand(id) && (a.Model.Active().Repository.Root != "" || !isBranchComparisonEntry(id)) {

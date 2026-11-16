@@ -74,6 +74,15 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 	if err != nil {
 		return repo, err
 	}
+	directories, err := g.read(ctx, repo.Root, "ls-files", "-z", "--others", "--directory", "--exclude-standard")
+	if err != nil {
+		return repo, err
+	}
+	for _, directory := range nulFields(directories) {
+		if strings.HasSuffix(directory, "/") {
+			repo.ProjectDirectories = append(repo.ProjectDirectories, strings.TrimSuffix(directory, "/"))
+		}
+	}
 	workingPaths := filesByPath(repo.Working)
 	for _, conflict := range repo.Conflicts {
 		if _, found := workingPaths[conflict.Path]; !found {

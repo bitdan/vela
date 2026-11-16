@@ -43,6 +43,11 @@ func (g *Executor) SaveFile(ctx context.Context, repo domain.Repository, file do
 	defer cancel()
 	g.write.Lock()
 	defer g.write.Unlock()
+	return g.saveFile(ctx, repo, file, text)
+}
+
+// saveFile runs with the shared write lock held by its caller.
+func (g *Executor) saveFile(ctx context.Context, repo domain.Repository, file domain.File, text string) (domain.File, error) {
 	if err := ctx.Err(); err != nil {
 		return file, err
 	}
