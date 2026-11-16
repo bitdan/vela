@@ -65,6 +65,9 @@ func (a *Workspace) runWorkspaceShortcut(id commandID) {
 }
 
 func (a *Workspace) dispatchWorkspaceShortcuts(c *ui.Context) {
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyR) {
+		a.run(replaceInProject, commandTarget{})
+	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF) {
 		a.run(findInProject, commandTarget{})
 	}

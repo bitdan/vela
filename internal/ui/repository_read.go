@@ -37,6 +37,7 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
 	a.stopHistoryComparison()
 	a.closeRevisionBrowser()

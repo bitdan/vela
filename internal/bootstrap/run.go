@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"time"
 
 	"github.com/egoist/mygo"
 	native "github.com/egoist/mygo/ui"
@@ -46,6 +47,7 @@ func run(layoutPath string) error {
 	}
 	initial := workspace.SessionSnapshot()
 	git := gitcli.New()
+	var projectFiles application.ProjectFileManager = gitcli.ProjectFiles{Git: git, Trash: mygo.Shell.TrashItem}
 	var initializer application.RepositoryInitializer = git
 	var cloner application.RepositoryCloner = git
 	var reader application.RepositoryReader = git
@@ -63,6 +65,7 @@ func run(layoutPath string) error {
 	var patchExporter application.RepositoryPatchExporter = git
 	var patchFiles application.PatchFileWriter = adapters.PatchFiles{}
 	var projectSearch application.ProjectSearcher = adapters.ProjectFiles{}
+	var projectReplacer application.ProjectReplacer = git
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -76,6 +79,30 @@ func run(layoutPath string) error {
 			go func() {
 				path, err := initializer.Initialize(ctx, directory, branch)
 				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
+			}()
+		}
+		workspace.InspectProjectPath = func(ctx context.Context, repo domain.Repository, name string, done func(domain.ProjectPathSnapshot, error)) {
+			go func() {
+				snapshot, err := projectFiles.InspectProjectPath(ctx, repo, name)
+				mygo.RunOnMain(func() { done(snapshot, err); window.Invalidate() })
+			}()
+		}
+		workspace.ManageProjectFiles = func(ctx context.Context, repo domain.Repository, op domain.ProjectFileOperation, done func(domain.Repository, error, error)) {
+			go func() {
+				err := projectFiles.ExecuteProjectFileOperation(ctx, repo, op)
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := git.ReadRepository(refreshCtx, repo.Root)
+				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
+			}()
+		}
+		workspace.OpenProjectFolder = func(root, name string, done func(error)) {
+			go func() {
+				folder, err := gitcli.ResolveProjectFolder(root, name)
+				if err == nil {
+					err = mygo.Shell.OpenPath(folder)
+				}
+				mygo.RunOnMain(func() { done(err); window.Invalidate() })
 			}()
 		}
 		workspace.CloneRepository = func(ctx context.Context, source, target string, done func(string, error)) {
@@ -135,6 +162,15 @@ func run(layoutPath string) error {
 			go func() {
 				result, err := projectSearch.SearchProject(ctx, input)
 				mygo.RunOnMain(func() { done(result, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReplaceProjectFiles = func(ctx context.Context, repo domain.Repository, input application.ProjectReplaceInput, done func(domain.Repository, application.ProjectReplaceResult, error, error)) {
+			go func() {
+				result, err := projectReplacer.ReplaceProject(ctx, repo, input)
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
+				mygo.RunOnMain(func() { done(updated, result, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.ReadMergeDocument = func(ctx context.Context, repo domain.Repository, path string, done func(domain.MergeDocument, error)) {

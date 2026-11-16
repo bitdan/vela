@@ -13,8 +13,8 @@ import (
 
 type ProjectFiles struct{}
 
-// SearchProject reads only supplied Project paths, without walking the tree or
-// invoking Git. os.Root prevents a linked path from escaping the selected root.
+// SearchProject reads supplied Project paths and optionally discovers ignored
+// files. It never invokes Git. os.Root confines reads to the selected root.
 func (ProjectFiles) SearchProject(ctx context.Context, input application.ProjectSearchInput) (application.ProjectSearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return application.ProjectSearchResult{}, err
@@ -27,7 +27,14 @@ func (ProjectFiles) SearchProject(ctx context.Context, input application.Project
 		return application.ProjectSearchResult{}, fmt.Errorf("open project search root: %w", err)
 	}
 	defer root.Close()
-	return application.SearchProject(ctx, input, func(ctx context.Context, name string) (string, error) {
+	discoveryLimited := false
+	if input.IncludeIgnored {
+		input.Paths, discoveryLimited, err = discoverProjectSearchPaths(ctx, root, input.Paths, input.Query.PathFilter)
+		if err != nil {
+			return application.ProjectSearchResult{}, err
+		}
+	}
+	result, searchErr := application.SearchProject(ctx, input, func(ctx context.Context, name string) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
@@ -68,4 +75,6 @@ func (ProjectFiles) SearchProject(ctx context.Context, input application.Project
 		}
 		return string(data), nil
 	})
+	result.Limited = result.Limited || discoveryLimited
+	return result, searchErr
 }

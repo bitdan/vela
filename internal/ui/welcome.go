@@ -80,6 +80,7 @@ func (a *Workspace) exitDemo() {
 }
 
 func (a *Workspace) selectRepository(index int) {
+	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
 	if index < 0 || index >= len(a.Model.Sessions) {
 		return

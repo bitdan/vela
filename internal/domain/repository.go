@@ -43,6 +43,7 @@ type Repository struct {
 	Bisect                  BisectState
 	HeadMessage             string
 	Project                 []File
+	ProjectDirectories      []string
 	RemoteBranches          map[string]bool
 	Refs                    map[string]string
 	Upstreams               map[string]Upstream

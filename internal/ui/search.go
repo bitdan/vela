@@ -194,7 +194,7 @@ func (a *Workspace) searchResults(category searchCategory, query string) []searc
 			closeTab, openProject, openShelf, toggleConsole, showLog, refreshLog, showSettings, showLoading, showError, retryHistory,
 			goToFile, showRecentFiles, focusProject, manageRemotes, openLocalRepository, newBranch, fetch, pull, push, updateProject,
 			mergeBranch, rebaseBranch, cherryPick, revertCommit, continueMerge, abortMerge, continueRebase, skipRebase, abortRebase,
-			continueSequence, skipSequence, abortSequence, toggleBookmark, nextBookmark, previousBookmark, clearBookmarks, fileType, findInProject, newChangelist, editChangelist, shelve} {
+			continueSequence, skipSequence, abortSequence, toggleBookmark, nextBookmark, previousBookmark, clearBookmarks, fileType, findInProject, replaceInProject, newChangelist, editChangelist, shelve} {
 			label := sequenceActionLabel(a.Model.Active().Repository, id)
 			target := commandTarget{}
 			if isEditorMetadataCommand(id) {

@@ -124,10 +124,26 @@ type projectTreeData struct {
 	byPath   map[string]domain.File
 }
 
-func buildProjectTree(files []domain.File) projectTreeData {
+func buildProjectTree(files []domain.File, directories ...string) projectTreeData {
 	children := make(map[string][]string)
 	byPath := make(map[string]domain.File, len(files))
 	seen := make(map[string]bool)
+	for _, directory := range directories {
+		if directory == "" || directory == "." {
+			continue
+		}
+		for item := directory; item != "."; item = path.Dir(item) {
+			if _, exists := children[item]; !exists {
+				children[item] = nil
+			}
+			if seen[item] {
+				break
+			}
+			seen[item] = true
+			parent := path.Dir(item)
+			children[parent] = append(children[parent], item)
+		}
+	}
 	for _, file := range files {
 		byPath[file.Path] = file
 		for item := file.Path; item != "."; {
@@ -142,10 +158,12 @@ func buildProjectTree(files []domain.File) projectTreeData {
 	}
 	for _, items := range children {
 		slices.SortStableFunc(items, func(a, b string) int {
+			_, aDirectory := children[a]
+			_, bDirectory := children[b]
 			switch {
-			case len(children[a]) != 0 && len(children[b]) == 0:
+			case aDirectory && !bDirectory:
 				return -1
-			case len(children[b]) != 0 && len(children[a]) == 0:
+			case bDirectory && !aDirectory:
 				return 1
 			default:
 				return cmp.Compare(path.Base(a), path.Base(b))
@@ -167,7 +185,7 @@ func (a *Workspace) projectPanel(c *ui.Context, p tokens) {
 		_, canLocate = byPath[entry.path]
 	}
 	a.projectToolbar(c, p, children, canLocate)
-	if len(byPath) == 0 {
+	if len(byPath) == 0 && len(children["."]) == 0 {
 		r.projectFocus = false
 		ui.Text(c, "No project files").Padding(inset).TextColor(p.theme.TextMuted)
 		return
@@ -261,6 +279,21 @@ func (a *Workspace) projectPanel(c *ui.Context, p tokens) {
 		}
 		if r.project.List.Shortcut(c, ui.Cmd, ui.KeyD) {
 			a.run(previewDiff, target)
+		}
+	}
+	if r.projectIndex >= 0 && r.projectIndex < r.project.Rows() {
+		target := commandTarget{source: "project", file: domain.File{Path: r.project.Item(r.projectIndex)}}
+		for _, binding := range []struct {
+			id   commandID
+			mods ui.Modifiers
+			key  ui.Key
+		}{
+			{cutProjectFile, ui.Ctrl, ui.KeyX}, {copyProjectFile, ui.Ctrl, ui.KeyC}, {pasteProjectFile, ui.Ctrl, ui.KeyV},
+			{renameFile, ui.Shift, ui.KeyF6}, {deleteFile, 0, ui.KeyDelete},
+		} {
+			if r.project.List.Shortcut(c, binding.mods, binding.key) {
+				a.run(binding.id, target)
+			}
 		}
 	}
 }

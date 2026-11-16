@@ -127,6 +127,14 @@ type Workspace struct {
 	sourceDecision                  *sourceFileDecision
 	fileTypeDialog                  *fileTypeDialog
 	projectSearch                   *projectSearchDialog
+	projectFile                     *projectFileDialog
+	projectClipboard                *projectFileClipboard
+	projectFileWriting              string
+	projectReplaceWriting           string
+	ReplaceProjectFiles             func(context.Context, domain.Repository, application.ProjectReplaceInput, func(domain.Repository, application.ProjectReplaceResult, error, error))
+	InspectProjectPath              func(context.Context, domain.Repository, string, func(domain.ProjectPathSnapshot, error))
+	ManageProjectFiles              func(context.Context, domain.Repository, domain.ProjectFileOperation, func(domain.Repository, error, error))
+	OpenProjectFolder               func(string, string, func(error))
 	changelistDialog                *changelistDialog
 	revisionBrowser                 *revisionBrowserDialog
 	ReadRepositoryRevisionTree      func(context.Context, string, string, string, func(domain.RevisionTree, error))
@@ -190,7 +198,7 @@ func newRepoView(repo domain.Repository, layout application.Layout) repoView {
 	applyLogSettings(r, layout.VersionControl.Log)
 	r.logTopo = repo.Root != ""
 	if repo.Root != "" {
-		r.projectTree = buildProjectTree(repo.Project)
+		r.projectTree = buildProjectTree(repo.Project, repo.ProjectDirectories...)
 	}
 	r.rebuildCommitLog(repo)
 	return *r
@@ -343,6 +351,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.projectSearch != nil {
 		a.projectSearchView(c, p)
+	}
+	if a.projectFile != nil {
+		a.projectFileView(c, p)
 	}
 	if a.changelistDialog != nil {
 		a.changelistView(c, p)
