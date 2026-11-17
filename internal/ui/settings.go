@@ -339,5 +339,5 @@ func (a *Workspace) gitSettings(c *ui.Context, p tokens) {
 	ui.Checkbox(c, &git.CheckIncoming, "Check remote for incoming changes")
 	settingsSelect(c, "Fetch tags", &git.FetchTags, "Auto", "Always", "Never")
 	ui.Checkbox(c, &git.CredentialHelper, "Use credential helper")
-	ui.Text(c, "Fetch tags and credential helper preferences apply to repository Fetch / Pull / Push / Update and background remote tasks. Auto respects Git's tag configuration. Update method / cleanup, protected-branch options and GPG configuration remain pending.").FillWidth().TextColor(p.theme.TextMuted)
+	ui.Text(c, "Fetch tags and credential helper preferences apply to repository Fetch / Pull / Push / Update and background remote tasks. Auto respects Git's tag configuration. Update method and cleanup are defaults in the explicit Update confirmation; protected-branch options and GPG configuration remain pending.").FillWidth().TextColor(p.theme.TextMuted)
 }

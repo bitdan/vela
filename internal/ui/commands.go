@@ -118,6 +118,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if a.updateWriting != "" && a.updateWriting == a.Model.Active().Repository.Root && id != cancelGitTask && id != selectRepo {
+		return "Wait for the branch update to finish"
+	}
 	if a.patchImport != nil && id != previewImportedPatch && id != applyImportedPatch && id != cancelGitTask && id != selectRepo {
 		return "Finish or close the patch import first"
 	}

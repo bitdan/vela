@@ -87,6 +87,8 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	UpdateMethod, UpdateCleanup    string
+	ConfirmUpdateCleanup           bool
 	Network                        NetworkPolicy
 	Paths                          []string
 	RemoveApplied                  bool
