@@ -37,6 +37,7 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	a.stopBackgroundTasks()
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
 	a.stopHistoryComparison()
@@ -82,6 +83,7 @@ func (a *Workspace) loadRepository(directory string, refresh bool) {
 			}
 		}
 		a.Model.Switch(a.installRepository(repo))
+		a.syncBackgroundRepository()
 		if refresh {
 			a.status = "Refreshed " + repo.Name
 		} else {
@@ -130,6 +132,9 @@ func (a *Workspace) installRepository(repo domain.Repository) int {
 		a.Model.Sessions[index], a.repos[index] = session, view
 	}
 	a.Model.Sessions[index].Changelists.Normalize(repo)
+	if a.Model.Active().Repository.Root == repo.Root {
+		a.syncBackgroundRepository()
+	}
 	return index
 }
 

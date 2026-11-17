@@ -95,6 +95,11 @@ type repoView struct {
 }
 
 type Workspace struct {
+	background                      backgroundState
+	backgroundInFlight              int
+	WatchRepository                 func(domain.Repository)
+	RefreshRepository               func(context.Context, domain.Repository, func(domain.Repository, error))
+	CheckRepositoryRemote           func(context.Context, domain.Repository, application.BackgroundRemotePolicy, func(application.BackgroundRemoteResult, error))
 	branchComparison                *branchComparisonDialog
 	ReadRepositoryComparison        func(context.Context, domain.Repository, string, string, func(domain.RevisionComparison, error))
 	ReadRepositoryComparisonCommits func(context.Context, string, domain.RevisionComparison, int, int, func(domain.CommitLogPage, error))
@@ -123,6 +128,10 @@ type Workspace struct {
 	patchDialog                     *patchDialog
 	fileHistory                     *fileHistoryDialog
 	patchExport                     *patchExportDialog
+	patchImport                     *patchImportDialog
+	PickPatchSource                 func(func(string, error))
+	PreviewImportedPatch            func(context.Context, domain.Repository, string, string, func(domain.ImportedPatch, error))
+	ApplyImportedPatch              func(context.Context, domain.Repository, domain.ImportedPatch, func(domain.Repository, error, error))
 	patchCopyRead                   *readRequest
 	sourceDecision                  *sourceFileDecision
 	fileTypeDialog                  *fileTypeDialog
@@ -343,6 +352,9 @@ func (a *Workspace) View(c *ui.Context) {
 	if a.patchExport != nil {
 		a.patchExportView(c, p)
 	}
+	if a.patchImport != nil {
+		a.patchImportView(c, p)
+	}
 	if a.sourceDecision != nil {
 		a.sourceDecisionView(c, p)
 	}
@@ -555,7 +567,12 @@ func (a *Workspace) statusBar(c *ui.Context, p tokens) {
 		}
 		ui.Text(c, context).FontSize(p.textSize(smallText)).SingleLine().Ellipsis("…")
 		ui.Text(c, a.status).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
-		if a.repositoryWriteCancel != nil || a.patchCopyRead != nil {
+		if a.background.task != "" {
+			ui.Text(c, a.background.task).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Tooltip(a.background.message)
+		} else if a.background.message != "" {
+			ui.Text(c, a.background.message).Width(220).SingleLine().Ellipsis("…").FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Tooltip(a.background.message)
+		}
+		if a.repositoryWriteCancel != nil || a.patchCopyRead != nil || a.background.refresh != nil || a.background.remote != nil {
 			ui.ButtonBase(c.Key("cancel-git-task")).Height(statusHeight-2).Padding(0, gap).Center().Label("Cancel Git Task").Tooltip("Cancel Git task in " + a.repositoryWrite).
 				Disabled(a.repositoryCancelRequested).Children(func() { ui.Text(c, "Cancel Task").FontSize(p.textSize(smallText)) }).OnClick(func() { a.run(cancelGitTask, commandTarget{}) })
 		}

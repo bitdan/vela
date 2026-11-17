@@ -87,6 +87,7 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	Network                        NetworkPolicy
 	Paths                          []string
 	RemoveApplied                  bool
 	Kind                           RepositoryOperationKind
@@ -102,4 +103,10 @@ type RepositoryOperation struct {
 	PatchVersion                   string
 	HunkIndex                      int
 	IncludeUntracked, RestoreIndex bool
+}
+
+// NetworkPolicy is copied at dispatch; it never reads mutable UI preferences.
+type NetworkPolicy struct {
+	FetchTags                               string
+	DisableCredentialHelper, NonInteractive bool
 }

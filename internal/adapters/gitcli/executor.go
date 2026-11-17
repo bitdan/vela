@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"vela/internal/domain"
 )
 
 type Executor struct {
@@ -25,6 +27,12 @@ type result struct {
 }
 
 type canonicalHistoryKey struct{}
+
+type networkPolicyKey struct{}
+
+func withNetworkPolicy(ctx context.Context, policy domain.NetworkPolicy) context.Context {
+	return context.WithValue(ctx, networkPolicyKey{}, policy)
+}
 
 func canonicalHistory(ctx context.Context) context.Context {
 	return context.WithValue(ctx, canonicalHistoryKey{}, true)
@@ -61,6 +69,14 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 }
 
 func (*Executor) runInputWithEnvLimit(ctx context.Context, directory, input string, env []string, stdoutLimit int, args ...string) (result, error) {
+	policy, _ := ctx.Value(networkPolicyKey{}).(domain.NetworkPolicy)
+	if policy.DisableCredentialHelper {
+		args = append([]string{"-c", "credential.helper="}, args...)
+	}
+	if policy.NonInteractive {
+		args = append([]string{"-c", "core.askPass="}, args...)
+		env = append(env, "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=Never", "GIT_ASKPASS=", "SSH_ASKPASS=", "SSH_ASKPASS_REQUIRE=never")
+	}
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = directory
 	cmd.Stdin = strings.NewReader(input)
@@ -94,11 +110,14 @@ func (*Executor) runInputWithEnvLimit(ctx context.Context, directory, input stri
 	}
 	if err != nil {
 		commandArgs := args
-		if commandArgs[0] == "-c" {
-			commandArgs = commandArgs[2:]
-		}
-		if commandArgs[0] == "--literal-pathspecs" {
-			commandArgs = commandArgs[1:]
+		for len(commandArgs) > 1 {
+			if commandArgs[0] == "-c" && len(commandArgs) > 2 {
+				commandArgs = commandArgs[2:]
+			} else if commandArgs[0] == "--literal-pathspecs" {
+				commandArgs = commandArgs[1:]
+			} else {
+				break
+			}
 		}
 		return output, fmt.Errorf("git %s: %w", commandArgs[0], err)
 	}
