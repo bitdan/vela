@@ -67,6 +67,7 @@ const (
 )
 
 type commandTarget struct {
+	taskID            uint64
 	shelfID, shelfOID string
 	remote            domain.Remote
 	index             int
@@ -78,6 +79,10 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	toggleImportedFile: "Toggle Imported Patch File", toggleImportedHunk: "Toggle Imported Patch Hunk", selectImportedAll: "Select All Imported Hunks", clearImportedSelection: "Clear Imported Hunk Selection", toggleImportedReverse: "Reverse Imported Patch",
+	configureSigning:      "Configure GPG Key…",
+	confirmCommitWarnings: "Commit Anyway", cancelCommitWarnings: "Cancel Commit Warnings",
+	showTasks: "Task Center", cancelSelectedTask: "Cancel Selected Task", clearTaskHistory: "Clear Completed Tasks",
 	importPatch: "Import Patch…", previewImportedPatch: "Preview Imported Patch", applyImportedPatch: "Apply Imported Patch",
 	replaceInProject: "Replace in Files…", applyProjectReplace: "Replace Previewed Matches",
 	closeBranchComparison: "Close Branch Comparison", reloadBranchComparison: "Reload Branch Comparison", loadMoreComparisonCommits: "Load More Missing Commits", cancelBranchComparison: "Cancel Branch Comparison", openComparisonEntry: "Open Branch Comparison Diff", browseComparisonCommit: "Browse Missing Commit",
@@ -118,14 +123,29 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if id == configureSigning {
+		return a.disabledFor(showSettings, target)
+	}
+	if id == confirmCommitWarnings || id == cancelCommitWarnings {
+		return a.commitWarningDisabled(id)
+	}
+	if reason, handled := a.taskDisabled(id, target); handled {
+		return reason
+	}
 	if a.updateWriting != "" && a.updateWriting == a.Model.Active().Repository.Root && id != cancelGitTask && id != selectRepo {
 		return "Wait for the branch update to finish"
 	}
-	if a.patchImport != nil && id != previewImportedPatch && id != applyImportedPatch && id != cancelGitTask && id != selectRepo {
+	if a.patchImport != nil && !isPatchImportCommand(id) && id != cancelGitTask && id != selectRepo {
 		return "Finish or close the patch import first"
 	}
-	if id == importPatch || id == previewImportedPatch || id == applyImportedPatch {
-		return a.patchImportDisabled(id)
+	if isPatchImportCommand(id) {
+		if reason := a.patchImportDisabled(id); reason != "" {
+			return reason
+		}
+		if isPatchSelectionCommand(id) {
+			return a.patchSelectionDisabled(id, target)
+		}
+		return ""
 	}
 	if a.projectReplaceWriting != "" && a.projectReplaceWriting == a.Model.Active().Repository.Root && id != cancelGitTask && id != selectRepo {
 		return "Wait for the project replacement to finish"
@@ -212,7 +232,7 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 		return ""
 	}
 	if id == cancelGitTask {
-		if (a.repositoryWriteCancel == nil || a.repositoryCancelRequested) && a.patchCopyRead == nil && a.background.refresh == nil && a.background.remote == nil {
+		if (a.repositoryWriteCancel == nil || a.repositoryCancelRequested) && a.patchCopyRead == nil && a.background.refresh == nil && a.background.remote == nil && a.activeCancellableTask() == 0 {
 			return "No cancellable Git task"
 		}
 		return ""
@@ -337,6 +357,21 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isPatchSelectionCommand(id) {
+		a.runPatchSelection(id, target)
+		return
+	}
+	if id == configureSigning {
+		a.configureSigningSettings()
+		return
+	}
+	if id == confirmCommitWarnings || id == cancelCommitWarnings {
+		a.runCommitWarning(id)
+		return
+	}
+	if a.taskCommand(id, target) {
 		return
 	}
 	switch id {
@@ -466,6 +501,11 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		a.repositoryClone = &repositoryCloneDialog{open: true}
 		return
 	case cancelGitTask:
+		if id := a.activeCancellableTask(); id != 0 {
+			a.Tasks.Cancel(id)
+			a.status = "Cancellation requested · waiting for operation and refresh"
+			return
+		}
 		if a.repositoryWriteCancel == nil {
 			if a.background.refresh != nil || a.background.remote != nil {
 				a.stopBackgroundTasks()
@@ -616,6 +656,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		a.repo().toolPage = commandLabel(id)
 		a.Layout.HideCommit = false
 	case toggleConsole, showLog:
+		a.tasksOpen = false
 		a.repo().consoleOpen = id == toggleConsole
 		a.Layout.HideGit = false
 	case showSettings:
@@ -657,6 +698,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		a.Layout.Top, a.Layout.Commit, a.Layout.Branches, a.Layout.Log, a.Layout.Files = defaults.Top, defaults.Commit, defaults.Branches, defaults.Log, defaults.Files
 		a.Layout.HideCommit, a.Layout.HideGit, a.Layout.HideBranches, a.Layout.HideDetails = false, false, false, false
 		a.repo().toolPage, a.repo().consoleOpen = "", false
+		a.tasksOpen = false
 		a.record("Default layout restored")
 	case showLoading:
 		a.Model.Active().HistoryState = application.HistoryLoading

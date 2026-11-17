@@ -298,8 +298,15 @@ func (g *Executor) sequenceSelected(ctx context.Context, repo domain.Repository,
 		originalMessage = subject + " (selected from " + op.Source + ")\n" + body
 	}
 	message := originalMessage + "\n\nSelected changes from " + op.Source + "\n"
+	protected, err := domain.ProtectedBranch(op.Safety.ProtectedBranches, repo.CurrentBranch)
+	if err != nil {
+		return err
+	}
 	for _, path := range paths {
 		message += strconv.Quote(path) + "\n"
+	}
+	if op.Kind == domain.CherryPickSelected && op.Safety.CherryPickSuffix && protected {
+		message += "\n(cherry picked from commit " + op.Source + ")\n"
 	}
 	commitArgs := []string{"-c", "commit.gpgsign=false", "commit-tree", tree}
 	if len(parents) > 1 {

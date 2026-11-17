@@ -87,6 +87,7 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	Safety                         RepositorySafetyPolicy
 	UpdateMethod, UpdateCleanup    string
 	ConfirmUpdateCleanup           bool
 	Network                        NetworkPolicy

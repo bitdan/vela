@@ -30,6 +30,9 @@ func (g *Executor) Commit(ctx context.Context, snapshot domain.Repository, messa
 	if len(policies) > 0 {
 		policy = policies[0]
 	}
+	if err := policy.Signing.Validate(); err != nil {
+		return err
+	}
 	if warning := policy.Inspections.Inspect(message); warning != "" {
 		return fmt.Errorf("commit inspection: %s", warning)
 	}
@@ -43,6 +46,15 @@ func (g *Executor) Commit(ctx context.Context, snapshot domain.Repository, messa
 	}
 	if current.CurrentBranch == "Detached HEAD" {
 		return errors.New("check out a local branch before committing")
+	}
+	if amend {
+		protected, err := domain.ProtectedBranch(policy.ProtectedBranches, current.CurrentBranch)
+		if err != nil {
+			return err
+		}
+		if protected {
+			return fmt.Errorf("branch %q is protected; Amend is disabled", current.CurrentBranch)
+		}
 	}
 	if err := g.checkCommitState(ctx, current.Root, index); err != nil {
 		return err
@@ -87,13 +99,33 @@ func (g *Executor) Commit(ctx context.Context, snapshot domain.Repository, messa
 			return err
 		}
 	}
-	args := []string{"-c", "core.fsmonitor=false", "commit", "--file=-", "--cleanup=verbatim"}
+	args := []string{"-c", "core.fsmonitor=false"}
+	if policy.Signing.Enabled {
+		args = append(args, "-c", "gpg.format=openpgp")
+	}
+	args = append(args, "commit", "--file=-", "--cleanup=verbatim")
+	if policy.Signing.Enabled {
+		args = append(args, "--gpg-sign="+policy.Signing.KeyID())
+	}
+	if err := g.inspectCommitWarnings(ctx, current, index, policy); err != nil {
+		return err
+	}
+	// Inspection may take time; reject external HEAD/Index changes before commit.
+	if _, _, err := g.verifyCheckout(ctx, snapshot); err != nil {
+		return err
+	}
+	if err := g.checkCommitState(ctx, current.Root, index); err != nil {
+		return err
+	}
 	if amend {
 		args = append(args, "--amend")
 	}
 	message = strings.ReplaceAll(message, "\r\n", "\n")
 	if !strings.HasSuffix(message, "\n") {
 		message += "\n"
+	}
+	if policy.Signing.Enabled {
+		application.ReportTaskProgress(ctx, "Signing Commit/Amend with configured OpenPGP key")
 	}
 	out, err := g.runInput(ctx, current.Root, message, args...)
 	if err != nil && ctx.Err() == nil && strings.TrimSpace(out.stderr) != "" {

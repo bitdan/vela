@@ -19,6 +19,7 @@ func (g *Executor) CheckRepositoryRemote(ctx context.Context, repo domain.Reposi
 	defer cancel()
 	policy.Network.NonInteractive = true
 	ctx = withNetworkPolicy(ctx, policy.Network)
+	application.ReportTaskProgress(ctx, "Waiting for repository write lock")
 	g.write.Lock()
 	defer g.write.Unlock()
 	if _, _, err := g.verifyCheckout(ctx, repo); err != nil {
@@ -43,12 +44,15 @@ func (g *Executor) CheckRepositoryRemote(ctx context.Context, repo domain.Reposi
 			}
 			if !supported {
 				result.Skipped = append(result.Skipped, remote.Name)
+				application.ReportTaskProgress(ctx, "Skipped unsupported automatic transport: "+remote.Name)
 				continue
 			}
+			application.ReportTaskProgress(ctx, "Fetching remote: "+remote.Name)
 			if err := g.fetchBranches(ctx, repo.Root, remote.Name, "*", policy.Network); err != nil {
 				return result, fmt.Errorf("automatic fetch stopped at %s: %w", remote.Name, err)
 			}
 			result.Fetched = append(result.Fetched, remote.Name)
+			application.ReportTaskProgress(ctx, "Fetch completed: "+remote.Name)
 		}
 		result.Message = fmt.Sprintf("Automatically fetched %d remotes", len(result.Fetched))
 		if len(result.Skipped) > 0 {
@@ -80,6 +84,7 @@ func (g *Executor) CheckRepositoryRemote(ctx context.Context, repo domain.Reposi
 		return result, err
 	}
 	ref := "refs/heads/" + upstream.Branch
+	application.ReportTaskProgress(ctx, "Checking upstream: "+upstream.Remote+"/"+upstream.Branch)
 	out, err := g.runInputWithEnvLimit(ctx, repo.Root, "", nil, 64<<10, "ls-remote", "--exit-code", "--heads", "--refs", "--", upstream.Remote, ref)
 	if err != nil {
 		if out.exitCode == 2 && ctx.Err() == nil {

@@ -112,6 +112,13 @@ func (g *Executor) sequence(ctx context.Context, repo domain.Repository, index s
 			return errors.New("the selected commit is unavailable")
 		}
 		args := []string{"--no-edit", "--no-rerere-autoupdate"}
+		protected, err := domain.ProtectedBranch(op.Safety.ProtectedBranches, repo.CurrentBranch)
+		if err != nil {
+			return err
+		}
+		if op.Kind == domain.StartCherryPick && op.Safety.CherryPickSuffix && protected {
+			args = append(args, "-x")
+		}
 		if len(parents) > 2 {
 			if op.Mainline < 1 || op.Mainline >= len(parents) {
 				return errors.New("choose the mainline parent for this merge commit")

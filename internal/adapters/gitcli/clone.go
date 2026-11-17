@@ -15,6 +15,21 @@ import (
 // Clone requires a new directory. On failure it never recursively deletes a
 // destination: Git may have left a useful partial repository or user content.
 func (g *Executor) Clone(ctx context.Context, source, target string) (string, error) {
+	return g.CloneWithPolicy(ctx, source, target, domain.NetworkPolicy{})
+}
+
+func (g *Executor) CloneWithPolicy(ctx context.Context, source, target string, policy domain.NetworkPolicy) (string, error) {
+	ctx = withNetworkPolicy(ctx, policy)
+	var tagArgs []string
+	switch policy.FetchTags {
+	case "", "Auto":
+	case "Always":
+		tagArgs = []string{"--tags"}
+	case "Never":
+		tagArgs = []string{"--no-tags"}
+	default:
+		return "", errors.New("invalid clone tags preference")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	g.write.Lock()
@@ -70,7 +85,9 @@ func (g *Executor) Clone(ctx context.Context, source, target string) (string, er
 	if err := os.Mkdir(target, 0755); err != nil {
 		return "", fmt.Errorf("create new clone destination: %w", err)
 	}
-	out, err := g.run(ctx, parent, "-c", "submodule.recurse=false", "-c", "protocol.ext.allow=never", "clone", "--no-local", "--no-hardlinks", "--no-recurse-submodules", "--template=", "--origin=origin", "--", source, target)
+	args := []string{"-c", "submodule.recurse=false", "-c", "protocol.ext.allow=never", "clone", "--no-local", "--no-hardlinks", "--no-recurse-submodules", "--template=", "--origin=origin"}
+	args = append(args, tagArgs...)
+	out, err := g.run(ctx, parent, append(args, "--", source, target)...)
 	if err != nil {
 		return target, fmt.Errorf("clone did not complete; inspect destination %q before retrying: %w", target, operationError(ctx, out, err))
 	}

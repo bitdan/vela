@@ -63,6 +63,9 @@ func (a *Workspace) updateDirtyBuffer(root string) bool {
 }
 
 func (a *Workspace) updateDisabled(s *repositoryOperationDialog) string {
+	if err := a.Layout.VersionControl.Git.SafetyPolicy().CheckOperation(s.snapshot, s.op); err != nil {
+		return err.Error()
+	}
 	if s.op.Kind != domain.UpdateTrackedBranch || s.op.UpdateMethod == "" {
 		return ""
 	}

@@ -7,14 +7,17 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
 type commitChange struct {
-	repo    domain.Repository
-	message string
-	amend   bool
-	push    bool
+	warnings       *application.CommitWarnings
+	warningConsent string
+	repo           domain.Repository
+	message        string
+	amend          bool
+	push           bool
 }
 
 func (a *Workspace) commitForm(c *ui.Context, p tokens) {
@@ -69,6 +72,15 @@ func (a *Workspace) commitDisabled() string {
 	case strings.TrimSpace(s.Message) == "":
 		return "Enter a commit message"
 	}
+	if s.Amend {
+		protected, err := domain.ProtectedBranch(a.Layout.VersionControl.Git.ProtectedBranches, s.Repository.CurrentBranch)
+		if err != nil {
+			return err.Error()
+		}
+		if protected {
+			return "Amend is disabled on a protected branch"
+		}
+	}
 	for _, file := range s.Repository.Working {
 		if file.Status == "U" {
 			return "Resolve the index conflicts before committing"
@@ -92,6 +104,10 @@ func (a *Workspace) requestCommit(push bool) {
 
 func (a *Workspace) confirmAmend(c *ui.Context) {
 	change := a.commitConfirmation
+	if change.warnings != nil {
+		a.commitWarningDialog(c)
+		return
+	}
 	message := fmt.Sprintf("Replace commit %s on %s in %s using the commit message and the current index (%s staged).",
 		change.repo.Head[:min(8, len(change.repo.Head))], change.repo.CurrentBranch, change.repo.Name, fileCount(len(change.repo.Staged)))
 	open := true
@@ -111,8 +127,20 @@ func (a *Workspace) applyCommit(change *commitChange) {
 		progress, success, failure = "Amending commit…", "Amended commit", "Amend failed"
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = application.WithCommitWarningConsent(ctx, change.warningConsent)
+	showPushDialog := a.Layout.VersionControl.Git.ShowPushDialog
 	a.beginRepositoryWrite(root, progress, cancel)
 	a.CommitRepository(ctx, change.repo, change.message, change.amend, func(repo domain.Repository, err, refreshErr error) {
+		wasCanceled := ctx.Err() != nil
+		var warnings *application.CommitWarnings
+		if errors.As(err, &warnings) {
+			a.finishRepositoryWrite(root, repo, refreshErr, "Commit requires warning confirmation")
+			if !wasCanceled && refreshErr == nil && a.Model.Active().Repository.Root == root {
+				change.warnings = warnings
+				a.commitConfirmation = change
+			}
+			return
+		}
 		message := success
 		if err != nil {
 			message = failure + " · " + err.Error()
@@ -130,10 +158,15 @@ func (a *Workspace) applyCommit(change *commitChange) {
 			message += " on " + change.repo.CurrentBranch
 		}
 		a.finishRepositoryWrite(root, repo, refreshErr, message)
-		if change.push && err == nil && refreshErr == nil && a.Model.Active().Repository.Root == root &&
+		if change.push && !wasCanceled && err == nil && refreshErr == nil && a.Model.Active().Repository.Root == root && repo.CurrentBranch == change.repo.CurrentBranch &&
 			a.disabledFor(push, commandTarget{}) == "" {
 			a.openRepositoryOperation(push, commandTarget{})
 			a.repositoryOperation.afterCommit = true
+			upstream := repo.Upstreams[repo.CurrentBranch]
+			op := a.repositoryOperation.op
+			if !showPushDialog && upstream.Remote != "" && upstream.Remote != "." && upstream.Branch != "" && upstream == change.repo.Upstreams[change.repo.CurrentBranch] && repo.RemoteVersion != "" && repo.RemoteVersion == change.repo.RemoteVersion && op.Branch == repo.CurrentBranch && op.Remote == upstream.Remote && op.Target == upstream.Branch && !op.SetUpstream {
+				a.applyRepositoryOperation(a.repositoryOperation)
+			}
 		}
 	})
 }

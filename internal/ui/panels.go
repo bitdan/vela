@@ -198,10 +198,13 @@ func (a *Workspace) git(c *ui.Context, p tokens) {
 		r := a.repo()
 		ui.Row(c).Height(headerHeight+4).FillWidth().Padding(0, inset).Gap(gap).AlignItems(ui.Center).Background(p.chrome).Children(func() {
 			ui.Text(c, "Git").Bold()
-			toolTab(c, p, "Log", !r.consoleOpen, func() { a.run(showLog, commandTarget{}) })
-			toolTab(c, p, "Console", r.consoleOpen, func() { a.run(toggleConsole, commandTarget{}) })
+			toolTab(c, p, "Log", !r.consoleOpen && !a.tasksOpen, func() { a.run(showLog, commandTarget{}) })
+			toolTab(c, p, "Console", r.consoleOpen && !a.tasksOpen, func() { a.run(toggleConsole, commandTarget{}) })
+			toolTab(c, p, "Tasks", a.tasksOpen, func() { a.run(showTasks, commandTarget{}) })
 			ui.Box(c).Grow(1)
-			if r.consoleOpen {
+			if a.tasksOpen {
+				a.panelAction(c, clearTaskHistory, "×")
+			} else if r.consoleOpen {
 				a.panelAction(c, clearConsole, "×")
 			} else {
 				titleTool(c, "⋯", "Git View Options").Menu(func(m *ui.Menu) {
@@ -211,6 +214,10 @@ func (a *Workspace) git(c *ui.Context, p tokens) {
 			a.panelAction(c, toggleGit, "−")
 		})
 		divider(c, p)
+		if a.tasksOpen {
+			a.taskPanel(c, p)
+			return
+		}
 		if r.consoleOpen {
 			a.consolePanel(c, p)
 			return

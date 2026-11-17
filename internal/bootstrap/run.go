@@ -49,7 +49,7 @@ func run(layoutPath string) error {
 	git := gitcli.New()
 	var projectFiles application.ProjectFileManager = gitcli.ProjectFiles{Git: git, Trash: mygo.Shell.TrashItem}
 	var initializer application.RepositoryInitializer = git
-	var cloner application.RepositoryCloner = git
+	var cloner application.RepositoryNetworkCloner = git
 	var reader application.RepositoryReader = git
 	var comparisonReader application.RepositoryComparisonReader = git
 	var revisionTreeReader application.RepositoryRevisionTreeReader = git
@@ -65,6 +65,7 @@ func run(layoutPath string) error {
 	var fileHistoryReader application.RepositoryFileHistoryReader = git
 	var patchExporter application.RepositoryPatchExporter = git
 	var patchImporter application.RepositoryPatchImporter = git
+	var patchReviewer application.RepositoryPatchReviewer = git
 	var patchFiles application.PatchFileWriter = adapters.PatchFiles{}
 	var projectSearch application.ProjectSearcher = adapters.ProjectFiles{}
 	var projectReplacer application.ProjectReplacer = git
@@ -116,6 +117,7 @@ func run(layoutPath string) error {
 		workspace.ManageProjectFiles = func(ctx context.Context, repo domain.Repository, op domain.ProjectFileOperation, done func(domain.Repository, error, error)) {
 			go func() {
 				err := projectFiles.ExecuteProjectFileOperation(ctx, repo, op)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
 				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				updated, refreshErr := git.ReadRepository(refreshCtx, repo.Root)
@@ -132,8 +134,10 @@ func run(layoutPath string) error {
 			}()
 		}
 		workspace.CloneRepository = func(ctx context.Context, source, target string, done func(string, error)) {
+			preferences := workspace.Layout.VersionControl.Git
+			policy := domain.NetworkPolicy{FetchTags: preferences.FetchTags, DisableCredentialHelper: !preferences.CredentialHelper}
 			go func() {
-				path, err := cloner.Clone(ctx, source, target)
+				path, err := cloner.CloneWithPolicy(ctx, source, target, policy)
 				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
 			}()
 		}
@@ -166,10 +170,17 @@ func run(layoutPath string) error {
 		workspace.ApplyImportedPatch = func(ctx context.Context, repo domain.Repository, doc domain.ImportedPatch, done func(domain.Repository, error, error)) {
 			go func() {
 				err := patchImporter.ApplyImportedPatch(ctx, repo, doc)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
 				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
+			}()
+		}
+		workspace.ReviewImportedPatch = func(ctx context.Context, repo domain.Repository, input domain.ImportedPatch, done func(domain.ImportedPatch, error)) {
+			go func() {
+				doc, err := patchReviewer.ReviewImportedPatch(ctx, repo, input)
+				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
 			}()
 		}
 		workspace.PickPatchDestination = func(done func(string, error)) {
@@ -187,7 +198,10 @@ func run(layoutPath string) error {
 		workspace.WritePatchFile = func(ctx context.Context, repo domain.Repository, path, text string, done func(domain.Repository, error, error)) {
 			go func() {
 				err := patchFiles.SaveNewPatch(ctx, repo, path, text)
-				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
@@ -218,6 +232,7 @@ func run(layoutPath string) error {
 		workspace.ReplaceProjectFiles = func(ctx context.Context, repo domain.Repository, input application.ProjectReplaceInput, done func(domain.Repository, application.ProjectReplaceResult, error, error)) {
 			go func() {
 				result, err := projectReplacer.ReplaceProject(ctx, repo, input)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
 				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
@@ -281,30 +296,42 @@ func run(layoutPath string) error {
 		workspace.SaveRepositoryFile = func(ctx context.Context, repo domain.Repository, file domain.File, text string, done func(domain.Repository, domain.File, error, error)) {
 			go func() {
 				saved, err := fileWriter.SaveFile(ctx, repo, file, text)
-				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
 				mygo.RunOnMain(func() { done(updated, saved, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.UpdateRepositoryIndex = func(ctx context.Context, repo domain.Repository, stage bool, files []domain.File, done func(domain.Repository, error, error)) {
 			go func() {
 				err := index.UpdateIndex(ctx, repo, stage, files)
-				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.CommitRepository = func(ctx context.Context, repo domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
-			policy := application.CommitPolicy{Inspections: workspace.Layout.VersionControl.Commit}
+			preferences := workspace.Layout.VersionControl.Git
+			policy := application.CommitPolicy{Signing: preferences.SigningPolicy(), Inspections: workspace.Layout.VersionControl.Commit, WarnLarge: preferences.WarnLarge, WarnNames: preferences.WarnNames, LargeFileMB: preferences.LargeFileMB, ProtectedBranches: preferences.ProtectedBranches, WarningConsent: application.CommitWarningConsent(ctx)}
 			go func() {
 				err := commits.Commit(ctx, repo, message, amend, policy)
-				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.UpdateRepository = func(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation, done func(domain.Repository, domain.UpdateResult, error, error)) {
 			preferences := workspace.Layout.VersionControl.Git
+			op.Safety = preferences.SafetyPolicy()
 			op.Network = domain.NetworkPolicy{FetchTags: preferences.FetchTags, DisableCredentialHelper: !preferences.CredentialHelper}
 			go func() {
 				result, err := updater.UpdateRepository(ctx, repo, op)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
 				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
@@ -313,14 +340,20 @@ func run(layoutPath string) error {
 		}
 		workspace.OperateRepository = func(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation, done func(domain.Repository, error, error)) {
 			preferences := workspace.Layout.VersionControl.Git
+			op.Safety = preferences.SafetyPolicy()
 			op.Network = domain.NetworkPolicy{FetchTags: preferences.FetchTags, DisableCredentialHelper: !preferences.CredentialHelper}
 			go func() {
 				err := operator.ExecuteRepositoryOperation(ctx, repo, op)
-				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
+				application.ReportTaskProgress(ctx, "Refreshing original repository after operation")
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.CloseWindow = func() { go mygo.RunOnMain(window.Close) }
+		connectReadTasks(workspace, window.Invalidate)
+		connectWriteTasks(workspace, window.Invalidate)
 		workspace.StartSessionRestore()
 		window.OnClose(func(e *mygo.CloseEvent) {
 			if !workspace.RequestClose() {

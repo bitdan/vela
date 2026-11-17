@@ -20,6 +20,7 @@ const (
 )
 
 type settingsDraft struct {
+	signingOpen                                 bool
 	keymap                                      map[string]string
 	keymapRow                                   int
 	keymapList                                  ui.ListState
@@ -55,6 +56,9 @@ func (a *Workspace) openSettings() {
 
 func (a *Workspace) applySettings() {
 	draft := a.settings
+	if draft.vcs.Git.Validate() != nil {
+		return
+	}
 	bindings, err := application.NormalizeKeymap(draft.keymap)
 	if err != nil {
 		a.settings.keymapMessage = err.Error()
@@ -124,7 +128,7 @@ func (a *Workspace) settingsDialog(c *ui.Context, p tokens) {
 			ui.Row(c).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Box(c).Grow(1)
 				_, keymapErr := application.NormalizeKeymap(a.settings.keymap)
-				invalid := a.settings.invalidColor() || keymapErr != nil
+				invalid := a.settings.invalidColor() || keymapErr != nil || a.settings.vcs.Git.Validate() != nil
 				changed := a.settings.vcs != a.Layout.VersionControl || a.settings.dark != a.Layout.Dark ||
 					a.settings.appearance != a.Layout.Appearance || a.settings.editor != a.Layout.Editor || !maps.Equal(a.settings.keymap, layoutKeymap(a.Layout))
 				ui.PrimaryButton(c, "OK").Width(76).Disabled(invalid).OnClick(func() { a.applySettings(); a.settingsOpen = false })
@@ -323,15 +327,19 @@ func (a *Workspace) gitSettings(c *ui.Context, p tokens) {
 	ui.Text(c, "Automatic Fetch / incoming checks run for the active repository every five minutes; incoming-only checks do not fetch. Changes apply to the next task.").FillWidth().FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted)
 	ui.Checkbox(c, &git.WarnLarge, "Warn when committing large files")
 	if git.WarnLarge {
-		settingsNumber(c, "Large file threshold (MB)", &git.LargeFileMB, 1, 100000)
+		settingsNumber(c, "Large file threshold (MiB)", &git.LargeFileMB, 1, 100000)
 	}
 	ui.Checkbox(c, &git.WarnNames, "Warn about file names incompatible with other systems")
 	ui.Checkbox(c, &git.CherryPickSuffix, "Add source hash when cherry-picking to a protected branch")
-	ui.Button(c, "Configure GPG Key…").Width(160).Disabled(true).Tooltip("Commit signing is available in a later Git phase")
+	a.signingSettings(c, p)
 	settingsSection(c, p, "Push")
 	ui.Checkbox(c, &git.ShowPushDialog, "Show Push dialog for Commit and Push")
 	ui.Text(c, "Protected branches")
 	ui.TextInput(c, &git.ProtectedBranches).Label("Protected branches").FillWidth()
+	ui.Text(c, "Semicolon-separated, case-sensitive branch globs (main;master;release/*). Protected branches block Amend, Reset, Rebase, Update/Rebase and local rename/delete. Normal commits, merges and non-forced pushes remain available.").FillWidth().TextColor(p.theme.TextMuted)
+	if err := git.Validate(); err != nil {
+		ui.Text(c, err.Error()).FillWidth().TextColor(p.theme.Danger)
+	}
 	settingsSection(c, p, "Update")
 	settingsSelect(c, "Update method", &git.UpdateMethod, "Merge", "Rebase")
 	settingsSelect(c, "Clean working tree using", &git.CleanWorkingTree, "Stash", "Shelve")
@@ -339,5 +347,5 @@ func (a *Workspace) gitSettings(c *ui.Context, p tokens) {
 	ui.Checkbox(c, &git.CheckIncoming, "Check remote for incoming changes")
 	settingsSelect(c, "Fetch tags", &git.FetchTags, "Auto", "Always", "Never")
 	ui.Checkbox(c, &git.CredentialHelper, "Use credential helper")
-	ui.Text(c, "Fetch tags and credential helper preferences apply to repository Fetch / Pull / Push / Update and background remote tasks. Auto respects Git's tag configuration. Update method and cleanup are defaults in the explicit Update confirmation; protected-branch options and GPG configuration remain pending.").FillWidth().TextColor(p.theme.TextMuted)
+	ui.Text(c, "File warnings inspect staged blobs and names before Commit/Amend and require confirmation. Fetch tags and credential helper preferences also apply to Clone; Never uses Git's persistent --no-tags clone option. Without the Push dialog, Commit and Push uses an unchanged existing upstream and remote configuration; otherwise it shows target options.").FillWidth().TextColor(p.theme.TextMuted)
 }

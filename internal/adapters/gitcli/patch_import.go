@@ -59,6 +59,17 @@ func (g *Executor) PreviewImportedPatch(ctx context.Context, repo domain.Reposit
 		return empty, err
 	}
 	doc.Target = target
+	return g.ReviewImportedPatch(ctx, repo, doc)
+}
+
+func (g *Executor) ReviewImportedPatch(ctx context.Context, repo domain.Repository, input domain.ImportedPatch) (domain.ImportedPatch, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	doc, err := application.ParseImportedPatch(input.Text)
+	if err != nil {
+		return doc, err
+	}
+	doc.Target, doc.Reverse = input.Target, input.Reverse
 	g.write.Lock()
 	defer g.write.Unlock()
 	doc.Version, err = g.importedPatchVersion(ctx, repo, doc)
@@ -71,16 +82,19 @@ func (g *Executor) PreviewImportedPatch(ctx context.Context, repo domain.Reposit
 	return doc, err
 }
 
-func importedPatchArgs(target string) []string {
+func importedPatchArgs(target string, reverse bool) []string {
 	args := []string{"-c", "core.autocrlf=false", "-c", "apply.ignoreWhitespace=no", "apply", "--whitespace=nowarn", "-p1"}
 	if target == "Index only" {
 		args = append(args, "--cached")
+	}
+	if reverse {
+		args = append(args, "--reverse")
 	}
 	return args
 }
 
 func (g *Executor) checkImportedPatch(ctx context.Context, root string, doc domain.ImportedPatch) error {
-	out, err := g.runInput(ctx, root, doc.Text, append(importedPatchArgs(doc.Target), "--check", "-")...)
+	out, err := g.runInput(ctx, root, doc.Text, append(importedPatchArgs(doc.Target, doc.Reverse), "--check", "-")...)
 	if err != nil {
 		return fmt.Errorf("patch does not apply cleanly: %w: %s", err, strings.TrimSpace(out.stderr))
 	}
@@ -138,6 +152,7 @@ func (g *Executor) importedPatchVersion(ctx context.Context, repo domain.Reposit
 	defer root.Close()
 	hash := sha256.New()
 	fmt.Fprintf(hash, "%s\x00%s\x00%s\x00%s\x00%s\x00%s", repo.Root, repo.Head, repo.IndexVersion, repo.WorktreeVersion, doc.Target, doc.Text)
+	fmt.Fprintf(hash, "\x00reverse=%t", doc.Reverse)
 	for _, path := range paths {
 		if err = projectPath(path, false); err != nil {
 			return "", err
@@ -218,7 +233,7 @@ func (g *Executor) ApplyImportedPatch(ctx context.Context, repo domain.Repositor
 	if err != nil {
 		return err
 	}
-	doc.Target = preview.Target
+	doc.Target, doc.Reverse = preview.Target, preview.Reverse
 	verify := func() error {
 		version, err := g.importedPatchVersion(ctx, repo, doc)
 		if err != nil {
@@ -241,7 +256,7 @@ func (g *Executor) ApplyImportedPatch(ctx context.Context, repo domain.Repositor
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	out, err := g.runInput(ctx, repo.Root, doc.Text, append(importedPatchArgs(doc.Target), "-")...)
+	out, err := g.runInput(ctx, repo.Root, doc.Text, append(importedPatchArgs(doc.Target, doc.Reverse), "-")...)
 	if err != nil {
 		return fmt.Errorf("patch application stopped; inspect refreshed files and index before retrying (changes may have been written): %w: %s", err, strings.TrimSpace(out.stderr))
 	}
