@@ -152,6 +152,11 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	a.stopBackgroundTasks()
+	if a.backgroundInFlight > 0 {
+		a.status = "Waiting for background Git tasks to stop; close again after they finish"
+		return false
+	}
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
 	a.stopHistoryComparison()

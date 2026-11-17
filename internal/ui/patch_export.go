@@ -25,6 +25,7 @@ type patchExportDialog struct {
 }
 
 func (a *Workspace) stopPatchExports() {
+	a.stopPatchImport()
 	stopRead(&a.patchCopyRead)
 	if s := a.patchExport; s != nil && !s.busy {
 		stopRead(&s.request)

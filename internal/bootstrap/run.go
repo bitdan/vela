@@ -63,9 +63,13 @@ func run(layoutPath string) error {
 	var patchReader application.RepositoryPatchReader = git
 	var fileHistoryReader application.RepositoryFileHistoryReader = git
 	var patchExporter application.RepositoryPatchExporter = git
+	var patchImporter application.RepositoryPatchImporter = git
 	var patchFiles application.PatchFileWriter = adapters.PatchFiles{}
 	var projectSearch application.ProjectSearcher = adapters.ProjectFiles{}
 	var projectReplacer application.ProjectReplacer = git
+	var background application.BackgroundRepository = git
+	monitor := &repositoryWatch{}
+	defer monitor.close()
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -74,6 +78,27 @@ func run(layoutPath string) error {
 		})
 		if err := window.SetIcon([]byte(branding.IconPNG)); err != nil {
 			log.Printf("Set vela window icon: %v", err)
+		}
+		workspace.WatchRepository = func(repo domain.Repository) {
+			monitor.configure(repo, func(root string, dirty bool, now time.Time) {
+				workspace.BackgroundPulse(root, dirty, now)
+				window.Invalidate()
+			}, func(root, message string) {
+				workspace.BackgroundNotice(root, message)
+				window.Invalidate()
+			})
+		}
+		workspace.RefreshRepository = func(ctx context.Context, repo domain.Repository, done func(domain.Repository, error)) {
+			go func() {
+				updated, err := background.RefreshRepository(ctx, repo)
+				mygo.RunOnMain(func() { done(updated, err); window.Invalidate() })
+			}()
+		}
+		workspace.CheckRepositoryRemote = func(ctx context.Context, repo domain.Repository, policy application.BackgroundRemotePolicy, done func(application.BackgroundRemoteResult, error)) {
+			go func() {
+				result, err := background.CheckRepositoryRemote(ctx, repo, policy)
+				mygo.RunOnMain(func() { done(result, err); window.Invalidate() })
+			}()
 		}
 		workspace.InitializeRepository = func(ctx context.Context, directory, branch string, done func(string, error)) {
 			go func() {
@@ -119,6 +144,31 @@ func run(layoutPath string) error {
 					path = dirs[0]
 				}
 				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
+			}()
+		}
+		workspace.PickPatchSource = func(done func(string, error)) {
+			go func() {
+				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: window, Title: "Import Git Patch", Filters: []mygo.FileFilter{{Name: "Git Patch", Extensions: []string{"patch", "diff"}}}})
+				var path string
+				if len(paths) > 0 {
+					path = paths[0]
+				}
+				mygo.RunOnMain(func() { done(path, err); window.Invalidate() })
+			}()
+		}
+		workspace.PreviewImportedPatch = func(ctx context.Context, repo domain.Repository, path, target string, done func(domain.ImportedPatch, error)) {
+			go func() {
+				doc, err := patchImporter.PreviewImportedPatch(ctx, repo, path, target)
+				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
+			}()
+		}
+		workspace.ApplyImportedPatch = func(ctx context.Context, repo domain.Repository, doc domain.ImportedPatch, done func(domain.Repository, error, error)) {
+			go func() {
+				err := patchImporter.ApplyImportedPatch(ctx, repo, doc)
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
+				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.PickPatchDestination = func(done func(string, error)) {
@@ -250,6 +300,8 @@ func run(layoutPath string) error {
 			}()
 		}
 		workspace.OperateRepository = func(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation, done func(domain.Repository, error, error)) {
+			preferences := workspace.Layout.VersionControl.Git
+			op.Network = domain.NetworkPolicy{FetchTags: preferences.FetchTags, DisableCredentialHelper: !preferences.CredentialHelper}
 			go func() {
 				err := operator.ExecuteRepositoryOperation(ctx, repo, op)
 				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
@@ -262,6 +314,8 @@ func run(layoutPath string) error {
 			if !workspace.RequestClose() {
 				e.PreventDefault()
 				window.Invalidate()
+			} else {
+				monitor.close()
 			}
 		})
 	})

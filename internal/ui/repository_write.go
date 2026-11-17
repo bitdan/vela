@@ -8,6 +8,7 @@ import (
 )
 
 func (a *Workspace) beginRepositoryWrite(root, message string, cancel context.CancelFunc) {
+	a.stopBackgroundTasks()
 	a.closeProjectSearchDialog()
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()

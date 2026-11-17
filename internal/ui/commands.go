@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -77,6 +78,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	importPatch: "Import Patch…", previewImportedPatch: "Preview Imported Patch", applyImportedPatch: "Apply Imported Patch",
 	replaceInProject: "Replace in Files…", applyProjectReplace: "Replace Previewed Matches",
 	closeBranchComparison: "Close Branch Comparison", reloadBranchComparison: "Reload Branch Comparison", loadMoreComparisonCommits: "Load More Missing Commits", cancelBranchComparison: "Cancel Branch Comparison", openComparisonEntry: "Open Branch Comparison Diff", browseComparisonCommit: "Browse Missing Commit",
 	openDemo: "Open Demo Workspace", leaveDemo: "Leave Demo Workspace",
@@ -116,6 +118,12 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if a.patchImport != nil && id != previewImportedPatch && id != applyImportedPatch && id != cancelGitTask && id != selectRepo {
+		return "Finish or close the patch import first"
+	}
+	if id == importPatch || id == previewImportedPatch || id == applyImportedPatch {
+		return a.patchImportDisabled(id)
+	}
 	if a.projectReplaceWriting != "" && a.projectReplaceWriting == a.Model.Active().Repository.Root && id != cancelGitTask && id != selectRepo {
 		return "Wait for the project replacement to finish"
 	}
@@ -201,7 +209,7 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 		return ""
 	}
 	if id == cancelGitTask {
-		if (a.repositoryWriteCancel == nil || a.repositoryCancelRequested) && a.patchCopyRead == nil {
+		if (a.repositoryWriteCancel == nil || a.repositoryCancelRequested) && a.patchCopyRead == nil && a.background.refresh == nil && a.background.remote == nil {
 			return "No cancellable Git task"
 		}
 		return ""
@@ -328,6 +336,17 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
 		return
 	}
+	switch id {
+	case importPatch:
+		a.choosePatchSource()
+		return
+	case previewImportedPatch:
+		a.previewPatchImport()
+		return
+	case applyImportedPatch:
+		a.applyPatchImport()
+		return
+	}
 	if isProjectFileCommand(id) {
 		a.runProjectFile(id, target)
 		return
@@ -445,6 +464,12 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		return
 	case cancelGitTask:
 		if a.repositoryWriteCancel == nil {
+			if a.background.refresh != nil || a.background.remote != nil {
+				a.stopBackgroundTasks()
+				a.background.nextRemote = time.Now().Add(5 * time.Minute)
+				a.background.message = "Background task cancellation requested"
+				return
+			}
 			stopRead(&a.patchCopyRead)
 			a.status = "Patch copy canceled"
 			return

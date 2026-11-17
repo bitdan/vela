@@ -15,6 +15,7 @@ import (
 )
 
 func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation) error {
+	ctx = withNetworkPolicy(ctx, op.Network)
 	if repo.Root == "" || repo.IndexVersion == "" {
 		return errors.New("refresh the local repository before running this operation")
 	}
@@ -107,7 +108,7 @@ func (g *Executor) syncRemote(ctx context.Context, repo, current domain.Reposito
 		return err
 	}
 	if op.Kind == domain.FetchRemote {
-		return g.fetchBranches(ctx, repo.Root, op.Remote, "*")
+		return g.fetchBranches(ctx, repo.Root, op.Remote, "*", op.Network)
 	}
 	if err := g.checkBranchName(ctx, repo.Root, op.Target); err != nil {
 		return err
@@ -162,7 +163,7 @@ func (g *Executor) integrateRemote(ctx context.Context, repo, current domain.Rep
 	} else if err := g.ensureBranchNotCheckedOut(ctx, repo.Root, localRef); err != nil {
 		return err
 	}
-	if err := g.fetchBranches(ctx, repo.Root, op.Remote, op.Target); err != nil {
+	if err := g.fetchBranches(ctx, repo.Root, op.Remote, op.Target, op.Network); err != nil {
 		return err
 	}
 	if err := g.fastForward(ctx, repo, op, localRef, localTip, onCurrent); err != nil {
@@ -289,10 +290,23 @@ func (g *Executor) isAncestor(ctx context.Context, root, older, newer string) (b
 	return err == nil, err
 }
 
-func (g *Executor) fetchBranches(ctx context.Context, root, remote, branch string) error {
+func (g *Executor) fetchBranches(ctx context.Context, root, remote, branch string, policies ...domain.NetworkPolicy) error {
 	spec := "+refs/heads/" + branch + ":refs/remotes/" + remote + "/" + branch
-	return g.runOperation(ctx, root, "fetch", "--atomic", "--no-tags", "--no-prune", "--no-prune-tags", "--no-recurse-submodules",
-		"--no-auto-maintenance", "--no-write-fetch-head", "--refmap=", "--", remote, spec)
+	args := []string{"fetch", "--atomic", "--no-prune", "--no-prune-tags", "--no-recurse-submodules", "--no-auto-maintenance", "--no-write-fetch-head", "--refmap="}
+	tags := "Never" // Preserve callers without a dispatched preference.
+	if len(policies) > 0 && policies[0].FetchTags != "" {
+		tags = policies[0].FetchTags
+	}
+	switch tags {
+	case "Always":
+		args = append(args, "--tags")
+	case "Never":
+		args = append(args, "--no-tags")
+	case "Auto": // Git's automatic tag following and repository tagOpt.
+	default:
+		return errors.New("invalid fetch tags preference")
+	}
+	return g.runOperation(ctx, root, append(args, "--", remote, spec)...)
 }
 
 func (g *Executor) readRemoteConfig(ctx context.Context, root string) (string, string, error) {

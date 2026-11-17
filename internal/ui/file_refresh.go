@@ -128,12 +128,12 @@ func (a *Workspace) refreshOpenFileViews(root, path string) {
 						if !matched || buffer.Modified() {
 							return
 						}
-						cursor := entry.code.Cursor()
 						if bufferDiskText(buffer) != file.New {
+							selections, scroll := entry.code.Selections(), entry.code.ScrollY()
 							buffer.Reset(file.New)
+							entry.code.SetSelections(selections...)
+							entry.code.SetScrollY(scroll)
 						}
-						cursor = min(cursor, buffer.Len())
-						entry.code.Select(cursor, cursor)
 					} else if entry.diff != nil {
 						matched := false
 						for _, identity := range candidates {
@@ -145,8 +145,13 @@ func (a *Workspace) refreshOpenFileViews(root, path string) {
 						if !matched {
 							return
 						}
-						entry.diff.Old.Reset(strings.ReplaceAll(file.Old, "\r\n", "\n"))
-						entry.diff.New.Reset(strings.ReplaceAll(file.New, "\r\n", "\n"))
+						old, next := strings.ReplaceAll(file.Old, "\r\n", "\n"), strings.ReplaceAll(file.New, "\r\n", "\n")
+						if entry.diff.Old.String() != old {
+							entry.diff.Old.Reset(old)
+						}
+						if entry.diff.New.String() != next {
+							entry.diff.New.Reset(next)
+						}
 					} else {
 						return
 					}

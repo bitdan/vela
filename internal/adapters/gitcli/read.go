@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,14 @@ import (
 )
 
 func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain.Repository, error) {
+	return g.readRepository(ctx, directory, nil)
+}
+
+func (g *Executor) RefreshRepository(ctx context.Context, previous domain.Repository) (domain.Repository, error) {
+	return g.readRepository(ctx, previous.Root, &previous)
+}
+
+func (g *Executor) readRepository(ctx context.Context, directory string, previous *domain.Repository) (domain.Repository, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	var repo domain.Repository
@@ -185,6 +194,10 @@ func (g *Executor) ReadRepository(ctx context.Context, directory string) (domain
 	repo.LogSnapshot.Boundary, err = commitLogBoundary(repo.CommonDir)
 	if err != nil {
 		return repo, err
+	}
+	if previous != nil && previous.Root == repo.Root && previous.Head == repo.Head && previous.CurrentBranch == repo.CurrentBranch && reflect.DeepEqual(previous.LogSnapshot, repo.LogSnapshot) {
+		repo.History, repo.LogHasMore = previous.History, previous.LogHasMore
+		return repo, nil
 	}
 	page, err := g.ReadCommitLog(ctx, repo.Root, repo.LogSnapshot, 0, commitLogPageSize)
 	repo.History, repo.LogHasMore = page.Commits, page.HasMore

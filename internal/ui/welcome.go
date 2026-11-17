@@ -80,6 +80,7 @@ func (a *Workspace) exitDemo() {
 }
 
 func (a *Workspace) selectRepository(index int) {
+	a.stopBackgroundTasks()
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
 	if index < 0 || index >= len(a.Model.Sessions) {
@@ -104,6 +105,7 @@ func (a *Workspace) selectRepository(index int) {
 	stopRead(&a.repositoryRead)
 	stopRead(&a.repositoryFileRead)
 	a.Model.Switch(index)
+	a.syncBackgroundRepository()
 	if root := a.Model.Active().Repository.Root; root != "" {
 		a.lastRealRoot = root
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"vela/internal/application"
@@ -63,6 +64,11 @@ func (a *Workspace) applySettings() {
 		for i := range a.repos {
 			applyLogSettings(&a.repos[i], draft.vcs.Log)
 		}
+	}
+	if draft.vcs.Git != a.Layout.VersionControl.Git {
+		a.stopBackgroundTasks()
+		a.background.nextRemote = time.Now()
+		a.background.message = ""
 	}
 	a.Layout.VersionControl, a.Layout.Dark = draft.vcs, draft.dark
 	a.Layout.Appearance, a.Layout.Editor = draft.appearance, draft.editor
@@ -314,7 +320,7 @@ func settingsInverted(c *ui.Context, label string, target *bool) {
 
 func (a *Workspace) gitSettings(c *ui.Context, p tokens) {
 	git := &a.settings.vcs.Git
-	ui.Text(c, "Git preferences are stored locally for later phases.").FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted)
+	ui.Text(c, "Automatic Fetch / incoming checks run for the active repository every five minutes; incoming-only checks do not fetch. Changes apply to the next task.").FillWidth().FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted)
 	ui.Checkbox(c, &git.WarnLarge, "Warn when committing large files")
 	if git.WarnLarge {
 		settingsNumber(c, "Large file threshold (MB)", &git.LargeFileMB, 1, 100000)
@@ -333,4 +339,5 @@ func (a *Workspace) gitSettings(c *ui.Context, p tokens) {
 	ui.Checkbox(c, &git.CheckIncoming, "Check remote for incoming changes")
 	settingsSelect(c, "Fetch tags", &git.FetchTags, "Auto", "Always", "Never")
 	ui.Checkbox(c, &git.CredentialHelper, "Use credential helper")
+	ui.Text(c, "Fetch tags and credential helper preferences apply to repository Fetch / Pull / Push / Update and background remote tasks. Auto respects Git's tag configuration. Update method / cleanup, protected-branch options and GPG configuration remain pending.").FillWidth().TextColor(p.theme.TextMuted)
 }
