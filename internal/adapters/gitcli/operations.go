@@ -49,6 +49,10 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 	case domain.CreateBranch, domain.CheckoutBranch:
 		return g.changeBranch(ctx, repo, index, op)
 	case domain.FetchRemote, domain.PullBranch, domain.PushBranch, domain.UpdateTrackedBranch:
+		if op.Kind == domain.UpdateTrackedBranch && op.UpdateMethod != "" {
+			_, err := g.updateTrackedBranch(ctx, repo, op)
+			return err
+		}
 		return g.syncRemote(ctx, repo, current, index, op)
 	case domain.StartMerge, domain.ContinueMerge, domain.AbortMerge:
 		return g.merge(ctx, repo, index, op)

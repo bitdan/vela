@@ -42,6 +42,10 @@ type RepositoryOperator interface {
 	ExecuteRepositoryOperation(context.Context, domain.Repository, domain.RepositoryOperation) error
 }
 
+type RepositoryUpdater interface {
+	UpdateRepository(context.Context, domain.Repository, domain.RepositoryOperation) (domain.UpdateResult, error)
+}
+
 type MergeDocumentReader interface {
 	ReadMergeDocument(context.Context, domain.Repository, string) (domain.MergeDocument, error)
 }

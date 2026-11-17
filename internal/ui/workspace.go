@@ -95,6 +95,8 @@ type repoView struct {
 }
 
 type Workspace struct {
+	updateWriting                   string
+	UpdateRepository                func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, domain.UpdateResult, error, error))
 	background                      backgroundState
 	backgroundInFlight              int
 	WatchRepository                 func(domain.Repository)

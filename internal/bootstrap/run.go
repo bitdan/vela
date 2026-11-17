@@ -57,6 +57,7 @@ func run(layoutPath string) error {
 	var index application.IndexWriter = git
 	var commits application.CommitWriter = git
 	var operator application.RepositoryOperator = git
+	var updater application.RepositoryUpdater = git
 	var mergeDocuments application.MergeDocumentReader = git
 	var blameReader application.RepositoryBlameReader = git
 	var fileWriter application.RepositoryFileWriter = git
@@ -297,6 +298,17 @@ func run(layoutPath string) error {
 				err := commits.Commit(ctx, repo, message, amend, policy)
 				updated, refreshErr := reader.ReadRepository(context.Background(), repo.Root)
 				mygo.RunOnMain(func() { done(updated, err, refreshErr); window.Invalidate() })
+			}()
+		}
+		workspace.UpdateRepository = func(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation, done func(domain.Repository, domain.UpdateResult, error, error)) {
+			preferences := workspace.Layout.VersionControl.Git
+			op.Network = domain.NetworkPolicy{FetchTags: preferences.FetchTags, DisableCredentialHelper: !preferences.CredentialHelper}
+			go func() {
+				result, err := updater.UpdateRepository(ctx, repo, op)
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				updated, refreshErr := reader.ReadRepository(refreshCtx, repo.Root)
+				mygo.RunOnMain(func() { done(updated, result, err, refreshErr); window.Invalidate() })
 			}()
 		}
 		workspace.OperateRepository = func(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation, done func(domain.Repository, error, error)) {

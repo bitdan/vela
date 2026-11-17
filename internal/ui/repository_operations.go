@@ -11,6 +11,7 @@ import (
 )
 
 type repositoryOperationDialog struct {
+	updateFinished               bool
 	open                         bool
 	root, label, detail, message string
 	op                           domain.RepositoryOperation
@@ -44,6 +45,12 @@ func operationRef(repo domain.Repository, source string) string {
 
 func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarget) string {
 	repo := a.Model.Active().Repository
+	switch id {
+	case continueMerge, abortMerge, continueRebase, skipRebase, abortRebase:
+		if a.updateDirtyBuffer(repo.Root) {
+			return "Save or discard unsaved source documents before continuing or aborting"
+		}
+	}
 	switch {
 	case a.OperateRepository == nil:
 		return "Git operations are unavailable"
@@ -269,6 +276,9 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 	case updateBranch, updateProject:
 		s.label, s.detail = "Update Branch", "Fetch "+upstream.Remote+"/"+upstream.Branch+" and fast-forward "+branch+"."
 		s.op = domain.RepositoryOperation{Kind: domain.UpdateTrackedBranch, Branch: branch, Remote: upstream.Remote, Target: upstream.Branch}
+		if a.UpdateRepository != nil {
+			a.configureUpdate(s)
+		}
 	}
 	a.repositoryOperation = s
 }
@@ -287,6 +297,7 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 			ui.Column(c).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Text(c, s.detail).FillWidth().TextColor(p.theme.TextMuted)
 				a.stashFields(c, s, busy)
+				a.updateFields(c, p, s, busy)
 				a.shelfFields(c, s, busy)
 				a.worktreeFields(c, s, busy)
 				bisectFields(c, s, busy)
@@ -359,6 +370,7 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 				needsBranch := op.Kind == domain.CreateBranch || op.Kind == domain.RenameBranch || (op.Kind == domain.CheckoutBranch && strings.HasPrefix(op.Source, "refs/remotes/"))
 				needsTarget := op.Kind == domain.PullBranch || op.Kind == domain.PushBranch
 				disabled := busy || a.repositoryWrite != "" || a.repositoryRead != nil || repo.Root != s.root || repo.IndexVersion == "" ||
+					a.updateDisabled(s) != "" ||
 					refFieldsDisabled(s) ||
 					historyComparisonDisabled(s) ||
 					shelfFieldsDisabled(s) ||
@@ -390,6 +402,17 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 }
 
 func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
+	if s.op.Kind == domain.UpdateTrackedBranch && s.op.UpdateMethod != "" && a.UpdateRepository != nil {
+		a.applyBranchUpdate(s)
+		return
+	}
+	switch s.op.Kind {
+	case domain.ContinueMerge, domain.AbortMerge, domain.ContinueRebase, domain.SkipRebase, domain.AbortRebase:
+		if a.updateDirtyBuffer(s.root) {
+			s.message = "Save or discard unsaved source documents before continuing or aborting"
+			return
+		}
+	}
 	if historyComparisonDisabled(s) {
 		return
 	}
@@ -495,6 +518,10 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 			s.message = message
 		}
 		a.finishRepositoryWrite(s.root, repo, refreshErr, message)
+		switch op.Kind {
+		case domain.StartMerge, domain.ContinueMerge, domain.AbortMerge, domain.StartRebase, domain.ContinueRebase, domain.SkipRebase, domain.AbortRebase:
+			a.refreshHistoricalWriteViews(s.root, op)
+		}
 		if refreshErr == nil && (isHistoryWrite(op.Kind) || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence || op.Kind == domain.AbortSequence) {
 			a.refreshHistoricalWriteViews(s.root, op)
 		}
