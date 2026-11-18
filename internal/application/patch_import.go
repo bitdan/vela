@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -12,10 +13,17 @@ import (
 )
 
 const MaxImportedPatchBytes = 2 << 20
+const MaxImportedPatchHunks = 10000
 
 type RepositoryPatchImporter interface {
 	PreviewImportedPatch(context.Context, domain.Repository, string, string) (domain.ImportedPatch, error)
 	ApplyImportedPatch(context.Context, domain.Repository, domain.ImportedPatch) error
+}
+
+// RepositoryPatchReviewer checks captured/selected text without rereading the
+// external source. The adapter reparses it before issuing a preview version.
+type RepositoryPatchReviewer interface {
+	ReviewImportedPatch(context.Context, domain.Repository, domain.ImportedPatch) (domain.ImportedPatch, error)
 }
 
 // ParseImportedPatch accepts Git unified diffs of existing regular text files.
@@ -71,7 +79,44 @@ func ParseImportedPatch(text string) (domain.ImportedPatch, error) {
 		result.Paths = append(result.Paths, path)
 		result.Modes[path] = strings.Fields(lines[1])[2]
 		result.Hunks += len(doc.Hunks)
+		if result.Hunks > MaxImportedPatchHunks {
+			return domain.ImportedPatch{}, errors.New("patch import supports at most 10000 hunks")
+		}
+		result.Files = append(result.Files, doc)
 	}
 	result.Text = text
 	return result, nil
+}
+
+// SelectImportedPatch keeps exact Git headers and hunk bodies in source order.
+// Invalid identities and empty selections fail rather than widening the scope.
+func SelectImportedPatch(text string, selected map[string][]int) (domain.ImportedPatch, error) {
+	doc, err := ParseImportedPatch(text)
+	if err != nil {
+		return domain.ImportedPatch{}, err
+	}
+	for path := range selected {
+		if !slices.Contains(doc.Paths, path) {
+			return domain.ImportedPatch{}, fmt.Errorf("unknown patch path %q", path)
+		}
+	}
+	var result strings.Builder
+	for _, file := range doc.Files {
+		indices := slices.Clone(selected[file.Path])
+		slices.Sort(indices)
+		if len(indices) == 0 {
+			continue
+		}
+		result.WriteString(file.Header)
+		for i, index := range indices {
+			if index < 0 || index >= len(file.Hunks) || i > 0 && index == indices[i-1] {
+				return domain.ImportedPatch{}, fmt.Errorf("invalid hunk selection for %q", file.Path)
+			}
+			result.WriteString(file.Hunks[index].Text)
+		}
+	}
+	if result.Len() == 0 {
+		return domain.ImportedPatch{}, errors.New("select at least one patch hunk")
+	}
+	return ParseImportedPatch(result.String())
 }

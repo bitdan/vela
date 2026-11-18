@@ -10,6 +10,7 @@ import (
 	"vela/internal/application"
 	"vela/internal/branding"
 	"vela/internal/domain"
+	velaruntime "vela/internal/runtime"
 )
 
 var projectIcon = func() *ui.Bitmap {
@@ -95,6 +96,12 @@ type repoView struct {
 }
 
 type Workspace struct {
+	Tasks                           velaruntime.Tasks
+	tasksOpen                       bool
+	taskList                        ui.ListState
+	taskSelected                    int
+	taskSelection                   velaruntime.TaskID
+	taskSplit                       float32
 	updateWriting                   string
 	UpdateRepository                func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, domain.UpdateResult, error, error))
 	background                      backgroundState
@@ -133,6 +140,7 @@ type Workspace struct {
 	patchImport                     *patchImportDialog
 	PickPatchSource                 func(func(string, error))
 	PreviewImportedPatch            func(context.Context, domain.Repository, string, string, func(domain.ImportedPatch, error))
+	ReviewImportedPatch             func(context.Context, domain.Repository, domain.ImportedPatch, func(domain.ImportedPatch, error))
 	ApplyImportedPatch              func(context.Context, domain.Repository, domain.ImportedPatch, func(domain.Repository, error, error))
 	patchCopyRead                   *readRequest
 	sourceDecision                  *sourceFileDecision
@@ -186,7 +194,7 @@ type Workspace struct {
 }
 
 func New(model *application.App, layout application.Layout) *Workspace {
-	a := &Workspace{Model: model, Layout: layout, repos: make([]repoView, len(model.Sessions)), status: "Ready"}
+	a := &Workspace{Model: model, Layout: layout, repos: make([]repoView, len(model.Sessions)), status: "Ready", taskSelected: -1, taskSplit: 52}
 	for i := range a.repos {
 		a.repos[i] = newRepoView(model.Sessions[i].Repository, layout)
 	}
@@ -279,7 +287,11 @@ func (a *Workspace) View(c *ui.Context) {
 		divider(c, p)
 		ui.Row(c).FillWidth().Grow(1).Children(func() {
 			if a.welcomeActive() {
-				a.welcomeView(c, p)
+				if a.tasksOpen && !a.Layout.HideGit {
+					ui.SplitVerticalPercent(c, &a.Layout.Top, func() { a.welcomeView(c, p) }, func() { a.git(c, p) }).SplitReset(58).Fill()
+				} else {
+					a.welcomeView(c, p)
+				}
 				return
 			}
 			a.activity(c, p)
@@ -485,7 +497,7 @@ func (a *Workspace) mainMenuBar(c *ui.Context, p tokens) {
 			build func(*ui.Menu)
 		}{
 			{"View", func(m *ui.Menu) {
-				a.menuGroup(m, commandTarget{}, openProject, showCommit, openShelf, showLog, toggleConsole)
+				a.menuGroup(m, commandTarget{}, openProject, showCommit, openShelf, showLog, toggleConsole, showTasks)
 				m.Separator()
 				a.menu(m, restoreLayout, commandTarget{})
 			}},
@@ -569,12 +581,15 @@ func (a *Workspace) statusBar(c *ui.Context, p tokens) {
 		}
 		ui.Text(c, context).FontSize(p.textSize(smallText)).SingleLine().Ellipsis("…")
 		ui.Text(c, a.status).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		ui.ButtonBase(c.Key("task-center")).Height(statusHeight-2).Padding(0, gap).Center().Label("Task Center").Children(func() {
+			ui.Text(c, fmt.Sprintf("Tasks (%d)", a.Tasks.ActiveCount())).FontSize(p.textSize(smallText))
+		}).OnClick(func() { a.run(showTasks, commandTarget{}) })
 		if a.background.task != "" {
 			ui.Text(c, a.background.task).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Tooltip(a.background.message)
 		} else if a.background.message != "" {
 			ui.Text(c, a.background.message).Width(220).SingleLine().Ellipsis("…").FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Tooltip(a.background.message)
 		}
-		if a.repositoryWriteCancel != nil || a.patchCopyRead != nil || a.background.refresh != nil || a.background.remote != nil {
+		if a.repositoryWriteCancel != nil || a.patchCopyRead != nil || a.background.refresh != nil || a.background.remote != nil || a.activeCancellableTask() != 0 {
 			ui.ButtonBase(c.Key("cancel-git-task")).Height(statusHeight-2).Padding(0, gap).Center().Label("Cancel Git Task").Tooltip("Cancel Git task in " + a.repositoryWrite).
 				Disabled(a.repositoryCancelRequested).Children(func() { ui.Text(c, "Cancel Task").FontSize(p.textSize(smallText)) }).OnClick(func() { a.run(cancelGitTask, commandTarget{}) })
 		}

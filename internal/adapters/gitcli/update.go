@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
 func (g *Executor) UpdateRepository(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation) (domain.UpdateResult, error) {
 	ctx, cancel := context.WithTimeout(withNetworkPolicy(ctx, op.Network), 5*time.Minute)
 	defer cancel()
+	application.ReportTaskProgress(ctx, "Waiting for repository write lock")
 	g.write.Lock()
 	defer g.write.Unlock()
 	return g.updateTrackedBranch(ctx, repo, op)
@@ -24,7 +26,11 @@ func (g *Executor) UpdateRepository(ctx context.Context, repo domain.Repository,
 // updateTrackedBranch holds the Executor write lock throughout fetch, backup,
 // integration and optional restore. External processes still require rechecks.
 func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation) (result domain.UpdateResult, err error) {
+	application.ReportTaskProgress(ctx, "Validating repository, branch, upstream and working changes")
 	result.Method = op.UpdateMethod
+	if err := op.Safety.CheckOperation(repo, op); err != nil {
+		return result, err
+	}
 	if repo.Root == "" || repo.IndexVersion == "" || repo.GitDir == "" || repo.CommonDir == "" {
 		return result, errors.New("refresh the repository identity before Update")
 	}
@@ -92,10 +98,12 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 			return result, err
 		}
 	}
+	application.ReportTaskProgress(ctx, "Fetching tracked branch")
 	if err = g.fetchBranches(ctx, repo.Root, op.Remote, op.Target, op.Network); err != nil {
 		return result, err
 	}
 	result.Fetched = true
+	application.ReportTaskProgress(ctx, "Fetch completed; validating fetched target")
 	// Report fetch success separately from every subsequent stage.
 	defer func() {
 		if err != nil {
@@ -120,6 +128,7 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 		return result, errors.New("invalid fetched target")
 	}
 	if !onCurrent {
+		application.ReportTaskProgress(ctx, "Fast-forwarding non-current branch")
 		err = g.updateOtherBranch(ctx, repo, op, localRef, localTip, result.TargetOID)
 		result.Integrated = err == nil
 		return result, err
@@ -153,6 +162,7 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 		if err = g.validateUpdateBackup(ctx, repo, index, paths); err != nil {
 			return result, err
 		}
+		application.ReportTaskProgress(ctx, "Saving retained backup and cleaning tracked changes")
 		result.BackupKind, result.BackupName = op.UpdateCleanup, "Vela Update "+time.Now().UTC().Format("20060102-150405")+" "+rand.Text()
 		save := domain.RepositoryOperation{Message: result.BackupName, Paths: paths}
 		if op.UpdateCleanup == "Stash" {
@@ -186,6 +196,7 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 			return result, err
 		}
 		result.Cleaned = true
+		application.ReportTaskProgress(ctx, "Tracked changes cleaned; backup retained")
 	}
 	_, activeIndex, err := g.verifyCheckout(ctx, active)
 	if err != nil {
@@ -218,6 +229,7 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 	if err = g.verifyUpdateMetadata(ctx, repo); err != nil {
 		return result, err
 	}
+	application.ReportTaskProgress(ctx, "Integrating fetched target using "+op.UpdateMethod)
 	switch op.UpdateMethod {
 	case "Rebase":
 		err = g.runRebase(ctx, repo.Root, "--merge", "--no-autostash", "--no-update-refs", "--no-autosquash", "--no-rebase-merges", "--no-fork-point", "--no-rerere-autoupdate", "--empty=stop", result.TargetOID)
@@ -230,6 +242,7 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 		return result, err
 	}
 	result.Integrated = true
+	application.ReportTaskProgress(ctx, "Branch integration completed")
 	if !dirty {
 		return result, nil
 	}
@@ -250,6 +263,7 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 	if err = g.verifyUpdateMetadata(ctx, active); err != nil {
 		return result, err
 	}
+	application.ReportTaskProgress(ctx, "Restoring tracked changes; backup remains retained")
 	restore := domain.RepositoryOperation{Source: result.BackupOID, Target: result.BackupID, RestoreIndex: true}
 	if result.BackupKind == "Stash" {
 		restore.Kind = domain.ApplyStash
@@ -259,6 +273,9 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 		err = g.shelfOperation(ctx, active, activeIndex, restore)
 	}
 	result.Restored = err == nil
+	if result.Restored {
+		application.ReportTaskProgress(ctx, "Tracked changes restored; backup retained")
+	}
 	if err != nil {
 		err = fmt.Errorf("branch updated; backup retained and restoration may be partial: %w", err)
 	}

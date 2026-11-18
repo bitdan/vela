@@ -3,8 +3,10 @@ package application
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
+	"vela/internal/domain"
 )
 
 // VersionControlSettings contains local preferences. Operational Git settings
@@ -72,9 +74,32 @@ type ShelfSettings struct {
 }
 
 type GitSettings struct {
+	SignCommits                                                                                        bool
+	SigningKey                                                                                         string
 	WarnLarge, WarnNames, CherryPickSuffix, ShowPushDialog, AutoFetch, CheckIncoming, CredentialHelper bool
 	LargeFileMB                                                                                        float64
 	ProtectedBranches, UpdateMethod, CleanWorkingTree, FetchTags                                       string
+}
+
+func (g GitSettings) SafetyPolicy() domain.RepositorySafetyPolicy {
+	return domain.RepositorySafetyPolicy{ProtectedBranches: g.ProtectedBranches, CherryPickSuffix: g.CherryPickSuffix}
+}
+
+func (g GitSettings) SigningPolicy() domain.CommitSigningPolicy {
+	return domain.CommitSigningPolicy{Enabled: g.SignCommits, Key: g.SigningKey}
+}
+
+func (g GitSettings) Validate() error {
+	if err := g.SigningPolicy().Validate(); err != nil {
+		return err
+	}
+	if _, err := domain.ProtectedBranch(g.ProtectedBranches, ""); err != nil {
+		return err
+	}
+	if g.WarnLarge && (math.IsNaN(g.LargeFileMB) || math.IsInf(g.LargeFileMB, 0) || g.LargeFileMB < 1 || g.LargeFileMB > 100000) {
+		return fmt.Errorf("large file threshold must be between 1 and 100000 MiB")
+	}
+	return nil
 }
 
 func DefaultVersionControlSettings() VersionControlSettings {

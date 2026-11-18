@@ -45,6 +45,9 @@ func operationRef(repo domain.Repository, source string) string {
 
 func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarget) string {
 	repo := a.Model.Active().Repository
+	if reason := a.protectedCommandReason(id, target); reason != "" {
+		return reason
+	}
 	switch id {
 	case continueMerge, abortMerge, continueRebase, skipRebase, abortRebase:
 		if a.updateDirtyBuffer(repo.Root) {
@@ -402,6 +405,10 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 }
 
 func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
+	if err := a.Layout.VersionControl.Git.SafetyPolicy().CheckOperation(s.snapshot, s.op); err != nil {
+		s.message = err.Error()
+		return
+	}
 	if s.op.Kind == domain.UpdateTrackedBranch && s.op.UpdateMethod != "" && a.UpdateRepository != nil {
 		a.applyBranchUpdate(s)
 		return

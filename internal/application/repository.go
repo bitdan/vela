@@ -36,7 +36,13 @@ type CommitWriter interface {
 }
 
 // CommitPolicy is copied before dispatch so background work never reads UI state.
-type CommitPolicy struct{ Inspections CommitSettings }
+type CommitPolicy struct {
+	Signing                           domain.CommitSigningPolicy
+	Inspections                       CommitSettings
+	WarnLarge, WarnNames              bool
+	LargeFileMB                       float64
+	ProtectedBranches, WarningConsent string
+}
 
 type RepositoryOperator interface {
 	ExecuteRepositoryOperation(context.Context, domain.Repository, domain.RepositoryOperation) error
@@ -57,6 +63,10 @@ type RepositoryInitializer interface {
 
 type RepositoryCloner interface {
 	Clone(context.Context, string, string) (string, error)
+}
+
+type RepositoryNetworkCloner interface {
+	CloneWithPolicy(context.Context, string, string, domain.NetworkPolicy) (string, error)
 }
 
 type RepositoryBlameReader interface {
