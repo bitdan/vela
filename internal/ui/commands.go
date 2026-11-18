@@ -79,6 +79,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	applyComparisonFilters: "Apply Comparison Filters", clearComparisonFilters: "Clear Comparison Filters",
 	toggleShelfFile: "Toggle Unshelve File", selectShelfAll: "Select All Unshelve Files", clearShelfSelection: "Clear Unshelve File Selection",
 	toggleImportedFile: "Toggle Imported Patch File", toggleImportedHunk: "Toggle Imported Patch Hunk", selectImportedAll: "Select All Imported Hunks", clearImportedSelection: "Clear Imported Hunk Selection", toggleImportedReverse: "Reverse Imported Patch",
 	configureSigning:      "Configure GPG Key…",

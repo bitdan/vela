@@ -7,6 +7,10 @@
 
 ## 1. 架构目标
 
+比较筛选使用 Domain ComparisonLogFilter 和 Application 统一校验。Adapter 在固定范围内按字面消息/作者、UTC 日期和字面 pathspec 筛选后分页，条件进入任务去重键；消息/作者禁止 CR/LF，避免 Git 拆成多个模式。每侧 Apply/Clear 仅取消并替换本侧请求，保留另一侧及 OID 快照。
+
+2026-11-18 分支比较：Bootstrap 对 committed/missing 模式均通过 `ReadMissingBranchComparison` 捕获固定 OID 与祖先边界，不先枚举两 tip 的文件差异。UI 使用两份 `comparisonSide`，正反调用既有 `ReadRepositoryComparisonCommits`；分页后重连各自图边。每侧提交详情通过已有 `ReadRepositoryRevisionChanges` 后台端口加载，独立请求身份、取消 Context、父提交和文件选择；普通/合并提交的 Diff 使用明确父 OID → 提交 OID，根提交沿用历史 Diff 读取。committed 状态由各自 `tab.comparison` 持有，working/missing 仍由原对话框持有；Command 通过 tabID 路由，回调检查标签成员身份/请求身份/仓库。关闭、重载和切换仓库使旧请求失效；打开 Diff 正常切换编辑器标签，不需要暂停/返回专用入口，也不阻塞后台刷新。比较标签不冒充 code/diff 对象，文件操作与 SessionSnapshot 排除工具标签；当前不跨启动恢复。Domain、Application 端口及 Git 写路径无新增依赖。
+
 vela 2.0 是一次新项目重建，不是把旧 Wails/Vue 代码逐文件翻译成 Go。
 
 本架构优先解决：
@@ -126,11 +130,25 @@ Metal，Linux 使用 OpenGL。以项目实际锁定版本为准。
 ### 3.1 依赖规则
 
 - 真实仓库会话使用现有 JSON 的可选 Root / ActiveRoot 字段，设计与兼容性见 `docs/adr/0001-real-repository-sessions.md`。Bootstrap 连接读端口后恢复活动仓库；其余仅保留最近身份。UI 通过既有异步 Reader 恢复标签，不保存 Git 状态或文件内容。
+- 源文档的 editorDocument 保存书签行号和类型覆盖，与 Buffer 一同共享给拆分视图；原生 GutterMarks、OnGutterClick 和 Select 通过统一命令交互。TabSnapshot 添加可选 Bookmarks / FileType，已加载与延迟恢复路径均克隆切片，恢复时校验行号和语言；Apply 校验仓库、标签、文档和 Buffer 身份。兼容性与边界见 `docs/adr/0003-editor-document-metadata.md`。
+- Find in Files 由 Application 的纯文本匹配、限额与 ProjectSearcher 窄端口承载；ProjectFiles 适配器通过标准库 os.Root 读取给定 Project 路径，不遍历文件树或调用 Git。Bootstrap 后台执行并通过 RunOnMain 交付。UI 命令捕获路径/未保存文本快照，显式 Find 启动请求；关闭及导航取消，指针、仓库和 Context 保护回调。结果使用 LF 内容指纹与字节偏移，打开前重读或校验现有 Buffer，不持久化查询或内容。
+- 真实 Shelf 复用 RepositoryOperation、Executor 写锁和后台刷新。两个临时 Index 构造选中暂存及工作树快照，后者从前者开始以保留暂存 mode/被强制加入的忽略文件；先发布私有 Git ref，再清理工作路径。事务/CAS 支持回收站、恢复、重命名和永久删除，不操作 refs/stash。ChangelistState 是 Application 会话元数据，深复制可选 JSON 字段，刷新时结合 Working/Staged 的重命名信息归属整文件。格式、回滚及 GC 边界见 `docs/adr/0004-shelves-and-changelists.md`。
+- 按文件 Unshelve 复用 RepositoryOperator，无新端口或存储。Application.SelectShelfFiles 验证显式集合与当前条目身份，SelectShelfFiles 请求标记区分空选与旧调用的整条默认。Adapter 在临时 GIT_INDEX_FILE 从原 Base 构造选中 Index/Worktree 树及 stash-compatible 对象；两树相对 Base 的 --no-renames 完整路径集合都必须是选区子集，防止 update-index --index-info 的文件/目录替换隐含删除未选路径。重新校验 checkout/worktree、GitDir/CommonDir 和原 ref OID 后才 apply，失败保留原条目。部分成功不改变原 refs，仅完整应用可 CAS 移到回收站。私有 Shelf 读取/应用采用 canonicalHistory，保持原始对象身份。
+- Unshelve 的原生虚拟文件列表与选择状态独立保存在 repositoryOperationDialog，原文件入口默认单项。只允许完整路径，不做 Hunk 或自动重命名闭包。Git 目标侧重命名/冲突沿用其原生行为，故执行前拒绝所有脏源 Buffer、锁定当前仓库所有源编辑器，直到回调恢复只读状态并刷新全部可变视图；不假定只刷新选中来源路径即可。
 - CommitWriter 接收可选、不可变的 CommitPolicy；Bootstrap 在 UI 线程复制偏好后传入后台任务。Git Adapter 在串行提交链路中检查暂存新增行，不在 View 中读文件。整文件 Index 和 Commit 回调显式接收可取消 Context，完成后使用独立刷新 Context 读取实际结果，UI 忙碌状态持续到结果交付。
+- CommitPolicy 同时携带暂存大文件/名称检查、阈值、保护模式及一次性 WarningConsent。Adapter 持锁对当前 Index 使用 cat-file --batch-check 读取 Blob 大小，名称检查不读工作文件；最多 10,000 暂存项和 100 展示警告。未确认时返回 typed Application.CommitWarnings，UI 保留草稿、通过统一命令显示可滚动原生确认，并把摘要放入新请求 Context；Bootstrap 复制到 policy。每次写前重新计算摘要并校验 HEAD/Index/分支和操作元数据。没有文件 IO 放入 View，没有新增万能检查服务或依赖。
+- CommitPolicy.Signing 是 Domain.CommitSigningPolicy 的不可变快照。GitSettings 新增 SignCommits/SigningKey，沿用现有 JSON 默认值及 Settings 草稿 Apply/OK/Cancel；关闭覆盖只继承 Git 配置。Domain 验证公开 ID/指纹，Adapter 仅在 Commit/Amend 启用时添加请求级 gpg.format=openpgp 与 --gpg-sign=<key> 独立参数，在警告/快照/操作校验后执行。没有私钥/口令 IO、Git config 写入、额外进程管理或未签名 fallback；其他 Git 工作流不使用该覆盖。实际签名/口令交互未功能验收。
+- Domain.RepositorySafetyPolicy 保存明确的保护模式/CherryPickSuffix，纯函数验证 semicolon path.Match 模式并选择本地历史写操作；Bootstrap 复制 GitSettings，UI 与 Executor 共用 guard。恢复操作不受新增保护阻塞，普通提交/合并/非强制推送保留。选中文件 Cherry-pick 的来源标记使用原始 OID；普通序列使用 Git -x，冲突继续保持 Git 语义。
+- Clone 原接口保留，新增 RepositoryNetworkCloner.CloneWithPolicy 窄端口由同一 Executor 实现；只为请求复制 NetworkPolicy，现有 UI 端口和任务中心装饰器不变。ShowPushDialog 的自动路径复用现有 RepositoryOperation/Executor，要求 upstream、RemoteVersion 及实际构造的远端/目标精确匹配原提交快照；变化则回到对话框，不使用刷新后的新 URL 静默推送。
+
 - Remote 管理及 Branch/Tag 管理复用 RepositoryOperation 和现有写锁。真实远端管理使用完整 remote/branch 配置及 scope/origin 的独立版本，避免仅校验传输参数而删除较新的配置。
 - 可配置工作区键位由 Application 保存稳定 ID、规范化组合键及有效映射验证，不依赖 MyGo；UI 映射到当前锁定版本的原生 Key/Modifiers，并复用统一 Registry。Layout.Keymap 为可选指针，发布后映射不可变，设置草稿克隆并在 Assign/Reset/Apply 校验；菜单与编辑区提示读取同一映射。JSON、兼容性和原生焦点范围见 ADR 0002。
 
--   仓库初始化由 Bootstrap 将 `application.RepositoryInitializer` 接到 `adapters/gitcli`。GUI 在后台运行初始化，并在 MyGo 主线程更新状态。命令行入口复用同一 Git 适配器。
+-   仓库初始化由 Bootstrap 将 `application.RepositoryInitializer` 接到 `adapters/gitcli`。GUI 在后台运行初始化，并在 MyGo 主线程更新状态；成功后复用 RepositoryReader 打开新仓库，取消及导航世代阻止过期结果切换当前仓库。命令行入口复用同一 Git 适配器。
+
+- 正常 Bootstrap 使用 `application.NewWorkspace`，只创建空会话；`NewDemo` 和兼容 `New` 保留确定性测试数据。Production 模式排除空/Demo 快照并拒绝旧 Mock 恢复；UI 的 Welcome 白名单阻止空会话触发模拟仓库操作。显式 Demo 按需分配会话，真实草稿和会话保留，正常选择器不隐式切入 Mock。
+- `RepositoryComparisonReader` 是独立窄只读 Port，返回 Domain 的 `RevisionComparison` 与分页提交。Git 适配器通过统一 Executor 固定引用、禁止 replace/外部 diff/textconv，校验 HEAD/Index/工作区和祖先边界；缺失提交捕获不枚举文件树，避免差异文件上限阻断完整历史查询。Bootstrap 后台调用并通过 RunOnMain 回传。
+- 比较窗口及分页请求独立于全局 Log，使用 Context、请求身份和仓库身份失效检查。Diff 来源 `compare:<left>:<right>` 或带工作区指纹的 `compare:<left>:working@<hash>`；会话 DTO 复用 ChangeKind/OldPath 保存重命名身份。工作内容变化拒绝旧预览，不持久化内容。详见本地 ADR 0006。
 
 -   `domain` 不依赖 MyGo、Git CLI、文件系统或 UI。
 -   `application` 依赖 Domain 和自己定义的 Ports。
@@ -356,7 +374,9 @@ Command 负责执行明确的写操作：
 
 Ports 应以业务能力命名，不要直接暴露 `exec.Command`。
 
-Phase 2 的 `RepositoryReader` 读取仓库快照和单个文件内容。快照包含状态、项目路径、引用和最多 10,000 条提交的元数据。源文件和 Diff 的两侧内容按需读取。Bootstrap 在后台执行查询，通过 MyGo 主线程回调交付结果。工作区用请求身份和取消上下文隔离切换、刷新和预览。
+Phase 2 的 `RepositoryReader` 读取仓库快照和单个文件内容。快照包含状态、项目路径、引用和首批最多 500 条提交的元数据，以及固定 HEAD/branch/remote/tag commit OID 的 CommitLogSnapshot。`RepositoryLogReader` 从同一不可变引用快照按 offset 每页读取最多 500 条，以 limit+1 判断后续记录，不设 10,000 条总量截断；通过 stdin 传递固定 OID，单页 stdout 限 16 MiB。禁用 replace refs，读取前后校验 shallow/grafts 指纹；边界变化、对象消失或超时均显式失败。源文件和 Diff 的两侧内容按需读取。Bootstrap 在后台执行查询，通过 MyGo 主线程回调交付结果。工作区用请求身份和取消上下文隔离切换、刷新和预览。
+
+全局 Log 的 Load More/Retry/Cancel 复用 Command Registry；View 构建不触发读取。成功追加复制已有 Commit 结构，Domain.ReconnectCommitLog 按原始父 OID 重建已加载父索引和 lane，UI 只重建 Graph/筛选派生数据，保留原 ListState、选择及 Editor Buffer。切仓库、刷新、写入、关闭会取消并失效旧请求。筛选明确只作用于已加载记录；再次刷新捕获新引用并回到首批 500 条，不持久化分页数据或快照。
 
 `RepositoryCloner` 在统一执行器下创建新目录并克隆，不自动清理失败目标。`RepositoryBlameReader` 读取固定对象的机器协议输出并构建 Domain.BlameDocument；UI 格式化只读文本，不参与 Git 解析。`RepositoryFileWriter` 接收已读取文件的 DiskVersion 和提交文本，复用 checkout 校验及写锁，通过根目录约束的同目录临时文件替换保存，保留权限和行尾；二次校验防止覆盖外部修改。UI 使用共享 Buffer 的原生编辑器、Save Command 和可取消回调，并保留后台保存期间的新输入。
 
@@ -364,7 +384,13 @@ Phase 2 的 `RepositoryReader` 读取仓库快照和单个文件内容。快照�
 
 `RepositoryFileHistoryReader` 按固定起点提供 Domain.FileHistoryPage，每次查询 --follow 的有限前缀再截取页面，避免 --skip 跳过重命名转换。UI 使用独立虚拟列表和请求身份，不替换全局 Log；前缀有 offset 上限，UI 限 100,000 条。固定修订源 `revision:OID` 直接读取 blob，不要求父提交或当前路径存在。会话的历史标签仅增补不可变 ChangeKind/OldPath 身份，复用 ADR 0001 的向后兼容 JSON。
 
+`RepositoryRevisionTreeReader` 提供固定 OID 的直接目录子项及显式主线父提交的 Changed Files；Bootstrap 后台调用并 RunOnMain 交付。Domain.RevisionTree/Entry 不依赖 MyGo；UI 使用虚拟列表、可取消请求和独立选择，合并比较不复用第一父提交的缓存列表。历史检出、工作区恢复和所选差异提交通过既有 RepositoryOperation/Executor 写锁串行执行。选中差异以临时 Index 与 commit-tree 构造内部提交，再调用既有 Sequencer，不生成用户分支或私有长期 ref。Context 限定的 canonicalHistory 标记使执行器对历史链路追加 GIT_NO_REPLACE_OBJECTS=1，文件读取亦使用原始对象，防止与 Log 身份不一致；不创建全局可变执行状态。Windows 别名和工作文件保护在写入前完成。详见本地 ADR 0005。
+
 `RepositoryPatchExporter` 通过统一执行器读取 Domain.PatchExport，固定 diff 参数、字面路径和 stdout 上限，校验选择身份及读取前后快照。`PatchFileWriter` 的文件适配器约束真实目录和 Git 元数据，通过同目录临时文件及 Root.Link 创建全新的目标，不覆盖或删除用户文件。Bootstrap 后台处理原生 Save 对话框、文件写入和原仓库刷新，再由 RunOnMain 交付；UI 只持有预览及请求状态，复制结果不记录 Patch 内容。预览截断与实际导出长度独立。
+
+`RepositoryPatchImporter` 是独立窄端口，Domain.ImportedPatch 保存受限文本、路径/mode、Hunk 数和目标专属版本。Application.ParseImportedPatch 验证多文件 Git 头一致性，复用 ParseTextPatch 的 Hunk 计数与换行标记规则；不执行 IO。Git Adapter 有限额读取原生选择器提供的外部普通文件，验证实际目标路径、转换属性、Index flags、mode、元数据目录身份和 checkout/worktree/磁盘版本；预览及应用均使用现有 Executor 写锁。应用重新解析捕获原文，在检查前后重复预检，使用固定 git apply 参数，不追加第三方依赖、不改变持久化格式。Bootstrap 后台执行 picker/preview/apply，RunOnMain 交付，并以独立超时刷新 Context 读取原仓库。UI 统一命令注册、确认与目标选择，切仓库/关闭取消并失效待预览请求；写入复用 repositoryWrite 取消/关闭保护，临时锁定目标源编辑器，完成后恢复并刷新关联视图。取消/失败不保证跨文件事务回滚，明确报告实际结果可能已写入。
+
+Patch 的部分/反向导入在既有普通文本范围内增加：Domain.ImportedPatch 包含解析后的 Files/Hunks 与 Reverse；Application.SelectImportedPatch 从捕获原文重新解析，按稳定路径/Hunk 序号选择并保留精确 Header/Text，拒绝空/非法身份，最多 10,000 Hunk。UI 保留不可变原输入与独立 bool 选择，原生虚拟列表通过统一 Command 更新，选项改变立即使候选版本/同意失效。SelectParsedImportedPatch 只组装已捕获 Header/Hunk 与无权限的候选元数据，避免在输入目录时重复解析原文；后端入口仍完整重解析。RepositoryPatchReviewer.ReviewImportedPatch 是新增窄端口（原 Importer 接口不变），Adapter 忽略来访 Files/Modes/Version、只重解析 Text，再校验并签发目标版本；Bootstrap 后台交付并接入任务中心。Reverse 同时进入 apply --check、实际写参数及版本摘要。应用重新解析被确认文本，重复现有路径/元数据/转换属性/Index/磁盘校验，无持久化或新依赖；Strip 为 1–16（默认 1），Directory 为仓库相对目录；ResolveImportedPatchPath 实现先 Strip 后 prefix，RelocateImportedPatch 在后台从原文派生权威目标 Paths/Modes，再进入原有真实路径/元数据/别名/属性检查。应用与预检传同一 -pN/--directory 参数，映射选项进入摘要和任务去重身份。UI 显示源 → 目标，Buffer 检查/锁定/刷新均使用目标路径；RelocateParsedImportedPatch 仅用于无权限 UI 候选，强制清空 Version。无行内/三方/新增文件扩张。
 
 Project 单标签关闭和重载由 sourceFileDecision 绑定 root、tabID、Buffer，复用现有文件端口。保存完成只关闭同一干净 Buffer 的原标签；重载以读取前文本及请求身份保护新输入。导航取消未完成重读，保存回调依原仓库处理，批量关闭保护未保存标签。
 
@@ -373,6 +399,10 @@ Phase 3 的 `IndexWriter` 接收仓库快照和选中的整文件变更。Git �
 `CommitWriter` 复用 checkout 校验和写入锁，核查 Index 冲突与进行中的 Git 操作，并以 stdin 传递提交信息。Amend 额外检查本地远端跟踪分支的可达性。Git 原生 hooks、身份和签名继续生效。
 
 `RepositoryOperator` 通过明确的操作类型处理分支与同步。远端操作验证配置指纹，Pull 与 Update 在 Fetch 后重新核对 checkout，非当前分支通过带旧 OID 的引用更新做快进。后台完成后刷新原仓库，Fetch 已成功但集成失败时保留阶段信息。
+
+`RepositoryUpdater` 是 Update 专用窄端口，返回 Domain.UpdateResult 的 Fetch/Cleaned/Integrated/Restored 与备份身份，不把已完成的部分阶段压缩成单一成功/失败。Domain.RepositoryOperation 保存明确 UpdateMethod/UpdateCleanup/ConfirmUpdateCleanup；UI 在确认时捕获默认偏好，Bootstrap 复制网络策略后后台调用并用独立刷新 Context 回读原仓库。默认操作仍复用既有 Update Command ID；RepositoryOperator 收到显式策略时也走相同的私有持锁实现，旧空策略调用保持快进兼容路径。
+
+Git Update 在现有 Executor 写锁内先 Fetch、固定目标 OID，再校验 checkout/元数据目录/upstream 与工作区。Stash/Shelf 保存复用已实现的窄持锁逻辑，备份使用唯一名称，取消或清理错误后仍独立限时读取发布身份。Shelf 使用既有私有 refs，Stash 使用 Git 自身 reflog，不新增持久化格式或自动恢复标记。集成成功才尝试 --index 恢复，备份永久保留供用户决定删除；失败或暂停不自动应用备份，不模拟事务回滚。非当前分支固定 OID 快进/CAS，不切换工作树。UI 锁定 Project 编辑器，拒绝未保存内容，恢复/失败均刷新原仓库与关联视图；Merge/Rebase 恢复命令同时增加未保存内容保护与可变视图刷新。
 
 Merge 复用同一执行器和写锁。快照从工作树的 `MERGE_HEAD` 与索引阶段读取合并和冲突状态。三栏编辑器读取两侧对象和工作区结果，各仓库独立保留会话草稿。应用时适配器重新验证 HEAD、Index、合并目标、文件冲突条目和原工作区文本的指纹，再替换工作文件并暂存。替换成功而暂存失败时分别报告。
 
@@ -654,38 +684,15 @@ MyGo Native UI 有明确的 UI 线程和窗口更新规则。必须遵循当前 
 
 ### 10.1 Task Manager
 
-统一管理后台任务：
+当前实现位于 `internal/runtime/tasks.go`：UI 线程独占 `Tasks`，`TaskID` 是单进程递增 uint64；`TaskInfo` 保存原始 Root、Name、QueryKey 摘要、Running/Canceling/Succeeded/Failed/Canceled/Timed out、开始/截止/结束时间、阶段和最终结果。运行态只持有请求 Context、取消入口与计时器清理入口，不保存业务快照或 UI 控件。最多 32 活动 + 100 已完成记录，32 阶段/任务及每段约 4 KiB 文本；无数据库/跨重启历史/复杂事件总线。
 
-``` go
-type TaskID string
+Bootstrap 的 `connectReadTasks` / `connectWriteTasks` 在现有 29 个异步窄端口安装完成后装饰它们。派发前在 UI 线程创建记录和有截止时间的子 Context；完成时先记录结果，再交给原回调，原指针/导航世代/根检查保持不变。即使旧回调不再安装结果，记录仍在原仓库名下结束。去重键使用操作 ID 与查询身份的 SHA-256（带字段边界），不持久保存内容/远端 URL。拒绝派发通过原错误回调交付，写回调返回输入仓库快照，避免把未执行误报为仓库刷新损坏。
 
-type TaskState int
+任务取消只发出请求。`runningTask` 分开保存主动取消与正常完成时的计时器清理；显式取消写任务会调用派发时捕获的原 UI cancel（Init 使用自身 dialog cancel），正常 Finish 不调用原 owner cancel，避免把正常成功当成用户取消。读取若返回 nil error 而子 Context 已取消/超时，Bootstrap 向原读取回调交付 Context 错误。写结果保留真实成功/失败，不声称取消即回滚。Post-write refresh 使用独立三十秒 Context，始终读取原仓库，任务等待刷新回调才结束。退出 CancelAll 后阻止窗口关闭，待回调收齐后用户重新关闭，继续原未保存文档确认。
 
-const (
-    TaskPending TaskState = iota
-    TaskRunning
-    TaskSucceeded
-    TaskFailed
-    TaskCanceled
-)
+`application.WithTaskProgress` / `ReportTaskProgress` 是可选窄阶段报告端口；默认无操作。Update 与后台远端适配器仅报告字符串，Bootstrap 经 MyGo `RunOnMain` 更新 runtime 状态并 invalidate，不从 worker 修改 UI。RunOnMain 会等待主线程交付；UI 不同步等待这些 worker。Executor 写锁、实际超时、Context 及写前校验不由 Tasks 替代。
 
-type TaskInfo struct {
-    ID         TaskID
-    Repository RepositoryID
-    Name       string
-    State      TaskState
-}
-```
-
-至少支持：
-
--   启动任务。
--   Context 取消。
--   超时。
--   进度和阶段信息。
--   错误结果。
--   任务去重或防重复提交。
--   关闭窗口时的任务清理策略。
+UI 的 `tasks.go` 只读任务快照，以原生虚拟 List 和稳定 TaskID 展示跨仓库历史；选择与编辑器/Log/分支独立。统一命令提供显示、取消指定 ID、清理完成历史；底部 Git 增加 Tasks 页签，不改变核心区域布局，Welcome 亦可展示。阶段进度为离散检查点，不伪造完成百分比；普通写入分别报告操作/刷新结果，Update 保留 Fetch/清理/整合/恢复检查点和备份身份。功能与桌面验收仍 UNVERIFIED。
 
 ### 10.2 过期结果隔离
 
@@ -703,6 +710,12 @@ A 的结果必须被丢弃，不得覆盖 B 的状态。
 查询结果还应通过 RequestID 或 QueryKey 识别，避免旧请求覆盖新请求。
 
 ### 10.3 刷新协调
+
+当前后台基线由 Application.BackgroundRepository、Domain.NetworkPolicy、runtime.RunRefreshLoop、Bootstrap.repositoryWatch 与 UI.backgroundState 组成。Runtime 只合并提示并产生低频调度脉冲，不依赖 MyGo 或 Git；Bootstrap 在后台安装 MyGo WatchFiles，通过 RunOnMain 交付。UI 显式生命周期入口同步活动仓库，不在 View 启动监听/查询。每个请求拥有 Context 和指针身份，导航世代、活动根、前台读写/对话框阻塞检查防止迟到结果覆盖上下文；独立 in-flight 计数保证取消后退出前仍等待回调返回。
+
+Git.RefreshRepository 复用既有读取过程，但相同 HEAD/分支/LogSnapshot 复用已加载 History。UI 原位安装刷新，保留 repoView 与编辑器/选择/滚动；仅文件相关版本变化时重读关联可变视图，内容相同时不重置 Buffer 或光标，必要更新保留所有选择端点和滚动。后台刷新仍读取完整工作区指纹，其成本尚未测量，不引入未经证实的缓存。
+
+网络偏好在主线程复制为不可变 NetworkPolicy。手动 RepositoryOperation 与 BackgroundRemotePolicy 共用 Executor 和原有写锁，后台 Fetch 不绕过写锁、不整合分支。CheckIncoming 读取固定 upstream 的机器格式 ls-remote，stdout 限 64 KiB；自动传输基于 remote get-url 的有效地址分类，跳过 SSH/自定义 remote.vcs，保留 SSH 配置。策略通过 Context 传入执行器的每进程 Git 参数/环境，无全局可变配置、凭据持久化或新依赖。统一任务中心已接入以上异步端口，详见 10.1；功能验收仍 UNVERIFIED。
 
 -   文件监听事件只表示"可能发生变化"。
 -   监听事件经 Debounce / Coalesce 后触发必要的 Git 查询。
@@ -918,6 +931,18 @@ Bootstrap 负责：
 -   自动更新和签名策略验证。
 -   崩溃日志、诊断信息和版本信息完善。
 -   关键功能回归和性能基线通过。
+
+## 16.1 Project 文件操作边界
+
+Project 文件管理使用 Domain 的 ProjectPathSnapshot / ProjectFileOperation，以及 Application 的窄 ProjectFileManager 端口。Git CLI Adapter 内的 ProjectFiles 只通过现有 Executor 复核仓库身份并共享写锁，实际文件操作使用 Go 标准库 os.Root；View 不读写文件。Bootstrap 在后台执行、通过 RunOnMain 返回结果，并注入锁定 MyGo v0.8.3 的 Shell.TrashItem / Shell.OpenPath 系统集成，无新依赖或持久化格式变更。
+
+命令复用 Project、编辑器菜单和文件树快捷键；检查操作上下文、未保存文档及路径边界。确认前异步捕获源树指纹，写入前复核，切仓库/刷新/关闭取消待确认读取；写入占用现有 repositoryWrite/取消通道，结果仅安装到对应仓库。空目录通过 Git ls-files --others --directory --exclude-standard 读取，不作为普通文件送入编辑器或文本搜索。复制排他创建目标，移动先复制再回收源项，禁止覆盖目标和永久删除降级；错误保留上下文及可能的部分结果。Source Buffer 写入期间设为只读，成功移动保留编辑状态并更新路径，删除关闭本地标签，历史标签不变。
+
+## 16.2 项目搜索与替换
+
+Application 的 ProjectSearchQuery/ProjectSearchInput 定义字面或 Go regexp 查询、路径掩码、显式忽略文件发现和未保存文本覆盖；纯匹配生成 LF 定位指纹、原始字节指纹及受限替换预览。ProjectReplacer 是独立写端口。普通 filesystem adapter 负责 os.Root 范围内的只读发现/扫描，不引入 Git Service；Git CLI Executor 的 ReplaceProject 共享既有写锁，先预检全部目标，再复用 SaveFile 的私有持锁实现逐文件写入。Bootstrap 后台执行和 RunOnMain 回调机制不变，无新依赖或持久化格式变化。
+
+UI 复用 Find/Replace 原生命令和虚拟列表，查询变化使预览失效；只允许完整且无读取失败的结果写入，匹配未保存 Buffer 时拒绝。写入期间目标编辑器设为只读，使用既有 repositoryWrite 取消、关闭保护、原仓库刷新及过期请求隔离。跨文件部分成功通过 ProjectReplaceResult 显式返回，失败不回滚已写文件，所有目标视图按实际磁盘身份重读并保护随后输入。
 
 ## 17. 架构决策记录（ADR）
 

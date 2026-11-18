@@ -8,6 +8,14 @@ type RevisionComparison struct {
 	Left, Right                       string
 	WorktreeVersion, AncestryBoundary string
 	Files                             []File
+	Filter                            ComparisonLogFilter
+}
+
+// ComparisonLogFilter restricts a frozen commit range. Message and author are
+// literal case-insensitive substrings; dates are inclusive UTC calendar days.
+// Path is a literal repository-relative file or directory, with no glob syntax.
+type ComparisonLogFilter struct {
+	Message, Author, Since, Until, Path string
 }
 
 func (c RevisionComparison) Source() string {

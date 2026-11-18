@@ -25,15 +25,18 @@ type comparisonSide struct {
 	request, details                 *readRequest
 	split, detailSplit               float32
 	graphWidth                       float32
+	draft                            domain.ComparisonLogFilter
+	filterMessage                    string
 }
 
 func (a *Workspace) startTwoWayComparison(s *branchComparisonDialog) {
 	for i := range s.sides {
 		comparison := s.comparison
+		comparison.Filter = s.filters[i]
 		if i == 1 {
 			comparison.Left, comparison.Right = comparison.Right, comparison.Left
 		}
-		s.sides[i] = &comparisonSide{comparison: comparison, selected: -1, file: -1, more: true, split: 64, detailSplit: 55}
+		s.sides[i] = &comparisonSide{comparison: comparison, draft: comparison.Filter, selected: -1, file: -1, more: true, split: 64, detailSplit: 55}
 		a.loadComparisonSide(s, s.sides[i])
 	}
 	if s.split == 0 {
@@ -176,6 +179,9 @@ func (a *Workspace) twoWayComparisonDisabled(id commandID, t commandTarget) stri
 	if !s.ready || side == nil {
 		return "Wait for branch identities"
 	}
+	if id == applyComparisonFilters || id == clearComparisonFilters {
+		return ""
+	}
 	if id == loadMoreComparisonCommits {
 		if side.request != nil || !side.more {
 			return "No more commits available"
@@ -246,6 +252,8 @@ func (a *Workspace) runTwoWayComparison(id commandID, t commandTarget) {
 	}
 	side := s.sides[comparisonSideIndex(t)]
 	switch id {
+	case applyComparisonFilters, clearComparisonFilters:
+		a.applyComparisonSideFilter(s, side, comparisonSideIndex(t), id == clearComparisonFilters)
 	case loadMoreComparisonCommits:
 		a.loadComparisonSide(s, side)
 	case selectComparisonCommit:
@@ -304,6 +312,7 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 	ui.SplitPercent(c, &side.split, func() {
 		ui.Column(c).Fill().Children(func() {
 			heading(c, p, "Commits in "+left+" missing from "+right, "")
+			a.comparisonFilterControls(c, p, side, t, left)
 			if side.message != "" {
 				ui.Text(c, side.message).FillWidth().TextColor(p.theme.Danger)
 			}
@@ -327,7 +336,13 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 				})
 			}).Grow(1).FillWidth().Label("Comparison commits " + left)
 			if len(side.commits) == 0 && side.request == nil && side.message == "" {
-				list.Children(func() { ui.Text(c, "No commits in this direction").Padding(inset) })
+				list.Children(func() {
+					text := "No commits in this direction"
+					if side.comparison.Filter != (domain.ComparisonLogFilter{}) {
+						text = "No commits match the applied filters"
+					}
+					ui.Text(c, text).Padding(inset)
+				})
 			}
 			if list.Changed() || list.Submitted() {
 				a.pending = func() { a.run(selectComparisonCommit, t) }

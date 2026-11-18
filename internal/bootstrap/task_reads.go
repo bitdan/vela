@@ -268,7 +268,7 @@ func connectReadTasks(a *ui.Workspace, invalidate func()) {
 	}
 	originalReadRepositoryComparisonCommits := a.ReadRepositoryComparisonCommits
 	a.ReadRepositoryComparisonCommits = func(ctx context.Context, root string, comparison domain.RevisionComparison, offset, limit int, done func(domain.CommitLogPage, error)) {
-		ctx, finish, err := trackTask(a, invalidate, ctx, root, "Read Repository Comparison Commits", taskKey("ReadRepositoryComparisonCommits", comparison.Left, comparison.Right, offset, limit), 2*time.Minute, nil)
+		ctx, finish, err := trackTask(a, invalidate, ctx, root, "Read Repository Comparison Commits", taskKey("ReadRepositoryComparisonCommits", comparison.Left, comparison.Right, comparison.Filter.Message, comparison.Filter.Author, comparison.Filter.Since, comparison.Filter.Until, comparison.Filter.Path, offset, limit), 2*time.Minute, nil)
 		if err != nil {
 			done(*new(domain.CommitLogPage), err)
 			return

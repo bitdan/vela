@@ -19,6 +19,8 @@ const (
 	browseComparisonCommit    commandID = "branches.browse-missing-commit"
 	selectComparisonCommit    commandID = "branches.select-comparison-commit"
 	comparisonParent          commandID = "branches.comparison-parent"
+	applyComparisonFilters    commandID = "branches.apply-comparison-filters"
+	clearComparisonFilters    commandID = "branches.clear-comparison-filters"
 )
 
 type branchComparisonDialog struct {
@@ -33,13 +35,14 @@ type branchComparisonDialog struct {
 	sides                                       [2]*comparisonSide
 	split                                       float32
 	tabID                                       string
+	filters                                     [2]domain.ComparisonLogFilter
 }
 
 func isBranchComparisonEntry(id commandID) bool {
 	return id == branchDiff || id == compareCurrentBranch || id == missingBranchCommits
 }
 func isBranchComparisonCommand(id commandID) bool {
-	return isBranchComparisonEntry(id) || id == closeBranchComparison || id == reloadBranchComparison || id == loadMoreComparisonCommits || id == cancelBranchComparison || id == openComparisonEntry || id == browseComparisonCommit || id == selectComparisonCommit || id == comparisonParent
+	return isBranchComparisonEntry(id) || id == closeBranchComparison || id == reloadBranchComparison || id == loadMoreComparisonCommits || id == cancelBranchComparison || id == openComparisonEntry || id == browseComparisonCommit || id == selectComparisonCommit || id == comparisonParent || id == applyComparisonFilters || id == clearComparisonFilters
 }
 func (a *Workspace) closeBranchComparisonDialog() {
 	if s := a.branchComparison; s != nil {
@@ -77,6 +80,9 @@ func (a *Workspace) branchComparisonDisabled(id commandID, t commandTarget) stri
 	}
 	if s.mode == "committed" {
 		return a.twoWayComparisonDisabled(id, t)
+	}
+	if id == applyComparisonFilters || id == clearComparisonFilters || id == selectComparisonCommit || id == comparisonParent {
+		return "Available in branch comparison tabs"
 	}
 	if id == closeBranchComparison || id == reloadBranchComparison {
 		return ""

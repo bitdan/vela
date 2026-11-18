@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -118,6 +119,9 @@ func (g *Executor) ReadComparisonCommits(ctx context.Context, root string, compa
 	if !validObjectID(comparison.Left) || !validObjectID(comparison.Right) || offset < 0 || limit < 1 || limit > 100 {
 		return page, errors.New("invalid missing-commit query")
 	}
+	if err := application.ValidateComparisonLogFilter(comparison.Filter); err != nil {
+		return page, err
+	}
 	ctx, cancel := context.WithTimeout(canonicalHistory(ctx), 30*time.Second)
 	defer cancel()
 	common, err := g.read(ctx, root, "rev-parse", "--path-format=absolute", "--git-common-dir")
@@ -128,7 +132,7 @@ func (g *Executor) ReadComparisonCommits(ctx context.Context, root string, compa
 	if err := checkLogBoundary(common, comparison.AncestryBoundary); err != nil {
 		return page, err
 	}
-	args := []string{"log", "-z", "--topo-order", "--no-decorate", "--no-color", "--encoding=UTF-8", "--no-notes", "--no-show-signature", "-n", strconv.Itoa(limit + 1), "--skip=" + strconv.Itoa(offset), "--format=tformat:%x00%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b", comparison.Left, "^" + comparison.Right, "--"}
+	args := comparisonLogArgs(comparison, offset, limit)
 	out, err := g.runInputWithEnvLimit(ctx, root, "", nil, 4<<20, args...)
 	if err != nil {
 		return page, err
@@ -147,6 +151,31 @@ func (g *Executor) ReadComparisonCommits(ctx context.Context, root string, compa
 	}
 	page.Commits = commits
 	return page, nil
+}
+
+func comparisonLogArgs(comparison domain.RevisionComparison, offset, limit int) []string {
+	args := []string{"--literal-pathspecs", "log", "-z", "--topo-order", "--no-decorate", "--no-color", "--encoding=UTF-8", "--no-notes", "--no-show-signature", "--no-use-mailmap", "--fixed-strings", "--regexp-ignore-case", "-n", strconv.Itoa(limit + 1), "--skip=" + strconv.Itoa(offset), "--format=tformat:%x00%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b"}
+	filter := comparison.Filter
+	if filter.Message != "" {
+		args = append(args, "--grep="+filter.Message)
+	}
+	if filter.Author != "" {
+		args = append(args, "--author="+filter.Author)
+	}
+	if filter.Since != "" {
+		args = append(args, "--since-as-filter="+filter.Since+"T00:00:00Z")
+	}
+	if filter.Until != "" {
+		args = append(args, "--until="+filter.Until+"T23:59:59Z")
+	}
+	if filter.Path != "" {
+		args = append(args, "--full-history")
+	}
+	args = append(args, comparison.Left, "^"+comparison.Right, "--")
+	if filter.Path != "" {
+		args = append(args, filter.Path)
+	}
+	return args
 }
 
 func (g *Executor) readComparisonFile(ctx context.Context, root, source string, file domain.File) (domain.File, error) {
