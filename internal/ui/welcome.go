@@ -83,6 +83,7 @@ func (a *Workspace) selectRepository(index int) {
 	a.stopBackgroundTasks()
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
+	a.stopComparisonTabReads()
 	if index < 0 || index >= len(a.Model.Sessions) {
 		return
 	}

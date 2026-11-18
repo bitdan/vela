@@ -103,7 +103,12 @@ func (a *Workspace) tabDisabled(id commandID, t commandTarget) string {
 		return "Select an editor tab"
 	}
 	switch id {
-	case pinTab, splitRight, splitDown, moveRight, moveDown:
+	case splitRight, splitDown, moveRight, moveDown:
+		if !t.preview && r.tabs[index].comparison != nil {
+			return "Branch comparison already contains independent split panes"
+		}
+		return ""
+	case pinTab:
 		return ""
 	case closeTab:
 		if !t.preview && r.tabs[index].modified() {
@@ -153,6 +158,9 @@ func (r *repoView) closeTabs(id commandID, target commandTarget) {
 	next := 0
 	for i, entry := range r.tabs {
 		if shouldClose(id, i, index, entry) {
+			if entry.comparison != nil {
+				stopComparisonReads(entry.comparison)
+			}
 			r.closed = append(r.closed, entry)
 			if r.split != nil && r.split.id == entry.id {
 				r.split = nil
@@ -202,6 +210,16 @@ func (a *Workspace) tabMenu(m *ui.Menu, entry tab, preview bool) {
 	}
 	a.menuNamed(m, closeTab, t, "Close", "")
 	a.menuGroup(m, t, closeOthers, closeAllTabs, closeUnmodified, closeLeft, closeRight, closeReadOnly)
+	if entry.comparison != nil {
+		m.Separator()
+		label := "Pin Tab"
+		if entry.pinned {
+			label = "Unpin Tab"
+		}
+		a.menuNamed(m, pinTab, t, label, "")
+		a.menuGroup(m, t, reloadBranchComparison, cancelBranchComparison, reopenTab)
+		return
+	}
 	m.Separator()
 	a.menu(m, copyPath, t)
 	m.Separator()

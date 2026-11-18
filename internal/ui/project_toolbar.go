@@ -17,6 +17,9 @@ func (a *Workspace) activeDocument() *tab {
 		return r.preview
 	}
 	if len(r.tabs) > 0 {
+		if r.tabs[r.active].comparison != nil {
+			return nil
+		}
 		return &r.tabs[r.active]
 	}
 	return nil

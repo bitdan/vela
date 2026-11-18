@@ -93,6 +93,7 @@ type RepositoryOperation struct {
 	Network                        NetworkPolicy
 	Paths                          []string
 	RemoveApplied                  bool
+	SelectShelfFiles               bool
 	Kind                           RepositoryOperationKind
 	Branch, Source, Remote, Target string
 	Checkout, SetUpstream          bool

@@ -28,6 +28,7 @@ type tab struct {
 	file                             domain.File
 	pinned                           bool
 	document                         *editorDocument
+	comparison                       *branchComparisonDialog
 }
 
 type repoView struct {

@@ -40,6 +40,7 @@ func (a *Workspace) loadRepository(directory string, refresh bool) {
 	a.stopBackgroundTasks()
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
+	a.stopComparisonTabReads()
 	a.stopHistoryComparison()
 	a.closeRevisionBrowser()
 	a.changelistDialog = nil

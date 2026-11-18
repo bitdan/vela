@@ -4,6 +4,8 @@ package domain
 // fingerprint. Version is issued by the adapter after repository preflight.
 type ImportedPatch struct {
 	Text, Target, Version string
+	Directory             string
+	Strip                 int
 	Reverse               bool
 	Files                 []PatchDocument
 	Paths                 []string

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -85,6 +84,7 @@ func ParseImportedPatch(text string) (domain.ImportedPatch, error) {
 		result.Files = append(result.Files, doc)
 	}
 	result.Text = text
+	result.Strip = 1
 	return result, nil
 }
 
@@ -95,28 +95,9 @@ func SelectImportedPatch(text string, selected map[string][]int) (domain.Importe
 	if err != nil {
 		return domain.ImportedPatch{}, err
 	}
-	for path := range selected {
-		if !slices.Contains(doc.Paths, path) {
-			return domain.ImportedPatch{}, fmt.Errorf("unknown patch path %q", path)
-		}
+	doc, err = SelectParsedImportedPatch(doc, selected)
+	if err != nil {
+		return domain.ImportedPatch{}, err
 	}
-	var result strings.Builder
-	for _, file := range doc.Files {
-		indices := slices.Clone(selected[file.Path])
-		slices.Sort(indices)
-		if len(indices) == 0 {
-			continue
-		}
-		result.WriteString(file.Header)
-		for i, index := range indices {
-			if index < 0 || index >= len(file.Hunks) || i > 0 && index == indices[i-1] {
-				return domain.ImportedPatch{}, fmt.Errorf("invalid hunk selection for %q", file.Path)
-			}
-			result.WriteString(file.Hunks[index].Text)
-		}
-	}
-	if result.Len() == 0 {
-		return domain.ImportedPatch{}, errors.New("select at least one patch hunk")
-	}
-	return ParseImportedPatch(result.String())
+	return ParseImportedPatch(doc.Text)
 }

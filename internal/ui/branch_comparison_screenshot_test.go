@@ -43,10 +43,17 @@ func TestProductionComparisonScreenshots(t *testing.T) {
 		a.Model.Active().Repository = r
 		a.ReadRepositoryFile = func(context.Context, string, string, domain.File, func(domain.File, error)) {}
 		a.ReadRepositoryRevisionTree = func(context.Context, string, string, string, func(domain.RevisionTree, error)) {}
-		a.ReadRepositoryComparisonCommits = func(_ context.Context, _ string, _ domain.RevisionComparison, _, _ int, done func(domain.CommitLogPage, error)) {
-			done(domain.CommitLogPage{Commits: []domain.Commit{{Hash: strings.Repeat("d", 40), Subject: "Fix remote tracking for renamed branch", Author: "Developer"}, {Hash: strings.Repeat("e", 40), Subject: "保留分支比较与主 Log 的独立状态", Author: "开发者"}}, HasMore: true}, nil)
-		}
 		for _, scene := range []string{"committed", "working", "missing", "loading", "empty", "error"} {
+			a.ReadRepositoryComparisonCommits = func(_ context.Context, _ string, comparison domain.RevisionComparison, _, _ int, done func(domain.CommitLogPage, error)) {
+				if scene == "empty" {
+					done(domain.CommitLogPage{}, nil)
+					return
+				}
+				done(domain.CommitLogPage{Commits: []domain.Commit{{Hash: comparison.Left, Subject: "Fix remote tracking for renamed branch", Author: "Developer"}, {Hash: strings.Repeat("e", 40), Subject: "保留分支比较与主 Log 的独立状态", Author: "开发者"}}, HasMore: true}, nil)
+			}
+			a.ReadRepositoryRevisionChanges = func(_ context.Context, _, _ string, _ int, done func([]domain.File, error)) {
+				done([]domain.File{{Path: "internal/ui/branch_comparison.go", Status: "M"}, {Path: "new file.go", Status: "A"}}, nil)
+			}
 			a.ReadRepositoryComparison = func(_ context.Context, _ domain.Repository, _ string, mode string, done func(domain.RevisionComparison, error)) {
 				if scene == "loading" {
 					return
@@ -73,9 +80,14 @@ func TestProductionComparisonScreenshots(t *testing.T) {
 				id = missingBranchCommits
 			}
 			a.run(id, commandTarget{source: "topic"})
-			a.branchComparison.selected = 0
+			if a.branchComparison != nil {
+				a.branchComparison.selected = 0
+			}
 			capture(scene)
 			a.closeBranchComparisonDialog()
+			if s := a.comparisonTarget(commandTarget{}); s != nil && s.tabID != "" {
+				a.closeTabs(closeTab, commandTarget{tabID: s.tabID})
+			}
 		}
 	}
 }

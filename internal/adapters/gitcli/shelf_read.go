@@ -35,6 +35,7 @@ func validShelfName(name string) bool {
 }
 
 func (g *Executor) readShelves(ctx context.Context, repo domain.Repository) ([]domain.Shelf, error) {
+	ctx = canonicalHistory(ctx)
 	out, err := g.runInputWithEnvLimit(ctx, repo.Root, "", nil, 2<<20, "for-each-ref", "--sort=-creatordate", "--format=%(refname)%00%(objectname)%00%(parent)%00%(subject)", shelfPrefix(repo.GitDir, false), shelfPrefix(repo.GitDir, true))
 	if err != nil {
 		return nil, err
@@ -87,6 +88,7 @@ func (g *Executor) readShelves(ctx context.Context, repo domain.Repository) ([]d
 }
 
 func (g *Executor) readShelfFile(ctx context.Context, root, source string, file domain.File) (domain.File, error) {
+	ctx = canonicalHistory(ctx)
 	var err error
 	repo := domain.Repository{Root: root}
 	repo.GitDir, err = g.gitDirectory(ctx, root)

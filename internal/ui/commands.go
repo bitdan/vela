@@ -79,13 +79,14 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	toggleShelfFile: "Toggle Unshelve File", selectShelfAll: "Select All Unshelve Files", clearShelfSelection: "Clear Unshelve File Selection",
 	toggleImportedFile: "Toggle Imported Patch File", toggleImportedHunk: "Toggle Imported Patch Hunk", selectImportedAll: "Select All Imported Hunks", clearImportedSelection: "Clear Imported Hunk Selection", toggleImportedReverse: "Reverse Imported Patch",
 	configureSigning:      "Configure GPG Key…",
 	confirmCommitWarnings: "Commit Anyway", cancelCommitWarnings: "Cancel Commit Warnings",
 	showTasks: "Task Center", cancelSelectedTask: "Cancel Selected Task", clearTaskHistory: "Clear Completed Tasks",
 	importPatch: "Import Patch…", previewImportedPatch: "Preview Imported Patch", applyImportedPatch: "Apply Imported Patch",
 	replaceInProject: "Replace in Files…", applyProjectReplace: "Replace Previewed Matches",
-	closeBranchComparison: "Close Branch Comparison", reloadBranchComparison: "Reload Branch Comparison", loadMoreComparisonCommits: "Load More Missing Commits", cancelBranchComparison: "Cancel Branch Comparison", openComparisonEntry: "Open Branch Comparison Diff", browseComparisonCommit: "Browse Missing Commit",
+	closeBranchComparison: "Close Branch Comparison", reloadBranchComparison: "Reload Branch Comparison", loadMoreComparisonCommits: "Load More Missing Commits", cancelBranchComparison: "Cancel Branch Comparison", openComparisonEntry: "Open Branch Comparison Diff", browseComparisonCommit: "Browse Missing Commit", selectComparisonCommit: "Select Comparison Commit", comparisonParent: "Compare Commit Parent",
 	openDemo: "Open Demo Workspace", leaveDemo: "Leave Demo Workspace",
 	checkoutRevision: "Checkout Revision", showRepositoryRevision: "Show Repository at Revision",
 	getRevision: "Get from Revision", cherryPickChanges: "Cherry-Pick Selected Changes", revertChanges: "Revert Selected Changes",
@@ -123,6 +124,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isShelfSelectionCommand(id) {
+		return a.shelfSelectionDisabled(id, target)
+	}
 	if id == configureSigning {
 		return a.disabledFor(showSettings, target)
 	}
@@ -357,6 +361,10 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isShelfSelectionCommand(id) {
+		a.runShelfSelection(id, target)
 		return
 	}
 	if isPatchSelectionCommand(id) {
