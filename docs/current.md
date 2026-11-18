@@ -1,9 +1,5 @@
 # vela 当前进展
 
-当前分支：`main`。已包含双向分支比较及消息、作者、UTC 日期和文件路径筛选。
-
-Go 1.27.4 / MyGo v0.8.3 / 系统 Git CLI；PowerShell 7 中运行 `go run ./cmd/vela`。
-
 ## 已实现
 
 - 原生 IDEA 布局、深浅主题、可调面板、多编辑器标签、仓库与文件会话恢复。
@@ -34,4 +30,4 @@ Patch 导入目前限既有普通跟踪 UTF-8/LF 文本修改；部分 Unshelve 
 
 格式、应用编译及 Application/Git Adapter/UI 测试代码编译通过。按约定未执行功能测试、Git 集成测试或桌面验收；功能与视觉为 **UNVERIFIED**，Gate 2 为 **PARTIAL**。
 
-产品规范见 [VELA_SPEC](../VELA_SPEC.md)，架构见 [ARCHITECTURE](../ARCHITECTURE.md)，必要决策见 [ADR](adr/)，布局参考见 [IDEA 图片](idea-example.png)。只维护当前能力与待办，不再按批次保存报告、计划和过程记录。代码与必要文档一起版本管理，AGENTS.md 保留本地。
+产品规范见 [VELA_SPEC](../VELA_SPEC.md)，架构见 [ARCHITECTURE](../ARCHITECTURE.md)，布局参考见 [IDEA 图片](idea-example.png)。只维护当前能力与待办，不再按批次保存报告、计划和过程记录。代码与必要文档一起版本管理，AGENTS.md 保留本地。
