@@ -13,7 +13,7 @@ import (
 func connectReadTasks(a *ui.Workspace, invalidate func()) {
 	originalReviewImportedPatch := a.ReviewImportedPatch
 	a.ReviewImportedPatch = func(ctx context.Context, repo domain.Repository, input domain.ImportedPatch, done func(domain.ImportedPatch, error)) {
-		ctx, finish, err := trackTask(a, invalidate, ctx, repo.Root, "Check Selected Patch", taskKey("ReviewImportedPatch", input.Text, input.Target, input.Reverse, repo.Head, repo.IndexVersion, repo.WorktreeVersion), 2*time.Minute, nil)
+		ctx, finish, err := trackTask(a, invalidate, ctx, repo.Root, "Check Selected Patch", taskKey("ReviewImportedPatch", input.Text, input.Target, input.Reverse, input.Strip, input.Directory, repo.Head, repo.IndexVersion, repo.WorktreeVersion), 2*time.Minute, nil)
 		if err != nil {
 			done(domain.ImportedPatch{}, err)
 			return

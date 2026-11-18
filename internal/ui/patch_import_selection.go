@@ -93,15 +93,23 @@ func (a *Workspace) patchSelectionList(c *ui.Context, p tokens) {
 	s.pathsList.Label = func(i int) string {
 		row := s.rows[i]
 		file := s.input.Files[row.file]
+		destination, err := s.mappedPatchPath(file.Path)
+		if err != nil {
+			destination = "invalid mapping"
+		}
 		if row.hunk < 0 {
-			return file.Path
+			return file.Path + " → " + destination
 		}
 		header, _, _ := strings.Cut(file.Hunks[row.hunk].Text, "\n")
-		return file.Path + " · " + header
+		return file.Path + " → " + destination + " · " + header
 	}
 	ui.List(c, &s.pathsList, len(s.rows), func(i int) {
 		row := s.rows[i]
 		file := s.input.Files[row.file]
+		destination, err := s.mappedPatchPath(file.Path)
+		if err != nil {
+			destination = "invalid mapping"
+		}
 		chosen := s.chosen[file.Path]
 		label, checked, id := file.Path, true, toggleImportedFile
 		indent := float32(0)
@@ -117,14 +125,22 @@ func (a *Workspace) patchSelectionList(c *ui.Context, p tokens) {
 			}
 			checked = count == len(chosen)
 			label = fmt.Sprintf("%s (%d/%d hunks)", file.Path, count, len(chosen))
+			if destination != file.Path {
+				label = fmt.Sprintf("%s → %s (%d/%d)", file.Path, destination, count, len(chosen))
+			}
 		}
 		target := commandTarget{source: file.Path, index: row.hunk}
 		ui.Row(c).FillWidth().Height(rowHeight).Padding(0, gap, 0, gap+indent).AlignItems(ui.Center).Children(func() {
-			ui.Checkbox(c.Key("patch-choice"), &checked, label).Label(file.Path + " · " + label).FillWidth().Disabled(busy).Tooltip(file.Path).OnChange(func() { a.run(id, target) })
+			ui.Checkbox(c.Key("patch-choice"), &checked, label).Label(file.Path + " → " + destination + " · " + label).FillWidth().Disabled(busy).Tooltip(file.Path + " → " + destination).OnChange(func() { a.run(id, target) })
 		})
 	}).FillWidth().Height(min(5*rowHeight, float32(len(s.rows))*rowHeight)).Label("Imported patch file and hunk selection")
 	if s.selectedPath >= 0 && s.selectedPath < len(s.rows) {
 		row := s.rows[s.selectedPath]
-		ui.ScrollHorizontal(c).FillWidth().Height(rowHeight).Label("Selected patch path").Children(func() { ui.Text(c, s.input.Files[row.file].Path).SingleLine() })
+		source := s.input.Files[row.file].Path
+		destination, err := s.mappedPatchPath(source)
+		if err != nil {
+			destination = err.Error()
+		}
+		ui.ScrollHorizontal(c).FillWidth().Height(rowHeight).Label("Selected patch source and destination").Children(func() { ui.Text(c, source+" → "+destination).SingleLine() })
 	}
 }

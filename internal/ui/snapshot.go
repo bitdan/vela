@@ -37,6 +37,9 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 			repo.Commit = s.Repository.History[s.Commit].Hash
 		}
 		for _, tab := range r.tabs {
+			if tab.comparison != nil {
+				continue
+			}
 			saved := application.TabSnapshot{Source: tab.source, Path: tab.path, Code: tab.code != nil, Pinned: tab.pinned}
 			identitySource := tab.source
 			for _, prefix := range []string{"revision:", "local:", "before:"} {
@@ -67,7 +70,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 				repo.Tabs = append(repo.Tabs, pending)
 			}
 		}
-		if len(r.tabs) > 0 {
+		if len(r.tabs) > 0 && r.tabs[r.active].comparison == nil {
 			repo.ActiveTab = r.tabs[r.active].id
 		}
 		if r.pendingActiveTab != "" {

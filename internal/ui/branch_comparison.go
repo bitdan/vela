@@ -17,6 +17,8 @@ const (
 	cancelBranchComparison    commandID = "branches.cancel-comparison"
 	openComparisonEntry       commandID = "branches.open-comparison-diff"
 	browseComparisonCommit    commandID = "branches.browse-missing-commit"
+	selectComparisonCommit    commandID = "branches.select-comparison-commit"
+	comparisonParent          commandID = "branches.comparison-parent"
 )
 
 type branchComparisonDialog struct {
@@ -28,17 +30,26 @@ type branchComparisonDialog struct {
 	selected                                    int
 	list                                        ui.ListState
 	request                                     *readRequest
+	sides                                       [2]*comparisonSide
+	split                                       float32
+	tabID                                       string
 }
 
 func isBranchComparisonEntry(id commandID) bool {
 	return id == branchDiff || id == compareCurrentBranch || id == missingBranchCommits
 }
 func isBranchComparisonCommand(id commandID) bool {
-	return isBranchComparisonEntry(id) || id == closeBranchComparison || id == reloadBranchComparison || id == loadMoreComparisonCommits || id == cancelBranchComparison || id == openComparisonEntry || id == browseComparisonCommit
+	return isBranchComparisonEntry(id) || id == closeBranchComparison || id == reloadBranchComparison || id == loadMoreComparisonCommits || id == cancelBranchComparison || id == openComparisonEntry || id == browseComparisonCommit || id == selectComparisonCommit || id == comparisonParent
 }
 func (a *Workspace) closeBranchComparisonDialog() {
 	if s := a.branchComparison; s != nil {
 		stopRead(&s.request)
+		for _, side := range s.sides {
+			if side != nil {
+				stopRead(&side.request)
+				stopRead(&side.details)
+			}
+		}
 		a.branchComparison = nil
 	}
 }
@@ -55,14 +66,17 @@ func (a *Workspace) branchComparisonDisabled(id commandID, t commandTarget) stri
 		if r.Head == "" || r.IndexVersion == "" || operationRef(r, t.source) == "" {
 			return "Select a committed local branch, remote branch or tag"
 		}
-		if id == missingBranchCommits && a.ReadRepositoryComparisonCommits == nil {
+		if (id == missingBranchCommits || id == compareCurrentBranch) && a.ReadRepositoryComparisonCommits == nil {
 			return "Missing-commit reader is unavailable"
 		}
 		return ""
 	}
-	s := a.branchComparison
+	s := a.comparisonTarget(t)
 	if s == nil {
 		return "Open a branch comparison"
+	}
+	if s.mode == "committed" {
+		return a.twoWayComparisonDisabled(id, t)
 	}
 	if id == closeBranchComparison || id == reloadBranchComparison {
 		return ""
@@ -112,11 +126,30 @@ func (a *Workspace) runBranchComparison(id commandID, t commandTarget) {
 			mode = "missing"
 		}
 		s := &branchComparisonDialog{open: true, root: r.Root, ref: operationRef(r, t.source), label: t.source, rightLabel: r.CurrentBranch, mode: mode, snapshot: r, selected: -1}
-		a.branchComparison = s
+		if mode == "committed" {
+			s.tabID = fmt.Sprintf("branch-compare:%p", s)
+			a.cancelSessionNavigation()
+			view := a.repo()
+			view.preview, view.mergeActive = nil, ""
+			for i, entry := range view.tabs {
+				if existing := entry.comparison; existing != nil && existing.ref == s.ref && existing.rightLabel == s.rightLabel {
+					view.active = i
+					return
+				}
+			}
+			view.tabs = append(view.tabs, tab{id: s.tabID, title: comparisonTabTitle(s), comparison: s})
+			view.active = len(view.tabs) - 1
+		} else {
+			a.branchComparison = s
+		}
 		a.loadBranchComparison(s)
 		return
 	}
-	s := a.branchComparison
+	s := a.comparisonTarget(t)
+	if s.mode == "committed" {
+		a.runTwoWayComparison(id, t)
+		return
+	}
 	switch id {
 	case closeBranchComparison:
 		a.closeBranchComparisonDialog()
@@ -146,11 +179,20 @@ func (a *Workspace) loadBranchComparison(s *branchComparisonDialog) {
 	s.selected = -1
 	s.commits = nil
 	s.comparison = domain.RevisionComparison{}
+	if s.mode == "committed" {
+		for _, side := range s.sides {
+			if side != nil {
+				stopRead(&side.request)
+				stopRead(&side.details)
+			}
+		}
+		s.sides = [2]*comparisonSide{}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	request := &readRequest{cancel: cancel}
 	s.request = request
 	a.ReadRepositoryComparison(ctx, s.snapshot, s.ref, s.mode, func(result domain.RevisionComparison, err error) {
-		if a.branchComparison != s || s.request != request || a.Model.Active().Repository.Root != s.root {
+		if !a.comparisonAlive(s) || s.request != request {
 			return
 		}
 		if err == nil {
@@ -167,6 +209,9 @@ func (a *Workspace) loadBranchComparison(s *branchComparisonDialog) {
 		}
 		s.comparison = result
 		s.ready = true
+		if s.mode == "committed" {
+			a.startTwoWayComparison(s)
+		}
 		if s.mode == "missing" {
 			s.more = true
 			a.loadComparisonCommits(s)
@@ -217,6 +262,9 @@ func (a *Workspace) loadComparisonCommits(s *branchComparisonDialog) {
 
 func (a *Workspace) branchComparisonView(c *ui.Context, p tokens) {
 	s := a.branchComparison
+	if s.mode == "committed" {
+		return
+	}
 	w, h := c.Size()
 	title := "Compare Branches"
 	if s.mode == "working" {

@@ -24,6 +24,7 @@ func (g *Executor) shelfCommit(ctx context.Context, root, tree, message string, 
 }
 
 func (g *Executor) shelfOperation(ctx context.Context, repo domain.Repository, index string, op domain.RepositoryOperation) error {
+	ctx = canonicalHistory(ctx)
 	if err := g.checkCommitState(ctx, repo.Root, index); err != nil {
 		return err
 	}
@@ -68,49 +69,7 @@ func (g *Executor) shelfOperation(ctx context.Context, repo domain.Repository, i
 		if entry.Deleted {
 			return errors.New("restore the deleted shelf before applying it")
 		}
-		if err := g.rejectHiddenIndexFlags(ctx, repo.Root); err != nil {
-			return err
-		}
-		if err := rejectSubmoduleIndex(index); err != nil {
-			return err
-		}
-		if err := g.verifyWorktree(ctx, repo); err != nil {
-			return err
-		}
-		if err := g.requireCleanTracked(ctx, repo.Root); err != nil {
-			return err
-		}
-		if err := g.protectWorktreePaths(ctx, repo.Root, repo.Head, entry.OID); err != nil {
-			return err
-		}
-		parents, err := g.read(ctx, repo.Root, "show", "-s", "--format=%P", entry.Index, "--")
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(parents) != entry.Base {
-			return errors.New("invalid shelf index ancestry")
-		}
-		if err := g.validateShelfPaths(ctx, repo, entry.Files, index); err != nil {
-			return err
-		}
-		for _, tip := range []string{entry.Base, entry.Index, entry.OID} {
-			if err := g.validateShelfTreeModes(ctx, repo.Root, tip, entry.Files); err != nil {
-				return err
-			}
-		}
-		args := []string{"-c", "submodule.recurse=false", "stash", "apply"}
-		if op.RestoreIndex {
-			args = append(args, "--index")
-		}
-		if err := g.runOperation(ctx, repo.Root, append(args, entry.OID)...); err != nil {
-			return fmt.Errorf("shelf retained; review the worktree for partial application or conflicts: %w", err)
-		}
-		if op.RemoveApplied {
-			if err := g.moveShelfRef(ctx, repo, entry, true); err != nil {
-				return fmt.Errorf("shelf applied but entry could not move to Recently Deleted: %w", err)
-			}
-		}
-		return nil
+		return g.applyShelf(ctx, repo, index, entry, op)
 	}
 	return errors.New("unknown shelf operation")
 }

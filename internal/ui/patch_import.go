@@ -18,6 +18,7 @@ const (
 )
 
 type patchImportDialog struct {
+	directory, stripDepth    string
 	input                    domain.ImportedPatch
 	chosen                   map[string][]bool
 	rows                     []patchImportRow
@@ -64,10 +65,13 @@ func (a *Workspace) patchImportDisabled(id commandID) string {
 		return "Read a patch before selecting its changes"
 	}
 	if (id == previewImportedPatch || id == applyImportedPatch) && s.input.Text != "" && s.doc.Text == "" {
+		if s.message != "" {
+			return s.message
+		}
 		return "Select at least one patch hunk"
 	}
 	if id == applyImportedPatch {
-		if s.doc.Version == "" || s.doc.Target != s.target || s.doc.Reverse != s.reverse || !s.ack {
+		if s.doc.Version == "" || s.doc.Target != s.target || s.doc.Reverse != s.reverse || !s.patchMappingMatches() || !s.ack {
 			return "Preview this target and confirm applying the patch"
 		}
 		for _, path := range s.doc.Paths {
@@ -84,7 +88,7 @@ func (a *Workspace) patchImportDisabled(id commandID) string {
 
 func (a *Workspace) choosePatchSource() {
 	a.stopPatchExports()
-	s := &patchImportDialog{open: true, picking: true, target: "Working tree", snapshot: a.Model.Active().Repository}
+	s := &patchImportDialog{open: true, picking: true, target: "Working tree", stripDepth: "1", snapshot: a.Model.Active().Repository}
 	a.patchImport = s
 	navigation := a.repositoryNavigation
 	a.PickPatchSource(func(path string, err error) {
@@ -204,7 +208,16 @@ func (a *Workspace) rebuildImportedPatch() {
 			}
 		}
 	}
-	doc, err := application.SelectImportedPatch(s.input.Text, selection)
+	doc, err := application.SelectParsedImportedPatch(s.input, selection)
+	if err == nil {
+		var depth int
+		depth, err = s.patchStripDepth()
+		if err == nil {
+			doc, err = application.RelocateParsedImportedPatch(doc, depth, s.directory)
+		} else {
+			doc = domain.ImportedPatch{}
+		}
+	}
 	doc.Target, doc.Reverse = s.target, s.reverse
 	s.doc = doc
 	if err != nil {
@@ -251,6 +264,10 @@ func (a *Workspace) applyPatchImport() {
 		if s.doc.Reverse {
 			message = "Applied reverse patch to " + s.doc.Target
 		}
+		message += fmt.Sprintf(" · -p%d", s.doc.Strip)
+		if s.doc.Directory != "" {
+			message += " · " + s.doc.Directory
+		}
 		if err != nil {
 			message = "Patch import stopped · " + err.Error()
 			s.message = message
@@ -280,13 +297,14 @@ func (a *Workspace) patchImportView(c *ui.Context, p tokens) {
 			ui.Column(c).Grow(1).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Text(c, s.snapshot.Root).FillWidth().SingleLine().Ellipsis("…")
 				ui.Text(c, s.source).FillWidth().SingleLine().Ellipsis("…")
-				ui.Text(c, "Existing tracked LF text modifications · up to 2 MiB / 100 files / 10,000 hunks. Select files/hunks or apply in reverse. Additions, deletions, renames, binary, links, modes and email patches remain unsupported.").FillWidth().TextColor(p.theme.TextMuted)
+				ui.Text(c, "Tracked LF text modifications · 2 MiB / 100 files / 10,000 hunks. Select hunks, reverse or relocate existing targets.").FillWidth().TextColor(p.theme.TextMuted).Tooltip("Additions, deletions, renames, binary, links, mode changes, conversion attributes and email patches remain unsupported")
 				if ui.Select(c, &s.target, []string{"Working tree", "Index only"}).Label("Patch application target").FillWidth().Disabled(s.busy || s.request != nil || s.picking).Changed() && s.input.Text != "" {
 					a.rebuildImportedPatch()
 				}
 				reverse := s.reverse
 				ui.Checkbox(c, &reverse, "Apply in reverse (undo selected patch changes)").Label(commandLabel(toggleImportedReverse)).Disabled(s.busy || s.request != nil || s.picking || s.input.Text == "").OnChange(func() { a.run(toggleImportedReverse, commandTarget{}) })
-				ui.Text(c, "Working tree changes local files; Index only stages the patch without changing local files. HEAD is preserved. Paths are relative to the repository root; strip depth is fixed at 1.").FillWidth().TextColor(p.theme.TextMuted)
+				a.patchRelocationControls(c, p)
+				ui.Text(c, "Working tree writes local files; Index only writes the index. Verify mapped paths below. HEAD is preserved.").FillWidth().TextColor(p.theme.TextMuted)
 				if s.picking || s.request != nil {
 					ui.Text(c, "Reading and checking patch…")
 				}
@@ -301,7 +319,7 @@ func (a *Workspace) patchImportView(c *ui.Context, p tokens) {
 					}
 					editor.View(c, s.preview).Label("Imported patch preview").FillWidth().Grow(1)
 				}
-				ui.Checkbox(c, &s.ack, "Apply the checked selection in the chosen direction and target").Disabled(s.busy || s.request != nil || s.doc.Version == "" || s.doc.Target != s.target || s.doc.Reverse != s.reverse)
+				ui.Checkbox(c, &s.ack, "Apply the checked selection to the mapped paths, direction and target").Disabled(s.busy || s.request != nil || s.doc.Version == "" || s.doc.Target != s.target || s.doc.Reverse != s.reverse || !s.patchMappingMatches())
 				if reason := a.patchImportDisabled(applyImportedPatch); reason != "" && s.doc.Version != "" {
 					ui.Text(c, reason).FillWidth().TextColor(p.theme.TextMuted)
 				}

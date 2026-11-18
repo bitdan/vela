@@ -166,6 +166,7 @@ func (a *Workspace) RequestClose() bool {
 	}
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()
+	a.stopComparisonTabReads()
 	a.stopHistoryComparison()
 	a.closeRevisionBrowser()
 	a.changelistDialog = nil
@@ -333,6 +334,10 @@ func (a *Workspace) emptyEditor(c *ui.Context, p tokens) {
 }
 
 func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
+	if entry.comparison != nil {
+		a.twoWayComparisonView(c, p, entry.comparison)
+		return
+	}
 	heading(c, p, entry.path, entry.context)
 	if entry.code != nil {
 		a.prepareEditorMetadata(&entry, p)

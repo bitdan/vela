@@ -279,7 +279,7 @@ func run(layoutPath string) error {
 			go func() {
 				var result domain.RevisionComparison
 				var err error
-				if mode == "missing" {
+				if mode == "missing" || mode == "committed" {
 					result, err = comparisonReader.ReadMissingBranchComparison(ctx, repo, ref)
 				} else {
 					result, err = comparisonReader.ReadBranchComparison(ctx, repo, ref, mode == "working")

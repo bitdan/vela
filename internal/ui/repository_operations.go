@@ -11,6 +11,10 @@ import (
 )
 
 type repositoryOperationDialog struct {
+	shelfFiles                   []domain.File
+	shelfChosen                  map[string]bool
+	shelfList                    ui.ListState
+	shelfSelected                int
 	updateFinished               bool
 	open                         bool
 	root, label, detail, message string
@@ -301,7 +305,7 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 				ui.Text(c, s.detail).FillWidth().TextColor(p.theme.TextMuted)
 				a.stashFields(c, s, busy)
 				a.updateFields(c, p, s, busy)
-				a.shelfFields(c, s, busy)
+				a.shelfFields(c, p, s, busy)
 				a.worktreeFields(c, s, busy)
 				bisectFields(c, s, busy)
 				refFields(c, s, busy)
@@ -377,6 +381,7 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 					refFieldsDisabled(s) ||
 					historyComparisonDisabled(s) ||
 					shelfFieldsDisabled(s) ||
+					a.shelfApplyReason(s) != "" ||
 					worktreeCommandDisabled(s) ||
 					bisectNeedsRange(*op) ||
 					((op.Kind == domain.ApplyStash || op.Kind == domain.DropStash) && len(s.choices) == 0) ||
@@ -405,6 +410,10 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 }
 
 func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
+	if reason := a.shelfApplyReason(s); reason != "" {
+		s.message = reason
+		return
+	}
 	if err := a.Layout.VersionControl.Git.SafetyPolicy().CheckOperation(s.snapshot, s.op); err != nil {
 		s.message = err.Error()
 		return
@@ -447,6 +456,10 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		a.run(removeWorktree, commandTarget{source: entry.Path})
 		return
 	}
+	restoreEditors := func() {}
+	if s.op.Kind == domain.ApplyShelf {
+		restoreEditors = a.lockShelfEditors()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel, s.message = cancel, ""
 	op := s.op
@@ -474,6 +487,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 	a.beginRepositoryWrite(s.root, s.label+"…", cancel)
 	a.OperateRepository(ctx, snapshot, op, func(repo domain.Repository, err, refreshErr error) {
 		cancel()
+		restoreEditors()
 		s.cancel = nil
 		message := s.label + " completed"
 		paused := op.Kind == domain.StartMerge && refreshErr == nil && len(repo.MergeHeads) > 0
@@ -532,7 +546,9 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		if refreshErr == nil && (isHistoryWrite(op.Kind) || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence || op.Kind == domain.AbortSequence) {
 			a.refreshHistoricalWriteViews(s.root, op)
 		}
-		if refreshErr == nil && (op.Kind == domain.SaveShelf || op.Kind == domain.ApplyShelf) {
+		if op.Kind == domain.ApplyShelf {
+			a.refreshHistoricalWriteViews(s.root, op)
+		} else if refreshErr == nil && op.Kind == domain.SaveShelf {
 			for _, path := range op.Paths {
 				a.refreshOpenFileViews(s.root, path)
 			}

@@ -120,7 +120,9 @@ func (a *Workspace) realShelfDisabled(id commandID, t commandTarget) string {
 	}
 	if id == unshelve {
 		if t.source == "shelf-file" {
-			return "Unshelve the complete entry; partial unshelve is not supported"
+			if !slices.ContainsFunc(entry.Files, func(f domain.File) bool { return f.Path == t.file.Path }) {
+				return "Select a file in the original shelf"
+			}
 		}
 		if len(repo.Staged) > 0 || slices.ContainsFunc(repo.Working, func(f domain.File) bool { return f.Status != "?" }) {
 			return "Commit, shelve or stash tracked changes before unshelving"
@@ -163,7 +165,14 @@ func (a *Workspace) configureShelf(s *repositoryOperationDialog, id commandID, t
 			s.op.Kind = domain.ApplyShelf
 			s.op.RestoreIndex = true
 			s.op.RemoveApplied = a.Layout.VersionControl.Shelf.RemoveApplied
-			s.detail += " · Restore saved working changes; conflicts keep the original shelf."
+			s.op.SelectShelfFiles = true
+			s.shelfFiles = slices.Clone(entry.Files)
+			s.shelfChosen = make(map[string]bool, len(entry.Files))
+			for _, file := range entry.Files {
+				s.shelfChosen[file.Path] = t.source != "shelf-file" || file.Path == t.file.Path
+			}
+			a.rebuildShelfSelection(s)
+			s.detail += " · Apply checked saved file changes. Partial restore keeps the complete original shelf. Git may map target-side renames or report conflicts."
 		case renameShelf:
 			s.label = "Rename Shelf"
 			s.op.Kind = domain.RenameShelf
@@ -184,13 +193,22 @@ func (a *Workspace) configureShelf(s *repositoryOperationDialog, id commandID, t
 	}
 }
 
-func (a *Workspace) shelfFields(c *ui.Context, s *repositoryOperationDialog, busy bool) {
+func (a *Workspace) shelfFields(c *ui.Context, p tokens, s *repositoryOperationDialog, busy bool) {
 	switch s.op.Kind {
 	case domain.SaveShelf, domain.RenameShelf:
 		ui.TextInput(c, &s.op.Message).Label("Shelf name").FillWidth().Disabled(busy)
 	case domain.ApplyShelf:
+		a.shelfApplyFiles(c, p, s, busy)
 		ui.Checkbox(c, &s.op.RestoreIndex, "Restore original staged state").Disabled(busy)
-		ui.Checkbox(c, &s.op.RemoveApplied, "Move to Recently Deleted after successful apply").Disabled(busy)
+		partial := len(s.op.Paths) < len(s.shelfFiles)
+		ui.Checkbox(c, &s.op.RemoveApplied, "Move complete entry to Recently Deleted after successful apply").Disabled(busy || partial)
+		if partial {
+			ui.Text(c, "Partial restore retains every saved file in the original shelf, including applied files. Rename source/destination paths are listed separately; select both to restore the complete rename.").FillWidth().TextColor(p.theme.TextMuted)
+		}
+		if reason := a.shelfApplyReason(s); reason != "" {
+			ui.Text(c, reason).FillWidth().TextColor(p.theme.TextMuted)
+		}
+		return
 	case domain.PurgeShelf:
 		ui.Checkbox(c, &s.acknowledged, "Permanently delete this saved shelf").Disabled(busy)
 	default:
@@ -209,6 +227,9 @@ func (a *Workspace) shelfFields(c *ui.Context, s *repositoryOperationDialog, bus
 }
 
 func shelfFieldsDisabled(s *repositoryOperationDialog) bool {
+	if s.op.Kind == domain.ApplyShelf {
+		return len(s.op.Paths) == 0
+	}
 	if s.op.Kind == domain.PurgeShelf {
 		return !s.acknowledged
 	}
