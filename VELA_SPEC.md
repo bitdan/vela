@@ -1,9 +1,6 @@
 # vela --- 产品与交互规范
 
-> 文档状态：新项目基线\
-> 版本：2.0.0-draft\
-> 目标技术栈：Go + MyGo Native UI\
-> 本文档定义产品行为与验收标准，不代表相关功能已经实现。
+> 本文定义目标行为与安全约束，不代表功能已经验收。实际实现范围和验证状态只维护在 [当前清单](docs/current.md)。
 
 ## 1. 产品定位
 
@@ -204,27 +201,27 @@ Branches、Commit Log/Graph、Changed Files + Commit Details。
 -   支持键盘打开上下文菜单、上下移动、确认和取消。
 -   多选应明确支持 Ctrl/Cmd、Shift、范围选择和全选。
 
-### 5.7 Phase 1 顶栏、底栏与对象菜单
+### 5.7 顶栏、底栏与对象菜单
 
 -   Main Toolbar 以 [IDEA 主窗口参考图](docs/idea-example.png) 为准，与系统窗口按钮共用一行。顶栏使用 vela 品牌图标，Windows 原生窗口使用同一图标。左侧保留主菜单、仓库和当前分支入口。右侧提供搜索和设置。工具窗口的显示控制由活动栏、Git 视图菜单及现有快捷键提供。Branches 面板的选择不改变当前分支。
 -   点击顶栏主菜单在紧凑模式和横向菜单栏之间切换。紧凑模式显示仓库和分支选择器，横向菜单栏显示可直接点击的 View 和 Git 菜单。
--   Git 菜单按提交、同步、分支、日志、变更、文件和托管平台组织。Git Remotes 可在当前 Mock 仓库新增、编辑和移除远端，OK 应用本次会话的改动。GitHub、Gitee 和 GitLab 子菜单识别公共主机的 HTTPS 与 SSH 地址，提供打开仓库和复制网页地址。真实 Git 操作以及应用内 PR／MR 属于后续阶段。
--   顶栏放大镜和双击 Shift 打开 Search Everywhere，包含 All、Classes、Files、Symbols、Actions 和 Text。搜索范围为当前 Mock 项目和已打开的可编辑文件，Classes 对应 Go 类型，Symbols 查找 Go 声明。输入 `/` 或使用 `Ctrl+Shift+P` 进入操作搜索。上下键选择，Enter 打开结果或执行操作，文件结果支持 `Shift+Enter` 在右侧拆分中打开，Esc 关闭搜索。
--   Git Tool Window 包含 Log 和 Console 页签。页签下直接显示分支搜索、日志筛选及 Changed Files 工具栏。日志行从左到右显示作者、提交图、提交标题及引用、日期时间。时间显示 Today、Yesterday 或完整日期，并保留作者时间与提交时间切换。Date 筛选支持快捷范围、日历及起止时分、结束时间跟随最新提交、取消和应用。日期快捷范围基于最新 Mock 提交的时间。Log 顶部提供排序、First Parent、No Merges、刷新、Cherry-Pick、显示选项和搜索入口。Console 在此阶段展示 Mock 任务输出。Status Bar 独立显示仓库、当前分支、任务状态及当前文档上下文。
+-   Git 菜单按提交、同步、分支、日志、变更、文件和托管平台组织。Git Remotes 提供真实远端的新增、编辑和删除，执行前分别确认目标和影响。GitHub、Gitee 和 GitLab 子菜单识别公共主机的 HTTPS 与 SSH 地址，提供打开仓库和复制网页地址。应用内 PR／MR 尚未实现。
+-   顶栏放大镜和双击 Shift 打开 Search Everywhere，包含 All、Classes、Files、Symbols、Actions 和 Text。搜索范围为当前项目和已打开的可编辑文件，Classes 对应 Go 类型，Symbols 查找 Go 声明。输入 `/` 或使用 `Ctrl+Shift+P` 进入操作搜索。上下键选择，Enter 打开结果或执行操作，文件结果支持 `Shift+Enter` 在右侧拆分中打开，Esc 关闭搜索。
+-   Git Tool Window 包含 Log 和 Console 页签。页签下直接显示分支搜索、日志筛选及 Changed Files 工具栏。日志行从左到右显示作者、提交图、提交标题及引用、日期时间。时间显示 Today、Yesterday 或完整日期，并保留作者时间与提交时间切换。Date 筛选支持快捷范围、日历及起止时分、结束时间跟随最新提交、取消和应用。日期快捷范围基于当前 Log 的时间基准。Log 顶部提供排序、First Parent、No Merges、刷新、Cherry-Pick、显示选项和搜索入口。Console 展示命令与任务输出。Status Bar 独立显示仓库、当前分支、任务状态及当前文档上下文。
 -   Log 工具栏一次只显示一个筛选面板或菜单。切换入口会关闭原弹层，已应用的条件可组合使用。
--   左侧工具窗口默认打开 Commit，通过 Activity Bar 顶部图标在 Project 文件树和 Commit 之间切换。点击当前工具窗口的图标收起，再次点击恢复原面板。Git 工具窗口开关位于 Activity Bar 底部、Status Bar 上方。Shelf 保留为 Commit 工具窗口的子页。Shelf 条目与展开后的文件各有菜单。Mock Shelf 支持重命名、移入 Recently Deleted、恢复和确认后复制到 Working Changes。若工作区或暂存区存在同路径变更则拒绝复制。Commit 工具栏使用紧凑图标，按刷新、回滚、Diff、静默搁置、视图选项、定位、展开和折叠排列。Diff 和定位使用最近操作的 Working 或 Staged 列表。视图选项提供 Directory、Repository、Module 分组和 Mock 忽略文件开关。
--   项目文件、工作区文件、暂存文件、编辑器文件、Shelf、分支、Log 提交和历史 Changed Files 按对象构建菜单。功能入口复用统一 Command。真实 Git 操作在此阶段以带禁用原因的菜单项呈现。
+-   左侧工具窗口默认打开 Commit，通过 Activity Bar 顶部图标在 Project 文件树和 Commit 之间切换。点击当前工具窗口的图标收起，再次点击恢复原面板。Git 工具窗口开关位于 Activity Bar 底部、Status Bar 上方。Shelf 保留为 Commit 工具窗口的子页。Shelf 条目与展开后的文件各有菜单。Shelf 支持重命名、Recently Deleted 和确认后恢复；恢复前检查工作区、暂存区和未保存源文档。Commit 工具栏使用紧凑图标，按刷新、回滚、Diff、静默搁置、视图选项、定位、展开和折叠排列。Diff 和定位使用最近操作的 Working 或 Staged 列表。视图选项提供 Directory、Repository、Module 分组和 忽略文件显示开关。
+-   项目文件、工作区文件、暂存文件、编辑器文件、Shelf、分支、Log 提交和历史 Changed Files 按对象构建菜单。功能入口复用统一 Command。不可执行的操作保留禁用原因。
 -   `Show Diff` 在编辑工作区显示临时预览，关闭后回到原标签。`Show Diff in a New Tab` 打开或激活对应版本的独立标签。历史菜单区分编辑本地源文件与打开只读仓库版本。
 -   Commit 面板单击 Working 或 Staged 文件时复用临时 Commit Diff 标签，双击打开源文件。临时标签支持切换文件、定位差异块、并排或统一视图及固定为独立 Diff 标签。状态栏左侧展示路径面包屑，右侧展示分支及文档信息。
--   Project 工具栏提供 New、定位当前文件、展开与折叠、视图和隐藏。Scratch File 仅在当前会话中编辑，真实文件和目录创建保持禁用。
+-   Project 工具栏提供 New、定位当前文件、展开与折叠、视图和隐藏。Scratch File 仅在当前会话中编辑；真实文件操作须遵循仓库路径和覆盖保护。
 -   Project、Commit Changes、Branches 和历史 Changed Files 使用树形缩进及可单独展开的节点。Project 显示项目根和模块图标，同级目录排在文件之前。Commit 和历史变更显示分组文件数，目录分组压缩单链路径。Branches 按 Local、Remote、Tags 和斜杠前缀分层，叶节点使用短名称，菜单沿用完整引用。鼠标箭头与左右方向键控制展开状态，分支搜索使用独立的展开状态。
 -   工具窗口标签与编辑器标签采用扁平样式，选中项以柔和底线标识。列表、活动栏和下拉菜单的选中项使用中性底色，保留主题正文颜色。下拉按钮的灰底仅在菜单打开期间显示。分支下拉和分支列表共用线性图标，当前分支在列表中使用星标。
--   编辑器标签菜单包括临时 Commit Diff 标签，均以被点击标签为目标，支持单个或批量关闭、固定、重新打开和拆分。批量关闭保留固定及未保存标签，直接关闭未保存标签显示禁用原因。移动到拆分区保留原编辑状态。
+-   编辑器标签菜单包括临时 Commit Diff 标签，均以被点击标签为目标，支持单个或批量关闭、固定、重新打开和拆分。批量关闭保留固定及未保存标签；单独关闭未保存的真实源文件提供保存、丢弃内存改动和取消。移动到拆分区保留原编辑状态。比较工具标签使用自身分隔条，不进入文件拆分路径。
 -   编辑器无文件标签和临时 Diff 时隐藏标签条，居中显示可点击的 Search Everywhere、Go to File、Recent Files 和 Project Navigation。对应快捷键为双击 Shift、`Ctrl+Shift+N`、`Ctrl+E` 和 `Alt+Home`。Recent Files 查找当前工作区的打开及最近关闭的源文件，Project Navigation 显示并聚焦文件树。
--   分支菜单包含与当前分支比较、与工作区比较、查看缺失提交，以及保持禁用的 Checkout / Rebase / Merge 等操作。比较和缺失提交查询使用 Mock 版本与祖先关系，不改变当前分支。
+-   分支菜单提供比较、缺失提交及 Checkout / Rebase / Merge 等上下文操作，按实际仓库状态判断可用性。比较是只读查询，不切换当前分支。
 -   底部 Changed Files 提供 Diff、历史、视图选项及展开/折叠。分组、自动预览和详情显示与 Commit 面板独立。编辑器的关闭按钮位于各自标签旁。
 -   Git 右下角的 Commit Details 随日志选中提交更新，显示标题、正文、可复制的短哈希、作者、邮箱与完整时间。彩色标签显示直接指向该提交的 HEAD、本地分支、远程分支和标签。Show / Hide 切换按提交图计算的包含分支列表。详情独立滚动，并保留与 Changed Files 之间的分隔条。
--   Log 父子跳转基于 Mock 图关系。有多个相邻提交时菜单列出目标，键盘快捷键使用第一条关系。无对应关系的命令显示为禁用。
+-   Log 父子跳转基于已加载提交图关系。有多个相邻提交时菜单列出目标，键盘快捷键使用第一条关系。无对应关系的命令显示为禁用。
 
 ### 5.8 设置
 
@@ -234,7 +231,25 @@ Branches、Commit Log/Graph、Changed Files + Commit Details。
 -   Version Control 一级分组默认展开，可点击标题或通过键盘展开与收起。收起保留当前页面。搜索时展开匹配的子页，清空搜索后恢复浏览时的展开状态。
 -   Apply 应用草稿并保留对话框，OK 应用后关闭，Cancel 放弃自上次应用后的改动。已应用设置随应用配置在正常退出时保存，旧配置使用新增字段的默认值。
 -   File Status Colors 按 IDEA 参考顺序展示文件状态，浅色默认配色以参考图为准，深色使用同语义配色。自定义颜色覆盖主题默认值，Restore Default 清除当前状态的覆盖。现有文件状态在 Changes、Changed Files 和 Project 中使用对应颜色。
--   提交消息检查、Log 显示和条数限制、文件状态颜色与 Shelf 应用策略可在 Mock 工作区中验证。Git 和 Changelist 操作偏好保存在本地，实际生效依赖后续阶段。Directory Mappings 显示 Mock 映射。
+-   设置只对已接通的工作流生效，不得把可编辑的偏好误报为完整功能。具体支持范围以当前清单为准。
+
+### 5.9 分支比较
+
+Compare with 当前分支直接打开 `Compare: A and B` 编辑器标签，与文件标签并列。上下两侧分别展示所选分支独有提交和当前分支独有提交，固定两个 OID 后独立分页、选择、提交图、文件和详情；不借用全局 Log 的已加载集合。每页 100 条，空、加载、错误和取消分别反馈。
+
+两侧独立支持消息/作者（单行、不区分大小写的字面子串）、UTC 提交日期区间（含首末日）和字面仓库相对文件/目录筛选。Apply/Clear 查询完整固定范围，草稿不立即改变结果；非法条件保留现有查询，Reload 保留已应用筛选。
+
+文件变化相对所选提交的父提交，合并提交可切换父提交。Diff 另开标签，切回比较保留分页、选择和分隔条。同分支对复用已有标签，不同分支对可并存；支持关闭、固定、批量关闭和重新打开。关闭/导航取消未完成请求；比较工具标签暂不跨启动恢复。Hash/正则等筛选、多提交聚合和合并提交按父节点分组尚未实现。
+
+### 5.10 Patch、Shelf 与提交策略
+
+外部 Patch 导入目前限既有普通跟踪 UTF-8/LF 文本修改，最多 2 MiB、100 文件、10,000 Hunk。可按文件/完整 Hunk 选择、反向应用及 Working tree / Index only。源文件读取一次，条件改变后重新 Preview Target 并确认；空选不能应用，写前重查身份，不静默扩大选择或降级强制应用。
+
+Strip 为 1–16，按 Git 的 a/b 前缀计层；先去层，再添加仓库内目标目录。清楚展示源路径到目标路径，拒绝绝对/越界路径、过度 Strip 和同名目标碰撞，预检与写入使用同一映射。
+
+Shelf 可按整文件 Unshelve，并选择是否恢复原暂存状态；部分恢复保留完整原 Shelf，不自动裁剪或删除已恢复部分。只有全部恢复成功才可按明确选项移动原条目。重命名两端分别列出，需同时选择才能完整恢复；Hunk 级 Unshelve 尚未实现。
+
+保护分支默认包括 main/master，由 Settings → Git 配置，UI 和写前校验同时生效，冲突恢复入口保留。大文件/名称警告须针对当前 Index 重新确认。GPG 设置只覆盖 Commit/Amend，只保存公开密钥 ID/指纹；不启用时继承 Git 配置，签名失败不自动退回未签名提交。
 
 ## 6. 统一 Command 规范
 
@@ -357,27 +372,9 @@ MyGo Native UI 使用 Go 样式和主题 API，不引入 CSS、Tailwind 或 Web
 
 具体阈值应在基准机器上测量后确定，不得用未经测量的数字宣称性能达标。
 
-## 11. 交付阶段
+## 11. 工作流约束
 
-### Phase 0：架构与技术验证
-
--   验证 Go 与 MyGo 版本。
--   验证 Windows 原生窗口、输入、主题、字体、剪贴板和文件对话框。
--   验证 MyGo Editor、DiffView、List、Split、Tester。
--   固定依赖版本并建立最小可运行工程。
-
-### Phase 1：设计系统与 IDEA 主界面
-
--   完成窗口 Shell 和全部布局区域。
--   完成 Design Tokens、Dark / Light 主题。
--   完成 Splitter、Tabs、Tool Window、Toolbar、Status Bar。
--   使用 Mock 数据呈现 Commit、Branches、Log、Changed Files。
--   完成焦点、键盘、右键菜单、面板尺寸和会话恢复。
--   完成 UI 自动化与视觉验收。
-
-**Phase 1 未通过验收，不得开始实现真实 Git 业务功能。**
-
-### Phase 2：Git 只读能力
+### 11.1 仓库打开与只读浏览
 
 进入真实仓库开发时，先用 Git → Initialize Git Repository 验证原生命令链路。用户选择已有目录及初始分支，默认使用 `main`。初始化拒绝现有或嵌套仓库，保留目录文件，成功后在状态栏反馈。命令行提供同一入口。
 
@@ -387,10 +384,10 @@ MyGo Native UI 使用 Go 样式和主题 API，不引入 CSS、Tailwind 或 Web
 -   从仓库选择器或 Git 菜单打开本地工作树。已打开仓库可在当前会话切换。普通 UTF-8 Project 文件支持编辑和 Save / Ctrl+S；只允许保存已读取且磁盘指纹未变的可写普通文件，保留 CRLF，不自动暂存。历史和 Blame 只读。失败和并发输入保留编辑内容，重开/刷新不得覆盖未保存 Buffer；未保存内容不持久化。
 -   Show Blame 读取固定 OID 的逐行作者、日期、提交和原始行号，以只读文本标签展示；工作区入口归因 HEAD 已提交版本。支持会话恢复和过期请求隔离，限制 2 MiB / 20,000 行。
 -   单个真实 Project 脏标签关闭提供保存后关闭、只丢弃内存编辑后关闭、取消；保存失败、新输入或取消关闭保留标签。完成回调仅关闭原仓库原标签，不切换当前仓库。批量关闭跳过脏标签。Reload from Disk 后台重读已打开的真实 Project 文件，覆盖编辑前确认，失败、取消或读取期间新输入保留编辑，更新共享拆分视图的 Buffer 和磁盘身份。
--   Copy as Patch / Create Patch 支持跟踪工作区、暂存区或固定提交历史文件的二进制完整 Patch，最多 16 MiB / 100 个文件；拒绝未跟踪和冲突路径，不包含未保存编辑。Create 预览最多 256 KiB，经原生文件对话框将完整 Patch 保存为新的 .patch/.diff；不得覆盖已有文件、写入 Git 元数据、自动暂存或提交。外部 Patch 导入/应用另行实现。
--   Show History 使用独立原生虚拟列表，在固定起点查询 Git --follow 文件历史，每页 100 条、最多显示 100,000 条，保留各修订的真实路径/类型，支持重命名和 Git 识别的复制。列表的点击/键盘选择、Enter、右键、Diff、只读版本和复制提交 ID 复用 Command。分页失败可重试，关闭/切仓库/写入取消查询。全局 Log 不被替换，历史标签超出已加载 Log 时仍按固定对象恢复。全局 Log 分页和行范围历史另行实现。
+-   Copy as Patch / Create Patch 支持跟踪工作区、暂存区或固定提交历史文件的二进制完整 Patch，最多 16 MiB / 100 个文件；拒绝未跟踪和冲突路径，不包含未保存编辑。Create 预览最多 256 KiB，经原生文件对话框将完整 Patch 保存为新的 .patch/.diff；不得覆盖已有文件、写入 Git 元数据、自动暂存或提交。外部 Patch 导入遵循下述受限范围和预检要求。
+-   Show History 使用独立原生虚拟列表，在固定起点查询 Git --follow 文件历史，每页 100 条、最多显示 100,000 条，保留各修订的真实路径/类型，支持重命名和 Git 识别的复制。列表的点击/键盘选择、Enter、右键、Diff、只读版本和复制提交 ID 复用 Command。分页失败可重试，关闭/切仓库/写入取消查询。全局 Log 不被替换，历史标签超出已加载 Log 时仍按固定对象恢复。全局 Log 独立分页；行范围历史尚未实现。
 
-### Phase 3：基础写操作
+### 11.2 基础写操作
 
 Commit 工具窗口支持真实整文件暂存和取消暂存。作用范围为触发操作的文件或包含该文件的当前多选集合。同一文件同时有暂存和未暂存内容时须确认。取消暂存保留工作区和 HEAD，命令完成后刷新原仓库。
 
@@ -405,9 +402,9 @@ Commit 使用当前 Index。Amend 可修改消息或纳入暂存内容，确认�
 -   Checkout / Create Branch。
 -   Fetch / Pull / Push / Update。
 
-当前采用快进策略。Pull 显式选择远端与分支并集成到当前分支。Update Branch 按所选本地分支的 upstream 更新，非当前分支在未被工作树检出时可单独快进。Fetch 仅更新远端跟踪分支，Push 只发布显式选定的分支。与目标 IDEA 版本的 Update 行为对照仍为 UNVERIFIED。
+Pull 显式选择远端、分支和整合策略。Update Branch 按所选本地分支的 upstream 更新，当前分支可选择快进、Merge 或 Rebase；非当前分支未被其他工作树检出时只允许快进。清理工作区可使用 Stash/Shelve，保留备份并显式恢复。Fetch 只更新远端跟踪分支，Push 只发布明确选定的分支。与目标 IDEA 的完整行为对照仍为 UNVERIFIED。
 
-### Phase 4：高级 Git 工作流
+### 11.3 高级 Git 工作流
 
 Merge 从 Git 菜单或分支菜单进入，显示来源和当前分支。文本冲突在 Editor 工作区显示左侧只读 Current、中间可编辑 Result 和右侧只读 Incoming。Result 以工作区已有合并内容初始化，可逐块采用任一侧或手动编辑。清除标记后应用并暂存。继续前核对未合并索引，中止前提示解决改动可能丢失。
 
@@ -421,7 +418,7 @@ Cherry-pick 与 Revert 从所选 Log 提交进入，确认目标分支、完整�
 
 Reset 从 Log 提交菜单或 Git → Reset HEAD 进入，确认目标仓库、当前分支和完整目标提交。默认 Mixed：移动 HEAD、重置 Index、保留工作文件；Soft 只移动 HEAD；Hard 同时替换 Index 和跟踪工作文件，必须额外勾选丢弃跟踪改动。执行前校验 checkout、Index 和磁盘原始内容指纹，保护可能被覆盖的未跟踪及忽略文件。进行中的 Merge、Rebase、Cherry-pick、Revert 或 Bisect 必须先结束。无恢复元数据的未合并索引允许 Mixed/Hard 清除，Soft 拒绝。
 
-Stash 与 Mock Shelf 分开。保存包含暂存和未暂存改动，可明确包含未跟踪文件，保留忽略文件。恢复使用稳定提交 OID，重新校验列表版本及 reflog selector；可恢复暂存状态，始终保留原 Stash。删除单个条目必须单独确认，不提供自动 Pop 或 Clear。恢复前要求跟踪文件干净，保护未跟踪和忽略路径。冲突复用三栏编辑器和暂存入口，解决后创建普通提交；不产生虚假的 Continue/Abort Stash。要放弃应用结果，通过明确确认的 Reset 到 HEAD 清理，原 Stash 仍保留。
+Stash 与 Shelf 独立管理。保存包含暂存和未暂存改动，可明确包含未跟踪文件，保留忽略文件。恢复使用稳定提交 OID，重新校验列表版本及 reflog selector；可恢复暂存状态，始终保留原 Stash。删除单个条目必须单独确认，不提供自动 Pop 或 Clear。恢复前要求跟踪文件干净，保护未跟踪和忽略路径。冲突复用三栏编辑器和暂存入口，解决后创建普通提交；不产生虚假的 Continue/Abort Stash。要放弃应用结果，通过明确确认的 Reset 到 HEAD 清理，原 Stash 仍保留。
 
 Worktrees 对话框显示目录、HEAD、分支及 Locked/Prunable 状态，支持在当前应用打开。新增工作树使用新的绝对目录，选择已有本地分支、Detached 提交或明确的 New Branch 模式。New Branch 显示新分支名称、起点和目标目录，拒绝已有分支，不自动配置 upstream；不隐式创建分支，不允许工作树目录嵌套。移除仅针对其他关联工作树，确认目录及分支保留；拒绝主工作树、当前工作树、锁定/缺失工作树、未跟踪或忽略文件，以及隐藏索引标记。不使用 Force，不删除分支。已打开的被移除会话保留内存标签和草稿，但禁用 Git 写入。
 
@@ -429,7 +426,7 @@ Bisect 第一版使用手动 `--no-checkout` 搜索。用户指定 Bad 提交及
 
 Git → Bisect 和 Commit 面板的 Create Candidate Worktree 命令可把当前精确候选检出到单独的新绝对目录。确认框固定 Detached 和完整候选 OID，不允许改成其他引用或模式。即使候选超出已加载 Log，也可通过一致的 Bisect 元数据授权创建。步骤或搜索身份改变后拒绝旧确认。创建不切换搜索仓库、不运行测试脚本；用户通过 Worktrees 打开新目录测试，再返回原搜索仓库分类。候选工作树不会随分类、结束或新一轮搜索自动删除。
 
-### Phase 5：完善与发布
+### 11.4 会话、设置与发布
 
 真实仓库会话按绝对路径区分，正常退出保存草稿、选择和标签身份。启动后仅后台恢复上次活动仓库，其余保存的仓库保留为最近入口；标签按磁盘、Index 或历史版本重读，失败身份保留可重试。用户切换仓库、选择或关闭标签优先于异步恢复回调，旧结果不得抢占焦点。
 
@@ -445,9 +442,9 @@ Commit 消息格式检查适用于真实 Commit/Amend；TODO 检查只检查新�
 
 ## 12. 功能验收证据
 
-日常变更按影响范围验证，纯文档变更检查文本和引用。阶段验收按对应功能和门禁收集证据，并记录实际验证范围与未验证项。全量测试的触发条件见 [技术架构的测试策略](ARCHITECTURE.md#14-测试策略)。
+日常变更按影响范围验证，纯文档变更检查文本和引用。阶段验收按对应功能和门禁收集证据，并记录实际验证范围与未验证项。测试和文档维护规则见 [技术架构](ARCHITECTURE.md#验证与文档维护)。
 
-一个功能存在不等于交互正确。每个重要功能都必须记录：
+一个功能存在不等于交互正确。重要功能应保留可核查的证据，结论集中在当前清单，不要求另建报告：
 
   项目       必需证据
   ---------- ------------------------------------------
