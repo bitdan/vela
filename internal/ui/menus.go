@@ -365,7 +365,7 @@ func (a *Workspace) editorGitMenu(m *ui.Menu, t commandTarget) {
 	a.menu(m, openBranches, t)
 	a.menuGroup(m, t, newBranch, newTag, resetRevision)
 	m.Separator()
-	a.menuGroup(m, t, stashChanges, unstashChanges, manageRemotes, cloneRepo)
+	a.menuGroup(m, t, shelve, openShelf, manageRemotes, cloneRepo)
 }
 
 func (a *Workspace) branchCompareMenu(m *ui.Menu, t commandTarget) {

@@ -145,7 +145,7 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 				return "Select a commit in the Git Log"
 			}
 			if slices.ContainsFunc(repo.Working, func(f domain.File) bool { return f.Status != "?" }) || len(repo.Staged) > 0 {
-				return "Commit or stash changes before continuing"
+				return "Commit or shelve changes before continuing"
 			}
 			return ""
 		}
@@ -505,7 +505,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		unchanged := refreshErr == nil && errors.Is(err, domain.ErrRevertUnchanged)
 		stashConflicts := (op.Kind == domain.ApplyStash || op.Kind == domain.ApplyShelf) && refreshErr == nil && len(repo.Conflicts) > 0
 		if stashConflicts {
-			message = "Stash applied with conflicts. Original entry retained. Resolve and stage the unmerged files, or explicitly reset to HEAD to discard the applied changes."
+			message = "Backup applied with conflicts. Original entry retained. Resolve and stage the unmerged files, or explicitly reset to HEAD to discard the applied changes."
 			if op.Kind == domain.ApplyShelf {
 				message = "Shelf applied with conflicts. Original entry retained. Resolve and stage the unmerged files, or explicitly reset to HEAD to discard the applied changes."
 			}

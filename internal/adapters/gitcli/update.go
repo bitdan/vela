@@ -24,7 +24,7 @@ func (g *Executor) UpdateRepository(ctx context.Context, repo domain.Repository,
 }
 
 // updateTrackedBranch holds the Executor write lock throughout fetch, backup,
-// integration and optional restore. External processes still require rechecks.
+// integration and retained Shelf publication. External processes still require rechecks.
 func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Repository, op domain.RepositoryOperation) (result domain.UpdateResult, err error) {
 	application.ReportTaskProgress(ctx, "Validating repository, branch, upstream and working changes")
 	result.Method = op.UpdateMethod
@@ -85,8 +85,8 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 		return result, err
 	}
 	dirty := onCurrent && updateHasChanges(repo)
-	if dirty && (!op.ConfirmUpdateCleanup || (op.UpdateCleanup != "Stash" && op.UpdateCleanup != "Shelve")) {
-		return result, errors.New("confirm Stash or Shelve cleanup before updating tracked changes")
+	if dirty && (!op.ConfirmUpdateCleanup || op.UpdateCleanup != "Shelve") {
+		return result, errors.New("confirm Shelf backup before updating tracked changes")
 	}
 	var paths []string
 	if dirty {
@@ -165,13 +165,8 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 		application.ReportTaskProgress(ctx, "Saving retained backup and cleaning tracked changes")
 		result.BackupKind, result.BackupName = op.UpdateCleanup, "Vela Update "+time.Now().UTC().Format("20060102-150405")+" "+rand.Text()
 		save := domain.RepositoryOperation{Message: result.BackupName, Paths: paths}
-		if op.UpdateCleanup == "Stash" {
-			save.Kind = domain.SaveStash
-			err = g.stash(ctx, repo, index, save)
-		} else {
-			save.Kind = domain.SaveShelf
-			err = g.shelfOperation(ctx, repo, index, save)
-		}
+		save.Kind = domain.SaveShelf
+		err = g.shelfOperation(ctx, repo, index, save)
 		// Publication may have succeeded even if cleanup or cancellation failed.
 		inspectCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		findErr := g.findUpdateBackup(inspectCtx, repo, &result)
@@ -243,43 +238,7 @@ func (g *Executor) updateTrackedBranch(ctx context.Context, repo domain.Reposito
 	}
 	result.Integrated = true
 	application.ReportTaskProgress(ctx, "Branch integration completed")
-	if !dirty {
-		return result, nil
-	}
-	active, err = g.ReadRepository(ctx, repo.Root)
-	if err != nil {
-		return result, err
-	}
-	if active.CurrentBranch != repo.CurrentBranch || active.ResolvingConflicts() {
-		return result, errors.New("checkout or integration state changed; restore the retained backup manually")
-	}
-	if active.GitDir != repo.GitDir || active.CommonDir != repo.CommonDir {
-		return result, ErrStaleIndex
-	}
-	_, activeIndex, err = g.verifyCheckout(ctx, active)
-	if err != nil {
-		return result, err
-	}
-	if err = g.verifyUpdateMetadata(ctx, active); err != nil {
-		return result, err
-	}
-	application.ReportTaskProgress(ctx, "Restoring tracked changes; backup remains retained")
-	restore := domain.RepositoryOperation{Source: result.BackupOID, Target: result.BackupID, RestoreIndex: true}
-	if result.BackupKind == "Stash" {
-		restore.Kind = domain.ApplyStash
-		err = g.stash(ctx, active, activeIndex, restore)
-	} else {
-		restore.Kind = domain.ApplyShelf
-		err = g.shelfOperation(ctx, active, activeIndex, restore)
-	}
-	result.Restored = err == nil
-	if result.Restored {
-		application.ReportTaskProgress(ctx, "Tracked changes restored; backup retained")
-	}
-	if err != nil {
-		err = fmt.Errorf("branch updated; backup retained and restoration may be partial: %w", err)
-	}
-	return result, err
+	return result, nil
 }
 
 func updateHasChanges(repo domain.Repository) bool {
@@ -374,28 +333,15 @@ func (g *Executor) validateUpdateBackup(ctx context.Context, repo domain.Reposit
 }
 
 func (g *Executor) findUpdateBackup(ctx context.Context, repo domain.Repository, result *domain.UpdateResult) error {
-	if result.BackupKind == "Stash" {
-		entries, _, err := g.readStashes(ctx, repo.Root)
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if strings.HasSuffix(entry.Subject, result.BackupName) {
-				result.BackupOID, result.BackupID = entry.OID, entry.Selector
-				return nil
-			}
-		}
-	} else {
-		entries, err := g.readShelves(ctx, repo)
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if !entry.Deleted && entry.Title == result.BackupName {
-				result.BackupOID, result.BackupID = entry.OID, entry.ID
-				return nil
-			}
+	entries, err := g.readShelves(ctx, repo)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.Deleted && entry.Title == result.BackupName {
+			result.BackupOID, result.BackupID = entry.OID, entry.ID
+			return nil
 		}
 	}
-	return errors.New("backup identity could not be confirmed; inspect Stash/Shelf before retrying")
+	return errors.New("backup identity could not be confirmed; inspect Shelf before retrying")
 }

@@ -125,7 +125,7 @@ func (a *Workspace) realShelfDisabled(id commandID, t commandTarget) string {
 			}
 		}
 		if len(repo.Staged) > 0 || slices.ContainsFunc(repo.Working, func(f domain.File) bool { return f.Status != "?" }) {
-			return "Commit, shelve or stash tracked changes before unshelving"
+			return "Commit, shelve tracked changes before unshelving"
 		}
 		for _, f := range entry.Files {
 			if a.hasDirtySource(f.Path) {

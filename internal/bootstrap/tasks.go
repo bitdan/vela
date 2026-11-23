@@ -36,9 +36,12 @@ func taskKey(kind string, parts ...any) string {
 }
 
 func updateTaskResult(result domain.UpdateResult) string {
-	text := fmt.Sprintf("Method: %s\nFetch completed: %t\nTracked changes cleaned: %t\nBranch integrated: %t\nBackup restored: %t", result.Method, result.Fetched, result.Cleaned, result.Integrated, result.Restored)
-	if result.BackupKind != "" {
+	text := fmt.Sprintf("Method: %s\nFetch completed: %t\nTracked changes cleaned: %t\nBranch integrated: %t", result.Method, result.Fetched, result.Cleaned, result.Integrated)
+	if result.BackupOID != "" && result.BackupID != "" {
+		text += "\nRestore: manual Unshelve (backup retained)"
 		text += fmt.Sprintf("\nRetained %s backup: %s\nBackup OID: %s\nBackup name: %s", result.BackupKind, result.BackupID, result.BackupOID, result.BackupName)
+	} else if result.BackupName != "" {
+		text += "\nBackup publication unconfirmed; inspect Shelf for: " + result.BackupName
 	}
 	return text
 }
