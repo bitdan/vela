@@ -13,6 +13,10 @@ func (a *Workspace) protectedCommandReason(id commandID, target commandTarget) s
 		op.Kind = domain.StartRebase
 	case resetRevision:
 		op.Kind = domain.ResetRevision
+		if commit, ok := a.operationCommit(target); ok {
+			op.Source = commit.Hash
+		}
+		op.Mode = "Mixed"
 	case renameBranch:
 		op.Kind, op.Source = domain.RenameBranch, localBranchRef(repo, target.source)
 	case deleteBranch:

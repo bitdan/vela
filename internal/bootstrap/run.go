@@ -287,6 +287,12 @@ func run(layoutPath string) error {
 				mygo.RunOnMain(func() { done(result, err); window.Invalidate() })
 			}()
 		}
+		workspace.ReadRepositoryComparisonChanges = func(ctx context.Context, root string, comparison domain.RevisionComparison, ids []string, done func([]domain.ComparisonChangeGroup, error)) {
+			go func() {
+				groups, err := comparisonReader.ReadComparisonChanges(ctx, root, comparison, ids)
+				mygo.RunOnMain(func() { done(groups, err); window.Invalidate() })
+			}()
+		}
 		workspace.ReadRepositoryComparisonCommits = func(ctx context.Context, root string, comparison domain.RevisionComparison, offset, limit int, done func(domain.CommitLogPage, error)) {
 			go func() {
 				page, err := comparisonReader.ReadComparisonCommits(ctx, root, comparison, offset, limit)

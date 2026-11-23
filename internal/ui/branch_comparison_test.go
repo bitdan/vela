@@ -64,7 +64,7 @@ func TestRealBranchComparisonNativeAndLateCallback(t *testing.T) {
 	if a.repo().tabs[a.repo().active].comparison != comparison || comparison.sides[0].file != 0 || comparison.sides[1].file != -1 {
 		t.Fatal("returning to comparison lost independent selection")
 	}
-	_ = a.SessionSnapshot() // Comparison is a transient tool tab, not a file Diff.
+	_ = a.SessionSnapshot() // Comparison persists as a tool tab, not a file Diff.
 	a.run(closeTab, commandTarget{tabID: comparison.tabID})
 	if a.repo().tabIndex(comparison.tabID) >= 0 {
 		t.Fatal("comparison tab did not close")
@@ -141,8 +141,8 @@ func TestComparisonTabIdentityAfterReloadAndClose(t *testing.T) {
 	if a.disabledFor(splitRight, commandTarget{tabID: second.tabID}) == "" {
 		t.Fatal("tool tab must not enter file split path")
 	}
-	if saved := a.SessionSnapshot(); len(saved.Repositories[a.Model.Index].Tabs) != 0 {
-		t.Fatal("comparison tool tabs must not be serialized as file diffs")
+	if saved := a.SessionSnapshot(); len(saved.Repositories[a.Model.Index].Tabs) != 2 || saved.Repositories[a.Model.Index].Tabs[0].Comparison == nil || saved.Repositories[a.Model.Index].Tabs[1].Comparison == nil {
+		t.Fatal("comparison tool tabs must retain their separate session identity")
 	}
 	a.run(closeTab, commandTarget{tabID: first.tabID})
 	if contexts[1].Err() == nil {

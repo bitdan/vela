@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"vela/internal/domain"
 )
 
 const (
@@ -43,6 +44,13 @@ func (a *Workspace) patchSelectionDisabled(id commandID, target commandTarget) s
 	}
 	if id == toggleImportedHunk && (target.index < 0 || target.index >= len(chosen)) {
 		return "Choose an imported patch hunk row"
+	}
+	if id == toggleImportedHunk {
+		for _, file := range a.patchImport.input.Files {
+			if file.Path == target.source && file.Kind != "" {
+				return "Select structural changes as whole files"
+			}
+		}
 	}
 	return ""
 }
@@ -98,6 +106,9 @@ func (a *Workspace) patchSelectionList(c *ui.Context, p tokens) {
 			destination = "invalid mapping"
 		}
 		if row.hunk < 0 {
+			if file.Kind != "" {
+				return s.structuralPatchLabel(file)
+			}
 			return file.Path + " → " + destination
 		}
 		header, _, _ := strings.Cut(file.Hunks[row.hunk].Text, "\n")
@@ -128,6 +139,9 @@ func (a *Workspace) patchSelectionList(c *ui.Context, p tokens) {
 			if destination != file.Path {
 				label = fmt.Sprintf("%s → %s (%d/%d)", file.Path, destination, count, len(chosen))
 			}
+			if file.Kind != "" {
+				label = s.structuralPatchLabel(file)
+			}
 		}
 		target := commandTarget{source: file.Path, index: row.hunk}
 		ui.Row(c).FillWidth().Height(rowHeight).Padding(0, gap, 0, gap+indent).AlignItems(ui.Center).Children(func() {
@@ -141,6 +155,57 @@ func (a *Workspace) patchSelectionList(c *ui.Context, p tokens) {
 		if err != nil {
 			destination = err.Error()
 		}
+		if s.input.Files[row.file].Kind == "R" {
+			source = s.input.Files[row.file].OldPath + " → " + source
+		}
 		ui.ScrollHorizontal(c).FillWidth().Height(rowHeight).Label("Selected patch source and destination").Children(func() { ui.Text(c, source+" → "+destination).SingleLine() })
 	}
+}
+
+func (s *patchImportDialog) structuralPatchLabel(file domain.PatchDocument) string {
+	name, err := s.mappedPatchPath(file.Path)
+	if err != nil {
+		name = "invalid mapping"
+	}
+	kind := file.Kind
+	if s.reverse {
+		if kind == "A" {
+			kind = "D"
+		} else if kind == "D" {
+			kind = "A"
+		}
+	}
+	oldSize, newSize := file.OldSize, file.NewSize
+	oldMode, newMode := file.OldMode, file.NewMode
+	if s.reverse {
+		oldSize, newSize = newSize, oldSize
+		oldMode, newMode = newMode, oldMode
+	}
+	label := ""
+	switch kind {
+	case "A":
+		label = "Add " + name + " (whole file)"
+	case "D":
+		label = "Delete " + name + " (whole file)"
+	case "B":
+		return fmt.Sprintf("Binary %s (%d → %d bytes; whole file)", name, oldSize, newSize)
+	case "P":
+		label = "Mode " + name + " " + oldMode + " → " + newMode + " (whole file)"
+	case "R":
+		old, err := s.mappedPatchPath(file.OldPath)
+		if err != nil {
+			old = "invalid mapping"
+		}
+		if s.reverse {
+			old, name = name, old
+		}
+		label = "Rename " + old + " → " + name + " (whole file)"
+		if oldMode != "" && newMode != "" && oldMode != newMode {
+			label += " · " + oldMode + " → " + newMode
+		}
+	}
+	if file.Binary {
+		label += fmt.Sprintf(" · binary %d → %d bytes", oldSize, newSize)
+	}
+	return label
 }

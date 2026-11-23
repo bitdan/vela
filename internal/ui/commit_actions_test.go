@@ -22,7 +22,7 @@ func TestCommitFormAndAmendConfirmation(t *testing.T) {
 	}
 	g := gitcli.New()
 	ctx := context.Background()
-	if _, err := g.Initialize(ctx, dir, "main"); err != nil {
+	if _, err := g.Initialize(ctx, dir, "feature/amend"); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{

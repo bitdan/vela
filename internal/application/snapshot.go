@@ -1,5 +1,7 @@
 package application
 
+import "vela/internal/domain"
+
 // WorkspaceSnapshot stores identities and view positions, never cached Git data.
 type WorkspaceSnapshot struct {
 	ActiveRepository string
@@ -23,6 +25,7 @@ type RepositorySnapshot struct {
 }
 
 type TabSnapshot struct {
+	Comparison   *ComparisonSnapshot `json:",omitempty"`
 	Source, Path string
 	ChangeKind   string `json:",omitempty"`
 	OldPath      string `json:",omitempty"`
@@ -32,4 +35,20 @@ type TabSnapshot struct {
 	Unified      bool   `json:",omitempty"`
 	Bookmarks    []int  `json:",omitempty"`
 	FileType     string `json:",omitempty"`
+}
+
+// ComparisonSnapshot stores object identities and view state, never Git data.
+type ComparisonSnapshot struct {
+	Ref, Label, RightLabel, Left, Right, Boundary string
+	Split                                         float32
+	Sides                                         [2]ComparisonSideSnapshot
+}
+
+type ComparisonSideSnapshot struct {
+	Filter, Draft                  domain.ComparisonLogFilter
+	Selected                       []string
+	ActiveCommit, File, FileSource string
+	Loaded                         int
+	Split, DetailSplit             float32
+	ClosedGroups                   []string
 }

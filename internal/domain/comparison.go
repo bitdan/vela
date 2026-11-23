@@ -12,10 +12,19 @@ type RevisionComparison struct {
 }
 
 // ComparisonLogFilter restricts a frozen commit range. Message and author are
-// literal case-insensitive substrings; dates are inclusive UTC calendar days.
+// substrings (or Go regular expressions); dates are inclusive UTC calendar days.
 // Path is a literal repository-relative file or directory, with no glob syntax.
 type ComparisonLogFilter struct {
 	Message, Author, Since, Until, Path string
+	Hash                                string
+	Regex, CaseSensitive                bool
+}
+
+// ComparisonChangeGroup binds every displayed change to its exact diff source.
+// Merge groups differ by parent, even when the changed path is identical.
+type ComparisonChangeGroup struct {
+	Title, Source string
+	Files         []File
 }
 
 func (c RevisionComparison) Source() string {

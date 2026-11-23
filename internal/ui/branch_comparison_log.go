@@ -27,6 +27,14 @@ type comparisonSide struct {
 	graphWidth                       float32
 	draft                            domain.ComparisonLogFilter
 	filterMessage                    string
+	chosen                           ui.Selection[string]
+	groups                           []domain.ComparisonChangeGroup
+	fileSources                      []string
+	groupOutline                     ui.OutlineState[int]
+	groupRow                         int
+	restoreFile, restoreSource       string
+	closedGroups                     []string
+	restore                          *application.ComparisonSideSnapshot
 }
 
 func (a *Workspace) startTwoWayComparison(s *branchComparisonDialog) {
@@ -37,6 +45,9 @@ func (a *Workspace) startTwoWayComparison(s *branchComparisonDialog) {
 			comparison.Left, comparison.Right = comparison.Right, comparison.Left
 		}
 		s.sides[i] = &comparisonSide{comparison: comparison, draft: comparison.Filter, selected: -1, file: -1, more: true, split: 64, detailSplit: 55}
+		if s.restore != nil {
+			a.prepareComparisonSideRestore(s.sides[i], s.restore.Sides[i])
+		}
 		a.loadComparisonSide(s, s.sides[i])
 	}
 	if s.split == 0 {
@@ -100,14 +111,23 @@ func (a *Workspace) loadComparisonSide(s *branchComparisonDialog, side *comparis
 			side.graphWidth = max(side.graphWidth, 36+float32(min(entry.Lane, lastGraphLane))*graphStep)
 		}
 		side.more = page.HasMore
+		if side.restore != nil {
+			a.continueComparisonSideRestore(s, side)
+			return
+		}
 		if side.selected == -1 && len(side.commits) > 0 {
 			side.selected = 0
+			side.chosen.Add(side.commits[0].Hash)
 			a.loadComparisonDetails(s, side, 0)
 		}
 	})
 }
 
 func (a *Workspace) loadComparisonDetails(s *branchComparisonDialog, side *comparisonSide, parent int) {
+	if a.ReadRepositoryComparisonChanges != nil {
+		a.loadComparisonSelectionDetails(s, side)
+		return
+	}
 	stopRead(&side.details)
 	side.files, side.filesReady, side.file, side.detailMessage = nil, false, -1, ""
 	if side.selected < 0 || side.selected >= len(side.commits) {
@@ -198,6 +218,9 @@ func (a *Workspace) twoWayComparisonDisabled(id commandID, t commandTarget) stri
 		return "Wait for commit selection"
 	}
 	if id == browseComparisonCommit {
+		if side.chosen.Len() > 1 {
+			return "Select a single commit to browse"
+		}
 		if a.ReadRepositoryRevisionTree == nil {
 			return "Historical repository browser unavailable"
 		}
@@ -257,6 +280,8 @@ func (a *Workspace) runTwoWayComparison(id commandID, t commandTarget) {
 	case loadMoreComparisonCommits:
 		a.loadComparisonSide(s, side)
 	case selectComparisonCommit:
+		side.restore = nil
+		side.restoreFile, side.restoreSource = "", ""
 		a.loadComparisonDetails(s, side, 0)
 	case comparisonParent:
 		next := side.parent%len(side.commits[side.selected].ParentHashes) + 1
@@ -265,6 +290,10 @@ func (a *Workspace) runTwoWayComparison(id commandID, t commandTarget) {
 		revision := side.revision
 		a.openRevisionBrowser(revision)
 	case openComparisonEntry:
+		if len(side.fileSources) == len(side.files) && side.file >= 0 {
+			a.run(openDiff, commandTarget{source: side.fileSources[side.file], file: side.files[side.file]})
+			return
+		}
 		entry := side.commits[side.selected]
 		source := entry.Hash
 		if len(entry.ParentHashes) > 0 {
@@ -277,7 +306,7 @@ func (a *Workspace) runTwoWayComparison(id commandID, t commandTarget) {
 }
 
 func (a *Workspace) twoWayComparisonView(c *ui.Context, p tokens, s *branchComparisonDialog) {
-	ui.Column(c.Key(s.tabID)).Fill().Background(p.panel).Label("Branch Comparison workspace").Children(func() {
+	ui.Column(c.Key(s.tabID)).Grow(1).FillWidth().Background(p.panel).Label("Branch Comparison workspace").Children(func() {
 		ui.Row(c).FillWidth().Padding(gap).Gap(gap).Children(func() {
 			ui.Text(c, s.root).Grow(1).SingleLine().Ellipsis("…").TextColor(p.theme.TextMuted)
 			for _, button := range []struct {
@@ -320,6 +349,7 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 				ui.Text(c, "Reading commits…")
 			}
 			side.list.Selected = &side.selected
+			side.list.Selection = &side.chosen
 			side.list.Key = func(i int) any { return side.commits[i].Hash }
 			side.list.Label = func(i int) string { return side.commits[i].Subject }
 			list := ui.List(c, &side.list, len(side.commits), func(i int) {
@@ -327,7 +357,7 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 				ui.Row(c).FillWidth().Height(rowHeight).Gap(gap).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, entry.Author).Width(88).SingleLine().Ellipsis("…")
 					ui.Box(c).Width(side.graphWidth).FillHeight().Draw(func(painter *ui.Painter, box ui.Rect) { drawCommit(painter, box, p, entry, side.graph[i]) })
-					ui.Text(c, entry.Subject).Grow(1).SingleLine().Ellipsis("…")
+					ui.Text(c, entry.Subject).Label("Comparison commit " + left + " " + entry.Hash).Grow(1).SingleLine().Ellipsis("…")
 					for _, ref := range entry.Refs {
 						ui.Text(c, ref).MaxWidth(110).SingleLine().Ellipsis("…").TextColor(p.graph[0])
 					}
@@ -348,7 +378,7 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 				a.pending = func() { a.run(selectComparisonCommit, t) }
 			}
 			ui.Row(c).FillWidth().Padding(gap).Gap(gap).Children(func() {
-				ui.Text(c, fmt.Sprintf("%d commits loaded", len(side.commits))).Grow(1)
+				ui.Text(c, fmt.Sprintf("%d loaded · %d selected", len(side.commits), side.chosen.Len())).Grow(1)
 				ui.Button(c, "Load More").Label(commandLabel(loadMoreComparisonCommits) + " " + left).Disabled(a.branchComparisonDisabled(loadMoreComparisonCommits, t) != "").OnClick(func() { a.run(loadMoreComparisonCommits, t) })
 			})
 		})
@@ -356,7 +386,7 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 		ui.SplitVerticalPercent(c, &side.detailSplit, func() {
 			ui.Column(c).Fill().Children(func() {
 				heading(c, p, "Changed Files", "")
-				if side.selected >= 0 && side.selected < len(side.commits) && len(side.commits[side.selected].ParentHashes) > 1 {
+				if a.ReadRepositoryComparisonChanges == nil && side.selected >= 0 && side.selected < len(side.commits) && len(side.commits[side.selected].ParentHashes) > 1 {
 					ui.Button(c, fmt.Sprintf("Relative to parent %d · Next Parent", side.parent)).OnClick(func() { a.run(comparisonParent, t) })
 				}
 				if side.details != nil {
@@ -365,23 +395,7 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 				if side.detailMessage != "" {
 					ui.Text(c, side.detailMessage).FillWidth().TextColor(p.theme.Danger)
 				}
-				side.fileList.Selected = &side.file
-				side.fileList.Key = func(i int) any { return side.files[i].Path }
-				side.fileList.Label = func(i int) string { return side.files[i].Path }
-				list := ui.List(c, &side.fileList, len(side.files), func(i int) {
-					file := side.files[i]
-					name := file.Path
-					if file.OldPath != "" {
-						name = file.OldPath + " → " + name
-					}
-					ui.Text(c, file.Status+"  "+name).Height(rowHeight).FillWidth().SingleLine().Ellipsis("…")
-				}).Grow(1).FillWidth().Label("Comparison changed files " + left)
-				if side.filesReady && len(side.files) == 0 {
-					list.Children(func() { ui.Text(c, "No changed files").Padding(gap) })
-				}
-				if list.Submitted() {
-					a.pending = func() { a.run(openComparisonEntry, t) }
-				}
+				a.comparisonChangedFilesView(c, p, s, side, t, left)
 				ui.Row(c).FillWidth().Gap(gap).Children(func() {
 					ui.Button(c, "Browse Commit").Label(commandLabel(browseComparisonCommit) + " " + left).Disabled(a.branchComparisonDisabled(browseComparisonCommit, t) != "").OnClick(func() { a.run(browseComparisonCommit, t) })
 					ui.Button(c, "Show Diff").Label(commandLabel(openComparisonEntry) + " " + left).Disabled(a.branchComparisonDisabled(openComparisonEntry, t) != "").OnClick(func() { a.run(openComparisonEntry, t) })
@@ -395,6 +409,10 @@ func (a *Workspace) comparisonSideView(c *ui.Context, p tokens, s *branchCompari
 						return
 					}
 					entry := side.commits[side.selected]
+					if side.chosen.Len() > 1 {
+						ui.Text(c, fmt.Sprintf("%d selected commits", side.chosen.Len())).Bold()
+						ui.Text(c, "Continuous single-parent selections show net changes. Gaps and merges stay grouped by commit and parent.").FillWidth()
+					}
 					ui.Text(c, entry.Subject).FillWidth().Bold().Selectable()
 					if entry.Body != "" {
 						ui.Text(c, entry.Body).FillWidth().Selectable()

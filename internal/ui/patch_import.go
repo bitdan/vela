@@ -148,10 +148,12 @@ func (a *Workspace) previewPatchImport() {
 		s.chosen = make(map[string][]bool)
 		for i, file := range doc.Files {
 			s.rows = append(s.rows, patchImportRow{file: i, hunk: -1})
-			s.chosen[file.Path] = make([]bool, len(file.Hunks))
-			for j := range file.Hunks {
+			s.chosen[file.Path] = make([]bool, application.ImportedPatchUnits(file))
+			for j := range s.chosen[file.Path] {
 				s.chosen[file.Path][j] = true
-				s.rows = append(s.rows, patchImportRow{file: i, hunk: j})
+				if file.Kind == "" {
+					s.rows = append(s.rows, patchImportRow{file: i, hunk: j})
+				}
 			}
 		}
 		s.setPatchPreview(doc.Text)
@@ -297,7 +299,7 @@ func (a *Workspace) patchImportView(c *ui.Context, p tokens) {
 			ui.Column(c).Grow(1).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Text(c, s.snapshot.Root).FillWidth().SingleLine().Ellipsis("…")
 				ui.Text(c, s.source).FillWidth().SingleLine().Ellipsis("…")
-				ui.Text(c, "Tracked LF text modifications · 2 MiB / 100 files / 10,000 hunks. Select hunks, reverse or relocate existing targets.").FillWidth().TextColor(p.theme.TextMuted).Tooltip("Additions, deletions, renames, binary, links, mode changes, conversion attributes and email patches remain unsupported")
+				ui.Text(c, "Text/binary Git patches · 2 MiB input / 100 files. Structural, binary and mode changes are whole-file choices.").FillWidth().TextColor(p.theme.TextMuted).Tooltip("Binary sources and results are limited to 2 MiB each. Unix executable modes require Index only on Windows. Links, submodules, text conversion attributes and email patches remain unsupported.")
 				if ui.Select(c, &s.target, []string{"Working tree", "Index only"}).Label("Patch application target").FillWidth().Disabled(s.busy || s.request != nil || s.picking).Changed() && s.input.Text != "" {
 					a.rebuildImportedPatch()
 				}
@@ -309,7 +311,7 @@ func (a *Workspace) patchImportView(c *ui.Context, p tokens) {
 					ui.Text(c, "Reading and checking patch…")
 				}
 				if s.preview != nil {
-					ui.Text(c, fmt.Sprintf("%d files · %d hunks · %d bytes · %s", len(s.doc.Paths), s.doc.Hunks, len(s.doc.Text), s.doc.Target)).FillWidth()
+					ui.Text(c, fmt.Sprintf("%d files · %d hunks · %d bytes · %s", len(s.doc.Files), s.doc.Hunks, len(s.doc.Text), s.doc.Target)).FillWidth()
 					a.patchSelectionList(c, p)
 					if s.reverse {
 						ui.Text(c, "Source diff shown below; Reverse applies the inverse of the selected hunks.").FillWidth().TextColor(p.theme.TextMuted)

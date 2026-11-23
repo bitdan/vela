@@ -82,7 +82,7 @@ func (a *Workspace) restoreLoadedRepository() {
 	r := a.repo()
 	r.pendingTabs = append([]application.TabSnapshot(nil), saved.Tabs...)
 	r.pendingActiveTab = saved.ActiveTab
-	if len(r.pendingTabs) == 0 || (a.ReadRepositoryFile == nil && a.ReadRepositoryBlame == nil) {
+	if len(r.pendingTabs) == 0 {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -105,6 +105,15 @@ func (a *Workspace) restoreLoadedRepository() {
 		}
 		entry := remaining[0]
 		remaining = remaining[1:]
+		if entry.Comparison != nil {
+			if !a.restoreComparisonTab(entry) {
+				failed = append(failed, entry)
+				a.record("Could not restore comparison tab · invalid identity or reader unavailable")
+			}
+			r.pendingTabs = append(append([]application.TabSnapshot(nil), failed...), remaining...)
+			next()
+			return
+		}
 		lookup := entry.Source
 		var file domain.File
 		var ok bool

@@ -6,7 +6,9 @@ import (
 	"slices"
 	"time"
 
+	"crypto/rand"
 	"github.com/egoist/mygo/ui"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -36,6 +38,7 @@ type branchComparisonDialog struct {
 	split                                       float32
 	tabID                                       string
 	filters                                     [2]domain.ComparisonLogFilter
+	restore                                     *application.ComparisonSnapshot
 }
 
 func isBranchComparisonEntry(id commandID) bool {
@@ -133,7 +136,7 @@ func (a *Workspace) runBranchComparison(id commandID, t commandTarget) {
 		}
 		s := &branchComparisonDialog{open: true, root: r.Root, ref: operationRef(r, t.source), label: t.source, rightLabel: r.CurrentBranch, mode: mode, snapshot: r, selected: -1}
 		if mode == "committed" {
-			s.tabID = fmt.Sprintf("branch-compare:%p", s)
+			s.tabID = "branch-compare:" + rand.Text()
 			a.cancelSessionNavigation()
 			view := a.repo()
 			view.preview, view.mergeActive = nil, ""

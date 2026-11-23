@@ -3,8 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -25,13 +23,13 @@ type RepositoryPatchReviewer interface {
 	ReviewImportedPatch(context.Context, domain.Repository, domain.ImportedPatch) (domain.ImportedPatch, error)
 }
 
-// ParseImportedPatch accepts Git unified diffs of existing regular text files.
-// Every header must name the same path; no email envelope or extended operation
-// headers are accepted. ParseTextPatch checks hunk counts and newline markers.
+// ParseImportedPatch accepts bounded Git diffs, including whole-file binary,
+// regular mode, addition, deletion and rename changes. Endpoint headers must agree; unsupported
+// metadata is rejected. ParseTextPatch checks hunk counts and newline markers.
 func ParseImportedPatch(text string) (domain.ImportedPatch, error) {
 	var result domain.ImportedPatch
-	if len(text) == 0 || len(text) > MaxImportedPatchBytes || !utf8.ValidString(text) || strings.ContainsAny(text, "\x00\r") || !strings.HasPrefix(text, "diff --git ") {
-		return result, errors.New("choose a UTF-8 Git text patch of at most 2 MiB, without an email envelope")
+	if len(text) == 0 || len(text) > MaxImportedPatchBytes || !utf8.ValidString(text) || strings.ContainsAny(text, "\x00\r") || !strings.HasPrefix(text, "diff --git ") || !strings.HasSuffix(text, "\n") {
+		return result, errors.New("choose a UTF-8 Git patch of at most 2 MiB, without an email envelope")
 	}
 	parts := strings.Split(text, "\ndiff --git ")
 	if len(parts) > 100 {
@@ -46,37 +44,22 @@ func ParseImportedPatch(text string) (domain.ImportedPatch, error) {
 		if i < len(parts)-1 {
 			part += "\n"
 		}
-		lines := strings.SplitN(part, "\n", 5)
-		if len(lines) < 5 || !strings.HasPrefix(lines[2], "--- ") || !strings.HasPrefix(lines[3], "+++ ") {
-			return result, errors.New("only ordinary text modifications with Git index headers are supported")
-		}
-		oldToken := strings.TrimSuffix(strings.TrimPrefix(lines[2], "--- "), "\t")
-		newToken := strings.TrimSuffix(strings.TrimPrefix(lines[3], "+++ "), "\t")
-		decode := func(token string) (string, error) {
-			if strings.HasPrefix(token, "\"") {
-				return strconv.Unquote(token)
-			}
-			return token, nil
-		}
-		oldPath, err := decode(oldToken)
-		if err != nil {
-			return result, fmt.Errorf("invalid patch source path: %w", err)
-		}
-		newPath, err := decode(newToken)
-		if err != nil || !strings.HasPrefix(oldPath, "a/") || !strings.HasPrefix(newPath, "b/") || oldPath[2:] != newPath[2:] || lines[0] != "diff --git "+oldToken+" "+newToken {
-			return result, errors.New("patch headers must identify one unchanged repository-relative path")
-		}
-		path := oldPath[2:]
-		if seen[path] {
-			return result, errors.New("duplicate patch file sections are unsupported")
-		}
-		seen[path] = true
-		doc, err := ParseTextPatch(part, path)
+		doc, mode, err := parseImportedFile(part)
 		if err != nil {
 			return result, err
 		}
-		result.Paths = append(result.Paths, path)
-		result.Modes[path] = strings.Fields(lines[1])[2]
+		paths := []string{doc.Path}
+		if doc.OldPath != "" {
+			paths = append(paths, doc.OldPath)
+		}
+		for _, path := range paths {
+			if seen[path] {
+				return result, errors.New("overlapping patch endpoints are unsupported")
+			}
+			seen[path] = true
+			result.Paths = append(result.Paths, path)
+			result.Modes[path] = mode
+		}
 		result.Hunks += len(doc.Hunks)
 		if result.Hunks > MaxImportedPatchHunks {
 			return domain.ImportedPatch{}, errors.New("patch import supports at most 10000 hunks")
