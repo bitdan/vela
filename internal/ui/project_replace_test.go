@@ -72,6 +72,13 @@ func TestProjectReplaceNativePreviewAndApply(t *testing.T) {
 			if calls != 1 || complete == nil || !entry.code.ReadOnly || a.projectSearch != nil {
 				t.Fatal("write did not lock matching document")
 			}
+			if err := tt.Click("Source editor"); err != nil {
+				t.Fatal(err)
+			}
+			tt.Type("blocked")
+			if entry.code.Buffer.String() != "needle\n" {
+				t.Fatal("keyboard input changed file during replacement")
+			}
 			// A newer buffer must survive the completion/refresh of an older write.
 			entry.code.Buffer.Set("newer user input")
 			complete(a.Model.Active().Repository, application.ProjectReplaceResult{Paths: []string{"中文 space.txt"}, Replacements: 1}, errors.New("later file failed"), nil)

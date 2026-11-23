@@ -25,6 +25,7 @@ func replacePreview(t *testing.T, root string, paths []string) application.Proje
 }
 
 func TestReplaceProjectCRLFAndPreflight(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	names := []string{"a 中文.txt", "z space.txt"}
 	for _, name := range names {
@@ -81,6 +82,51 @@ type cancelAfterReplacement struct {
 	path   string
 }
 
+type editAfterReplacement struct {
+	context.Context
+	first, second string
+	edited        bool
+	err           error
+}
+
+func (c *editAfterReplacement) Err() error {
+	data, _ := os.ReadFile(c.first)
+	if string(data) == "new\r\n" && !c.edited {
+		c.edited = true
+		c.err = os.WriteFile(c.second, []byte("external new input\r\n"), 0600)
+	}
+	return c.Context.Err()
+}
+
+func TestReplaceProjectRechecksLaterFileAfterPreflight(t *testing.T) {
+	t.Parallel()
+	f := newWorkflow(t)
+	names := []string{"a 中文.txt", "z space.txt"}
+	for _, name := range names {
+		f.write(name, "needle\r\n")
+	}
+	repo := f.read()
+	input := replacePreview(t, repo.Root, names)
+	index := f.git("write-tree")
+	ctx := &editAfterReplacement{Context: context.Background(), first: filepath.Join(repo.Root, names[0]), second: filepath.Join(repo.Root, names[1])}
+	result, err := f.g.ReplaceProject(ctx, repo, input)
+	if !ctx.edited || ctx.err != nil {
+		t.Fatalf("external writer did not run: %v", ctx.err)
+	}
+	if !errors.Is(err, ErrStaleFile) || result.Replacements != 1 || !reflect.DeepEqual(result.Paths, names[:1]) {
+		t.Fatalf("late edit result: %+v %v", result, err)
+	}
+	for i, want := range []string{"new\r\n", "external new input\r\n"} {
+		data, _ := os.ReadFile(filepath.Join(repo.Root, names[i]))
+		if string(data) != want {
+			t.Fatalf("file %d overwritten: %q", i, data)
+		}
+	}
+	if f.git("rev-parse", "HEAD") != repo.Head || f.git("write-tree") != index {
+		t.Fatal("replacement changed Git state")
+	}
+}
+
 func (c cancelAfterReplacement) Err() error {
 	data, _ := os.ReadFile(c.path)
 	if string(data) == "new\r\n" {
@@ -90,6 +136,7 @@ func (c cancelAfterReplacement) Err() error {
 }
 
 func TestReplaceProjectCancellationReportsDurableProgress(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	names := []string{"a 中文.txt", "z space.txt"}
 	for _, name := range names {
