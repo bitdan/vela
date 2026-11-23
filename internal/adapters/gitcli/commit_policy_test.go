@@ -8,6 +8,7 @@ import (
 )
 
 func TestCommitPolicyMessageAndStagedTODO(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "base\n// TODO: staged addition\n")
 	f.git("add", ".")
@@ -42,6 +43,7 @@ func TestCommitPolicyMessageAndStagedTODO(t *testing.T) {
 }
 
 func TestCommitPolicyExistingTODOIsAllowed(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "// TODO: existing\nbase\n")
 	f.git("add", ".")
@@ -54,6 +56,7 @@ func TestCommitPolicyExistingTODOIsAllowed(t *testing.T) {
 }
 
 func TestCommitPolicyTODOWithPlusPrefix(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "base\n++TODO: still a new TODO\n")
 	f.git("add", ".")

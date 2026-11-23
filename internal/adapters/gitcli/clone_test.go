@@ -36,6 +36,7 @@ func TestCloneRepositoryFromBareRemote(t *testing.T) {
 }
 
 func TestCloneProtectsTargetAndRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	existing := t.TempDir()
 	sentinel := filepath.Join(existing, "keep.txt")

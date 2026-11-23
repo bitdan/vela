@@ -11,6 +11,7 @@ import (
 )
 
 func TestSaveFilePreservesIndexAndRejectsExternalChanges(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	repo := f.read()
 	file, err := f.g.ReadFile(context.Background(), repo.Root, "project", domain.File{Path: "文件 name.txt"})
@@ -41,6 +42,7 @@ func TestSaveFilePreservesIndexAndRejectsExternalChanges(t *testing.T) {
 }
 
 func TestSaveFileRejectsUnsafeTargetsAndCancellation(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	repo := f.read()
 	file, err := f.g.ReadFile(context.Background(), repo.Root, "project", domain.File{Path: "文件 name.txt"})
@@ -71,6 +73,7 @@ func TestSaveFileRejectsUnsafeTargetsAndCancellation(t *testing.T) {
 }
 
 func TestSaveFileRejectsChangedCheckoutAndReadOnlyFile(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	repo := f.read()
 	file, err := f.g.ReadFile(context.Background(), repo.Root, "project", domain.File{Path: "文件 name.txt"})
@@ -96,6 +99,7 @@ func TestSaveFileRejectsChangedCheckoutAndReadOnlyFile(t *testing.T) {
 }
 
 func TestSaveFileRejectsSymlink(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	outside := filepath.Join(t.TempDir(), "outside.txt")
 	if err := os.WriteFile(outside, []byte("external user data"), 0600); err != nil {

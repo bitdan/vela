@@ -12,6 +12,7 @@ import (
 )
 
 func TestRemoteManagementRoundtrip(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	bare := filepath.Join(t.TempDir(), "远端 with spaces.git")
 	f.git("init", "--bare", bare)
@@ -37,6 +38,7 @@ func TestRemoteManagementRoundtrip(t *testing.T) {
 }
 
 func TestRemoteManagementSafety(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("remote", "add", "origin", "https://example.test/old.git")
 	snapshot := f.read()
@@ -70,6 +72,7 @@ func TestRemoteManagementSafety(t *testing.T) {
 }
 
 func TestRemoteRemovalVerifiesTrackingRefs(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("remote", "add", "origin", "https://example.test/old.git")
 	f.git("update-ref", "refs/remotes/origin/main", "HEAD")
@@ -107,6 +110,7 @@ func TestRemoteManagementRejectsInheritedAndCustomRefspecs(t *testing.T) {
 }
 
 func TestRemoteManagementRejectsLocalInclude(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	include := filepath.Join(t.TempDir(), "included-config")
 	if err := os.WriteFile(include, []byte("[remote \"included\"]\n url = https://example.test/include.git\n fetch = +refs/heads/*:refs/remotes/included/*\n"), 0600); err != nil {
@@ -125,6 +129,7 @@ func TestRemoteManagementRejectsLocalInclude(t *testing.T) {
 }
 
 func TestRemoteRemovalRejectsStaleFullConfiguration(t *testing.T) {
+	t.Parallel()
 	for _, setting := range []string{"remote.origin.prune", "branch.topic.remote"} {
 		t.Run(setting, func(t *testing.T) {
 			f := newWorkflow(t)

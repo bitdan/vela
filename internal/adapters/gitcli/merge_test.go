@@ -12,6 +12,7 @@ import (
 )
 
 func TestMergeConflictWorkflow(t *testing.T) {
+	t.Parallel()
 	ctx, dir, g := context.Background(), t.TempDir(), New()
 	if _, err := g.Initialize(ctx, dir, "main"); err != nil {
 		t.Fatal(err)

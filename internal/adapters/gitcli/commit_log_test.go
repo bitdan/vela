@@ -14,6 +14,7 @@ import (
 )
 
 func TestCommitLogPagesFreezeAllTipsAndReconnectMerge(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("checkout", "-b", "side")
 	f.write("side.txt", "side\n")
@@ -57,6 +58,7 @@ func TestCommitLogPagesFreezeAllTipsAndReconnectMerge(t *testing.T) {
 }
 
 func TestCommitLogRejectsChangedAncestryAndIgnoresReplaceRefs(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	base := f.git("rev-parse", "HEAD")
 	f.git("commit", "--allow-empty", "-m", "new tip")
@@ -87,6 +89,7 @@ func TestCommitLogRejectsChangedAncestryAndIgnoresReplaceRefs(t *testing.T) {
 }
 
 func TestCommitLogRejectsOversizedMetadataPage(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	r := f.read()
 	cmd := exec.Command("git", "commit", "--allow-empty", "-F", "-")
@@ -102,6 +105,7 @@ func TestCommitLogRejectsOversizedMetadataPage(t *testing.T) {
 }
 
 func TestCommitLogPagesBeyondTenThousand(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	const total = 10023
 	var input strings.Builder
@@ -143,6 +147,7 @@ func TestCommitLogPagesBeyondTenThousand(t *testing.T) {
 }
 
 func TestCommitLogPageRejectsInvalidQueryAndCancellation(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	r := f.read()
 	for _, q := range []struct{ offset, limit int }{{-1, 1}, {0, 0}, {0, 501}} {

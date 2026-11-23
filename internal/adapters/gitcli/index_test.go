@@ -12,6 +12,7 @@ import (
 )
 
 func TestUpdateIndexStagesAndUnstagesSelectedFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	g := New()
 	ctx := context.Background()
@@ -57,6 +58,7 @@ func TestUpdateIndexStagesAndUnstagesSelectedFiles(t *testing.T) {
 }
 
 func TestUpdateIndexUnstagesRenameAndKeepsOtherChanges(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	g := New()
 	ctx := context.Background()

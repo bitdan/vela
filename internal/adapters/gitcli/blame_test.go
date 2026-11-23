@@ -7,6 +7,7 @@ import (
 )
 
 func TestBlameCommittedLinesAndRename(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	first := f.git("rev-parse", "HEAD")
 	f.write("文件 name.txt", "base\nsecond line\n")
@@ -37,6 +38,7 @@ func TestBlameCommittedLinesAndRename(t *testing.T) {
 }
 
 func TestBlameNewlinePathInGitObject(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	// Build an object-only fixture. Windows cannot check out a newline name;
 	// this tests Git's path protocol without creating that filesystem path.
@@ -52,6 +54,7 @@ func TestBlameNewlinePathInGitObject(t *testing.T) {
 }
 
 func TestParseBlameRejectsMalformedOutput(t *testing.T) {
+	t.Parallel()
 	for _, value := range []string{"garbage\n", "abc 1 1 1\n\ttext\n", "0000000000000000000000000000000000000000 1 0 1\n\ttext\n"} {
 		if _, err := parseBlame(value); err == nil {
 			t.Fatalf("malformed blame accepted %q", value)

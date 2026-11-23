@@ -11,6 +11,7 @@ import (
 )
 
 func TestShelfBinaryAddDeleteRenameAndConflict(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("binary.dat", "base\x00bytes")
 	f.write("deleted.txt", "delete me\n")
@@ -76,6 +77,7 @@ func TestShelfBinaryAddDeleteRenameAndConflict(t *testing.T) {
 }
 
 func TestShelfCleanupFailureRetainsDurableCopy(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "recoverable\n")
 	repo := f.read()
@@ -104,6 +106,7 @@ func TestShelfCleanupFailureRetainsDurableCopy(t *testing.T) {
 }
 
 func TestShelfCRLFAutocrlfAndWorktreeScope(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("config", "core.autocrlf", "true")
 	f.write("文件 name.txt", "working\r\n")
@@ -127,6 +130,7 @@ func TestShelfCRLFAutocrlfAndWorktreeScope(t *testing.T) {
 }
 
 func TestShelfWorktreeSnapshotPreservesStagedMode(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("config", "core.filemode", "false")
 	f.git("update-index", "--chmod=+x", "--", "文件 name.txt")
@@ -140,6 +144,7 @@ func TestShelfWorktreeSnapshotPreservesStagedMode(t *testing.T) {
 }
 
 func TestShelfStagedIgnoredAddition(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write(".gitignore", "ignored.txt\n")
 	f.git("add", ".gitignore")

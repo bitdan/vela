@@ -12,6 +12,7 @@ import (
 )
 
 func TestBranchComparisonFilesAndWorkingSnapshot(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("delete.txt", "deleted on topic\n")
 	f.write("main.txt", "base\n")
@@ -77,6 +78,7 @@ func TestBranchComparisonFilesAndWorkingSnapshot(t *testing.T) {
 }
 
 func TestBranchComparisonRemoteTagsAndMissingWithoutTreeLimit(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("checkout", "-b", "topic")
 	f.write("文件 name.txt", "topic\n")
@@ -124,6 +126,7 @@ func TestBranchComparisonRemoteTagsAndMissingWithoutTreeLimit(t *testing.T) {
 }
 
 func TestBranchComparisonRejectsConflictedWorkingSnapshot(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("checkout", "-b", "topic")
 	f.write("文件 name.txt", "incoming\n")
@@ -160,6 +163,7 @@ func matchHistoryFile(files []domain.File, path string) (domain.File, bool) {
 }
 
 func TestMissingBranchCommitsCompleteAndFrozen(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("checkout", "-b", "topic")
 	for _, message := range []string{"one", "two", "three", "four", "five"} {

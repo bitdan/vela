@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommitUsesIndexAndAmendsLocalHead(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	ctx := context.Background()
 	g := New()
@@ -101,6 +102,7 @@ func TestCommitUsesIndexAndAmendsLocalHead(t *testing.T) {
 }
 
 func TestCommitFailureKeepsHeadAndIndex(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	ctx := context.Background()
 	g := New()
