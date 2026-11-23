@@ -33,10 +33,7 @@ func (a *Workspace) configureUpdate(s *repositoryOperationDialog) {
 			s.op.UpdateMethod = "Merge"
 		}
 		if updateTrackedChanges(s.snapshot) {
-			s.op.UpdateCleanup = a.Layout.VersionControl.Git.CleanWorkingTree
-			if s.op.UpdateCleanup != "Stash" && s.op.UpdateCleanup != "Shelve" {
-				s.op.UpdateCleanup = "Shelve"
-			}
+			s.op.UpdateCleanup = "Shelve"
 		}
 	}
 	s.detail = "Fetch " + s.op.Remote + "/" + s.op.Target + " and update local branch " + s.op.Branch + "."
@@ -79,7 +76,7 @@ func (a *Workspace) updateDisabled(s *repositoryOperationDialog) string {
 		return "Save or discard unsaved source documents before Update"
 	}
 	if updateTrackedChanges(s.snapshot) && !s.op.ConfirmUpdateCleanup {
-		return "Confirm saving and restoring tracked changes"
+		return "Confirm saving tracked changes to Shelf for manual restoration"
 	}
 	return ""
 }
@@ -98,9 +95,8 @@ func (a *Workspace) updateFields(c *ui.Context, p tokens, s *repositoryOperation
 			ui.Text(c, "Rebase replays local commits and changes their IDs. Local merge commits require Merge or external Git.").FillWidth().TextColor(p.theme.TextMuted)
 		}
 		if updateTrackedChanges(s.snapshot) {
-			ui.Select(c, &s.op.UpdateCleanup, []string{"Stash", "Shelve"}).Label("Update working tree cleanup").FillWidth().Disabled(busy || s.updateFinished)
-			ui.Text(c, "Save all tracked changes before integration, then attempt to restore the index and worktree on success. The backup is kept even after restoration. Untracked and ignored files are not saved or deleted. Cancellation, failure or a paused integration leaves the backup for explicit restoration.").FillWidth().TextColor(p.theme.TextMuted)
-			ui.Checkbox(c, &s.op.ConfirmUpdateCleanup, "Save tracked changes, clean them, and restore after successful Update").Disabled(busy || s.updateFinished)
+			ui.Text(c, "Save tracked changes to Shelf before integration. The backup is retained; restore it manually with Unshelve after Update or after resolving/aborting a conflict. Untracked and ignored files are not saved or deleted.").FillWidth().TextColor(p.theme.TextMuted)
+			ui.Checkbox(c, &s.op.ConfirmUpdateCleanup, "Save tracked changes to Shelf; restore manually after Update").Disabled(busy || s.updateFinished)
 		}
 	}
 	if reason := a.updateDisabled(s); reason != "" {
@@ -168,9 +164,6 @@ func updateResultMessage(result domain.UpdateResult, err error) string {
 	if result.Integrated {
 		stages = append(stages, result.Method+" completed")
 	}
-	if result.Restored {
-		stages = append(stages, "tracked changes restored")
-	}
 	if len(stages) == 0 {
 		stages = append(stages, "Update did not complete")
 	}
@@ -178,10 +171,10 @@ func updateResultMessage(result domain.UpdateResult, err error) string {
 	if result.BackupOID != "" {
 		message += fmt.Sprintf(" · Backup kept: %s %s · %s · %s", result.BackupKind, result.BackupID, result.BackupOID, result.BackupName)
 		if !result.Restored {
-			message += " · Finish/abort the Git operation, then explicitly restore this backup from Stash/Shelf"
+			message += " · Restore manually with Unshelve in Shelf after finishing/aborting any Git operation"
 		}
 	} else if result.BackupName != "" {
-		message += " · Inspect Stash/Shelf for backup named " + result.BackupName + " before retrying"
+		message += " · Inspect Shelf for backup named " + result.BackupName + " before retrying"
 	}
 	if err != nil {
 		message += " · Stopped: " + err.Error()

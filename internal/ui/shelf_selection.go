@@ -73,7 +73,7 @@ func (a *Workspace) shelfApplyReason(s *repositoryOperationDialog) string {
 		return "Repository changed; close and reopen the shelf selection"
 	}
 	if len(repo.Staged) > 0 || slices.ContainsFunc(repo.Working, func(file domain.File) bool { return file.Status != "?" }) {
-		return "Commit, shelve or stash tracked changes before Unshelve"
+		return "Commit, shelve tracked changes before Unshelve"
 	}
 	entry, ok := a.realShelfEntry(commandTarget{shelfID: s.op.Target, shelfOID: s.op.Source})
 	if !ok || entry.Deleted {

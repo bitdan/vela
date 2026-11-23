@@ -306,7 +306,7 @@ func (a *Workspace) settingsPage(c *ui.Context, p tokens) {
 		ui.Checkbox(c, &s.Shelf.StoreBase, "Shelve base revisions of files").Disabled(true).
 			Tooltip("Base revisions are always kept for safe unshelve")
 		if a.Model.Active().Repository.Root != "" {
-			future("Shelf location: local Git objects, separate from Git Stash. Successful removal moves whole entries to Recently Deleted.")
+			future("Shelf backups are local to this repository. Successful removal moves whole entries to Recently Deleted.")
 		} else {
 			future("Shelf location: in-memory Mock workspace")
 		}
@@ -342,7 +342,7 @@ func (a *Workspace) gitSettings(c *ui.Context, p tokens) {
 	}
 	settingsSection(c, p, "Update")
 	settingsSelect(c, "Update method", &git.UpdateMethod, "Merge", "Rebase")
-	settingsSelect(c, "Clean working tree using", &git.CleanWorkingTree, "Stash", "Shelve")
+	ui.Text(c, "Working tree cleanup: Shelf (restore manually with Unshelve)").FillWidth()
 	ui.Checkbox(c, &git.AutoFetch, "Fetch remote changes automatically")
 	ui.Checkbox(c, &git.CheckIncoming, "Check remote for incoming changes")
 	settingsSelect(c, "Fetch tags", &git.FetchTags, "Auto", "Always", "Never")

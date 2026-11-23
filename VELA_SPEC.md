@@ -51,7 +51,7 @@ IDEA 主窗口布局以 [参考截图](docs/idea-example.png) 为准。
 -   文件 Diff、Hunk Diff。
 -   Fetch、Pull、Push、Update Branch。
 -   Merge、Rebase、Cherry-pick、Revert、Reset。
--   Stash。
+-   Shelf（搁置与手动恢复）。
 -   冲突查看与解决辅助。
 -   Worktree。
 -   文件历史和 Blame。
@@ -408,7 +408,28 @@ Commit 使用当前 Index。Amend 可修改消息或纳入暂存内容，确认�
 -   Checkout / Create Branch。
 -   Fetch / Pull / Push / Update。
 
-Pull 显式选择远端、分支和整合策略。Update Branch 按所选本地分支的 upstream 更新，当前分支可选择快进、Merge 或 Rebase；非当前分支未被其他工作树检出时只允许快进。清理工作区可使用 Stash/Shelve，保留备份并显式恢复。Fetch 只更新远端跟踪分支，Push 只发布明确选定的分支。与目标 IDEA 的完整行为对照仍为 UNVERIFIED。
+Pull 显式选择远端、分支和整合策略。Update Branch 的入口、Shelf 备份及手动恢复行为见下方 §11.2.1。Fetch 只更新远端跟踪分支，Push 只发布明确选定的分支。与目标 IDEA 的完整行为对照仍为 UNVERIFIED。
+
+### 11.2.1 Update Branch 与 Shelf 备份
+
+入口：Git → Update Project，或本地分支菜单的 Update Branch。
+
+行为：
+1. 按所选分支的 upstream Fetch。当前分支可选择 Fast-forward、Merge 或 Rebase；非当前分支未被其他工作树检出时仅允许快进，不清理当前工作区。
+2. 当前分支有已保存的跟踪文件改动时，须确认保存到 Shelf。保留暂存与未暂存版本，只清理这些跟踪路径，不保存或删除未跟踪及忽略文件。
+3. 清理成功后执行整合。成功、失败、冲突暂停或取消均不自动应用或删除 Shelf；结果展示真实已完成阶段及备份身份。
+4. 用户在 Shelf 中显式 Unshelve；可恢复暂存状态。恢复及成功后的移入 Recently Deleted 选项沿用 Shelf 的既有明确确认流程；Update 自身始终保留备份。
+
+状态矩阵：
+- 正常：干净工作区直接整合；脏工作区确认 Shelf 后整合，结束后等待手动恢复。
+- 禁用：存在未保存编辑内容、未确认 Shelf 清理、无有效 upstream、保护规则禁止 Rebase，或另一写操作进行中；展示具体原因。
+- 错误：保留真实 Fetch/清理/整合结果，展示已发布的 Shelf 身份，不宣称回滚。
+- 冲突：保留 Shelf，提供 Git 真实支持的继续、跳过或中止路径；解决或中止后用户手动 Unshelve。
+- 取消：仅请求停止，可能已经 Fetch、发布备份或写入；保留备份并刷新实际状态。
+
+安全约束：写前重新校验仓库、HEAD、Index、工作区、upstream 和备份引用；备份发布确认后才清理，不改动 refs/stash。Shelf 数据保护及冲突恢复遵循 §5.10。
+
+明确不支持：Update 的 Stash 清理、自动恢复备份、自动 Pop/删除备份；与 IDEA 的完整行为对照仍为 UNVERIFIED。
 
 ### 11.3 高级 Git 工作流
 
@@ -420,11 +441,11 @@ Cherry-pick 与 Revert 从所选 Log 提交进入，确认目标分支、完整�
 
 -   Merge / Rebase。
 -   Cherry-pick / Revert / Reset。
--   Stash、Conflict、Worktree、Bisect。
+-   Shelf、Conflict、Worktree、Bisect。
 
 Reset 从 Log 提交菜单或 Git → Reset HEAD 进入，确认目标仓库、当前分支和完整目标提交。默认 Mixed：移动 HEAD、重置 Index、保留工作文件；Soft 只移动 HEAD；Hard 同时替换 Index 和跟踪工作文件，必须额外勾选丢弃跟踪改动。执行前校验 checkout、Index 和磁盘原始内容指纹，保护可能被覆盖的未跟踪及忽略文件。进行中的 Merge、Rebase、Cherry-pick、Revert 或 Bisect 必须先结束。无恢复元数据的未合并索引允许 Mixed/Hard 清除，Soft 拒绝。
 
-Stash 与 Shelf 独立管理。保存包含暂存和未暂存改动，可明确包含未跟踪文件，保留忽略文件。恢复使用稳定提交 OID，重新校验列表版本及 reflog selector；可恢复暂存状态，始终保留原 Stash。删除单个条目必须单独确认，不提供自动 Pop 或 Clear。恢复前要求跟踪文件干净，保护未跟踪和忽略路径。冲突复用三栏编辑器和暂存入口，解决后创建普通提交；不产生虚假的 Continue/Abort Stash。要放弃应用结果，通过明确确认的 Reset 到 HEAD 清理，原 Stash 仍保留。
+应用统一提供 Shelf 入口（见 §5.10），菜单、Actions 和设置不提供 Stash 操作或清理选项。已有 Git Stash 数据保持原样，不自动迁移、恢复或删除；底层兼容实现不作为可见产品入口。
 
 Worktrees 对话框显示目录、HEAD、分支及 Locked/Prunable 状态，支持在当前应用打开。新增工作树使用新的绝对目录，选择已有本地分支、Detached 提交或明确的 New Branch 模式。New Branch 显示新分支名称、起点和目标目录，拒绝已有分支，不自动配置 upstream；不隐式创建分支，不允许工作树目录嵌套。移除仅针对其他关联工作树，确认目录及分支保留；拒绝主工作树、当前工作树、锁定/缺失工作树、未跟踪或忽略文件，以及隐藏索引标记。不使用 Force，不删除分支。已打开的被移除会话保留内存标签和草稿，但禁用 Git 写入。
 

@@ -49,12 +49,12 @@ func (a *Workspace) mainGitMenu(m *ui.Menu) {
 	})
 	m.Submenu("Uncommitted Changes", func(sub *ui.Menu) {
 		a.menuNamed(sub, showCommit, target, "Show Local Changes", "")
-		a.menuGroup(sub, target, rollback, shelve, openShelf, stashChanges, unstashChanges)
+		a.menuGroup(sub, target, rollback, shelve, openShelf)
 	})
 	m.Submenu("Current File", func(sub *ui.Menu) {
 		if entry := a.activeDocument(); entry != nil {
 			target := commandTarget{file: entry.file, source: entry.source}
-			a.menuGroup(sub, target, previewDiff, openDiff, fileHistory, showBlame,copyPath)
+			a.menuGroup(sub, target, previewDiff, openDiff, fileHistory, showBlame, copyPath)
 		} else {
 			sub.Item("Open a file to see its Git actions").Disabled(true)
 		}
