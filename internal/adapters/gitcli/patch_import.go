@@ -142,86 +142,11 @@ func (g *Executor) importedPatchVersion(ctx context.Context, repo domain.Reposit
 	if err = g.verifyWorktree(ctx, repo); err != nil {
 		return "", err
 	}
-	paths, err := historyPaths(doc.Paths)
-	if err != nil {
-		return "", err
-	}
-	if err = rejectHistoryIndexAliases(paths, index); err != nil {
-		return "", err
-	}
-	root, err := os.OpenRoot(repo.Root)
-	if err != nil {
-		return "", err
-	}
-	defer root.Close()
 	hash := sha256.New()
 	fmt.Fprintf(hash, "%s\x00%s\x00%s\x00%s\x00%s\x00%s", repo.Root, repo.Head, repo.IndexVersion, repo.WorktreeVersion, doc.Target, doc.Text)
-	fmt.Fprintf(hash, "\x00reverse=%t", doc.Reverse)
-	fmt.Fprintf(hash, "\x00strip=%d\x00directory=%s", doc.Strip, doc.Directory)
-	for _, path := range paths {
-		if err = projectPath(path, false); err != nil {
-			return "", err
-		}
-		if err = ordinaryProjectPath(root, path, false); err != nil {
-			return "", err
-		}
-		// Compare actual directory identities too: separate Git directories and
-		// Windows short-name aliases need not contain a literal .git component.
-		for ancestor := filepath.Dir(filepath.Join(repo.Root, filepath.FromSlash(path))); ; ancestor = filepath.Dir(ancestor) {
-			info, err := os.Stat(ancestor)
-			if err != nil {
-				return "", err
-			}
-			for _, dir := range metadata {
-				if os.SameFile(info, dir) {
-					return "", errors.New("patch targets cannot access repository metadata")
-				}
-			}
-			if filepath.Dir(ancestor) == ancestor {
-				break
-			}
-		}
-		regular := false
-		for _, record := range nulFields(index) {
-			header, name, _ := strings.Cut(record, "\t")
-			fields := strings.Fields(header)
-			if name == path && len(fields) == 3 && fields[2] == "0" && fields[0] == doc.Modes[path] && (fields[0] == "100644" || fields[0] == "100755") {
-				regular = true
-			}
-		}
-		if !regular {
-			return "", fmt.Errorf("%q must already be a regular tracked file with the patch's unchanged mode", path)
-		}
-		attrs, err := g.read(ctx, repo.Root, "--literal-pathspecs", "check-attr", "-z", "filter", "working-tree-encoding", "eol", "text", "--", path)
-		if err != nil {
-			return "", err
-		}
-		values := nulFields(attrs)
-		if len(values) != 12 {
-			return "", errors.New("invalid patch target attributes")
-		}
-		for i := 2; i < len(values); i += 3 {
-			if values[i] != "unspecified" && values[i] != "unset" {
-				return "", errors.New("patch import does not support text/encoding/filter attributes")
-			}
-		}
-		file, err := g.ReadFile(ctx, repo.Root, "project", domain.File{Path: path})
-		if err != nil {
-			return "", err
-		}
-		if file.DiskVersion == "" || strings.Contains(file.New, "\r") {
-			return "", errors.New("patch import currently requires existing regular LF text files")
-		}
-		if doc.Target == "Index only" {
-			text, err := g.readBlob(ctx, repo.Root, ":0:"+path)
-			if err != nil {
-				return "", err
-			}
-			if strings.Contains(text, "\r") {
-				return "", errors.New("patch import currently requires LF text in the index")
-			}
-		}
-		fmt.Fprintf(hash, "\x00%s\x00%s", path, file.DiskVersion)
+	fmt.Fprintf(hash, "\x00reverse=%t\x00strip=%d\x00directory=%s", doc.Reverse, doc.Strip, doc.Directory)
+	if err := g.fingerprintImportedPaths(ctx, repo, doc, index, metadata, hash); err != nil {
+		return "", err
 	}
 	if _, _, err = g.verifyCheckout(ctx, repo); err != nil {
 		return "", err

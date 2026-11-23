@@ -12,6 +12,7 @@ import (
 )
 
 func TestShelfSelectedRoundtripAndIndependentStash(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("other.txt", "base other\n")
 	f.git("add", ".")
@@ -53,6 +54,7 @@ func TestShelfSelectedRoundtripAndIndependentStash(t *testing.T) {
 }
 
 func TestShelfMetadataStaleAndCancel(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "shelved\n")
 	if err := f.run(domain.RepositoryOperation{Kind: domain.SaveShelf, Message: "Original", Paths: []string{"文件 name.txt"}}); err != nil {

@@ -11,6 +11,7 @@ import (
 )
 
 func TestWorktreeCreateNewBranch(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	base := f.git("rev-parse", "HEAD")
 	f.git("commit", "--allow-empty", "-m", "advance")
@@ -41,6 +42,7 @@ func TestWorktreeCreateNewBranch(t *testing.T) {
 }
 
 func TestWorktreeNewBranchRejectsUnsafeRequests(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	snapshot := f.read()
 	parent := t.TempDir()
@@ -76,6 +78,7 @@ func TestWorktreeNewBranchRejectsUnsafeRequests(t *testing.T) {
 }
 
 func TestWorktreeNewBranchRejectsMovedSource(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("branch", "source")
 	snapshot := f.read()

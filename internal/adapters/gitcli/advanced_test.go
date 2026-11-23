@@ -62,6 +62,7 @@ func (f *workflowFixture) run(op domain.RepositoryOperation) error {
 }
 
 func TestAdvancedResetModes(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"Soft", "Mixed", "Hard"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newWorkflow(t)
@@ -103,6 +104,7 @@ func TestAdvancedResetModes(t *testing.T) {
 }
 
 func TestAdvancedResetRejectsStaleAndCanceled(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "first dirty\n")
 	snapshot := f.read()
@@ -126,6 +128,7 @@ func TestAdvancedResetRejectsStaleAndCanceled(t *testing.T) {
 }
 
 func TestAdvancedResetProtectsIgnoredFiles(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("blocked.txt", "tracked\n")
 	f.git("add", ".")
@@ -147,6 +150,7 @@ func TestAdvancedResetProtectsIgnoredFiles(t *testing.T) {
 }
 
 func TestAdvancedStashRoundTrip(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "staged\n")
 	f.git("add", ".")
@@ -181,6 +185,7 @@ func TestAdvancedStashRoundTrip(t *testing.T) {
 }
 
 func TestAdvancedStashStaleAndConflicts(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "stash side\n")
 	if err := f.run(domain.RepositoryOperation{Kind: domain.SaveStash, Message: "first"}); err != nil {
@@ -221,6 +226,7 @@ func TestAdvancedStashStaleAndConflicts(t *testing.T) {
 }
 
 func TestAdvancedStashPreservesUntrackedByDefaultAndRejectsDirtyApply(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("文件 name.txt", "stashed\n")
 	f.write("keep.txt", "keep\n")
@@ -242,6 +248,7 @@ func TestAdvancedStashPreservesUntrackedByDefaultAndRejectsDirtyApply(t *testing
 }
 
 func TestAdvancedWorktrees(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("branch", "feature/测试")
 	path := filepath.Join(t.TempDir(), "linked 空格")
@@ -288,6 +295,7 @@ func TestAdvancedWorktrees(t *testing.T) {
 }
 
 func TestAdvancedWorktreeBoundaries(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	repo := f.read()
 	for _, path := range []string{f.root, filepath.Join(f.root, "nested"), "relative"} {
@@ -308,6 +316,7 @@ func TestAdvancedWorktreeBoundaries(t *testing.T) {
 }
 
 func TestAdvancedWorktreePorcelainPaths(t *testing.T) {
+	t.Parallel()
 	entries, err := parseWorktrees("worktree /repo\x00HEAD aaaa\x00branch refs/heads/main\x00\x00worktree /repo with\nnewline\x00HEAD bbbb\x00detached\x00locked reason\x00\x00")
 	if err != nil || len(entries) != 2 || entries[1].Path != "/repo with\nnewline" || !entries[1].Locked || !entries[1].Detached {
 		t.Fatalf("parse = %+v, %v", entries, err)
@@ -318,6 +327,7 @@ func TestAdvancedWorktreePorcelainPaths(t *testing.T) {
 }
 
 func TestAdvancedBisectNoCheckout(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	good := f.git("rev-parse", "HEAD")
 	for i := 0; i < 7; i++ {
@@ -362,6 +372,7 @@ func TestAdvancedBisectNoCheckout(t *testing.T) {
 }
 
 func TestAdvancedBisectSkipCancelAndInvalidRange(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	good := f.git("rev-parse", "HEAD")
 	f.git("commit", "--allow-empty", "-m", "middle")
@@ -399,6 +410,7 @@ func TestAdvancedBisectSkipCancelAndInvalidRange(t *testing.T) {
 }
 
 func TestAdvancedResetDetectsHiddenTrackedEdit(t *testing.T) {
+	t.Parallel()
 	for _, flag := range []string{"--assume-unchanged", "--skip-worktree"} {
 		t.Run(flag, func(t *testing.T) {
 			f := newWorkflow(t)
@@ -417,6 +429,7 @@ func TestAdvancedResetDetectsHiddenTrackedEdit(t *testing.T) {
 }
 
 func TestAdvancedWorktreeRemovalPreservesIgnoredFiles(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	path := filepath.Join(t.TempDir(), "linked")
 	if err := f.run(domain.RepositoryOperation{Kind: domain.CreateWorktree, Source: f.read().Head, Mode: "Detached", Path: path}); err != nil {
@@ -440,6 +453,7 @@ func TestAdvancedWorktreeRemovalPreservesIgnoredFiles(t *testing.T) {
 }
 
 func TestAdvancedBisectExternalCheckoutRecovery(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	good := f.git("rev-parse", "HEAD")
 	f.write("文件 name.txt", "middle\n")
@@ -464,6 +478,7 @@ func TestAdvancedBisectExternalCheckoutRecovery(t *testing.T) {
 }
 
 func TestAdvancedBisectRestrictedSearch(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	good := f.git("rev-parse", "HEAD")
 	for _, text := range []string{"middle\n", "bad\n"} {
@@ -483,6 +498,7 @@ func TestAdvancedBisectRestrictedSearch(t *testing.T) {
 }
 
 func TestAdvancedStashRefusesHiddenTrackedChanges(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("visible.txt", "base\n")
 	f.git("add", ".")

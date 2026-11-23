@@ -8,6 +8,7 @@ import (
 )
 
 func TestComparisonFiltersUseLiteralPathsAndPaginateMatches(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("checkout", "-b", "filtered-topic")
 	f.write("literal[1].txt", "first\n")

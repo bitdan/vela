@@ -38,6 +38,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 		}
 		for _, tab := range r.tabs {
 			if tab.comparison != nil {
+				repo.Tabs = append(repo.Tabs, application.TabSnapshot{Source: tab.id, Pinned: tab.pinned, Comparison: comparisonSnapshot(tab.comparison)})
 				continue
 			}
 			saved := application.TabSnapshot{Source: tab.source, Path: tab.path, Code: tab.code != nil, Pinned: tab.pinned}
@@ -67,10 +68,11 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 				return t.Source == pending.Source && t.Path == pending.Path && t.Code == pending.Code
 			}) {
 				pending.Bookmarks = slices.Clone(pending.Bookmarks)
+				pending.Comparison = cloneComparisonSnapshot(pending.Comparison)
 				repo.Tabs = append(repo.Tabs, pending)
 			}
 		}
-		if len(r.tabs) > 0 && r.tabs[r.active].comparison == nil {
+		if len(r.tabs) > 0 {
 			repo.ActiveTab = r.tabs[r.active].id
 		}
 		if r.pendingActiveTab != "" {
@@ -147,6 +149,7 @@ func cloneRepositorySnapshot(saved application.RepositorySnapshot) application.R
 	saved.Tabs = slices.Clone(saved.Tabs)
 	for i := range saved.Tabs {
 		saved.Tabs[i].Bookmarks = slices.Clone(saved.Tabs[i].Bookmarks)
+		saved.Tabs[i].Comparison = cloneComparisonSnapshot(saved.Tabs[i].Comparison)
 	}
 	saved.WorkingSelection = slices.Clone(saved.WorkingSelection)
 	saved.StagedSelection = slices.Clone(saved.StagedSelection)

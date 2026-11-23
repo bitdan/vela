@@ -12,6 +12,7 @@ import (
 )
 
 func TestReadRepository(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	ctx := context.Background()
 	g := New()
@@ -117,6 +118,7 @@ func TestReadRepository(t *testing.T) {
 }
 
 func TestParseLargeHistory(t *testing.T) {
+	t.Parallel()
 	const count = 10000
 	var log strings.Builder
 	for range count {

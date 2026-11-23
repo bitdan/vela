@@ -132,36 +132,72 @@ func (g *Executor) ReadComparisonCommits(ctx context.Context, root string, compa
 	if err := checkLogBoundary(common, comparison.AncestryBoundary); err != nil {
 		return page, err
 	}
-	args := comparisonLogArgs(comparison, offset, limit)
-	out, err := g.runInputWithEnvLimit(ctx, root, "", nil, 4<<20, args...)
+	match, err := application.ComparisonTextMatcher(comparison.Filter)
 	if err != nil {
 		return page, err
+	}
+	query := func(skip, count int) ([]domain.Commit, error) {
+		out, err := g.runInputWithEnvLimit(ctx, root, "", nil, 4<<20, comparisonLogArgs(comparison, skip, count)...)
+		if err != nil {
+			return nil, err
+		}
+		return parseHistory(out.stdout, nil)
+	}
+	var commits []domain.Commit
+	filter := comparison.Filter
+	if filter.Message == "" && filter.Author == "" && filter.Hash == "" {
+		commits, err = query(offset, limit)
+		if err != nil {
+			return page, err
+		}
+	} else {
+		// Match before pagination across the frozen range, never only the UI's
+		// loaded rows. Refuse over-limit scans instead of silently truncating.
+		matched := 0
+		for scanned := 0; ; scanned += 250 {
+			if scanned >= 100000 {
+				return page, errors.New("comparison filter exceeds 100000 scanned commits; narrow the date or path filter")
+			}
+			batch, err := query(scanned, 250)
+			if err != nil {
+				return page, err
+			}
+			more := len(batch) > 250
+			if more {
+				batch = batch[:250]
+			}
+			for _, commit := range batch {
+				if !match(commit) {
+					continue
+				}
+				if matched >= offset {
+					commits = append(commits, commit)
+				}
+				matched++
+				if len(commits) > limit {
+					break
+				}
+			}
+			if len(commits) > limit || !more {
+				break
+			}
+		}
 	}
 	if err := checkLogBoundary(common, comparison.AncestryBoundary); err != nil {
-		return page, err
-	}
-	commits, err := parseHistory(out.stdout, nil)
-	if err != nil {
 		return page, err
 	}
 	page.HasMore = len(commits) > limit
 	if page.HasMore {
 		commits = commits[:limit]
-		domain.ReconnectCommitLog(commits)
 	}
+	domain.ReconnectCommitLog(commits)
 	page.Commits = commits
 	return page, nil
 }
 
 func comparisonLogArgs(comparison domain.RevisionComparison, offset, limit int) []string {
-	args := []string{"--literal-pathspecs", "log", "-z", "--topo-order", "--no-decorate", "--no-color", "--encoding=UTF-8", "--no-notes", "--no-show-signature", "--no-use-mailmap", "--fixed-strings", "--regexp-ignore-case", "-n", strconv.Itoa(limit + 1), "--skip=" + strconv.Itoa(offset), "--format=tformat:%x00%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b"}
+	args := []string{"--literal-pathspecs", "log", "-z", "--topo-order", "--no-decorate", "--no-color", "--encoding=UTF-8", "--no-notes", "--no-show-signature", "--no-use-mailmap", "-n", strconv.Itoa(limit + 1), "--skip=" + strconv.Itoa(offset), "--format=tformat:%x00%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b"}
 	filter := comparison.Filter
-	if filter.Message != "" {
-		args = append(args, "--grep="+filter.Message)
-	}
-	if filter.Author != "" {
-		args = append(args, "--author="+filter.Author)
-	}
 	if filter.Since != "" {
 		args = append(args, "--since-as-filter="+filter.Since+"T00:00:00Z")
 	}

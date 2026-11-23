@@ -9,6 +9,7 @@ import (
 )
 
 func TestFileHistoryPagesFollowRenameAtFrozenRevision(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	old := "文件 name.txt"
 	path := "-renamed [文件].txt"
@@ -51,6 +52,7 @@ func TestFileHistoryPagesFollowRenameAtFrozenRevision(t *testing.T) {
 }
 
 func TestFileHistoryRejectsInvalidQueriesAndCancellation(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	repo := f.read()
 	before, index := repo.Head, f.git("write-tree")
@@ -80,6 +82,7 @@ func TestFileHistoryRejectsInvalidQueriesAndCancellation(t *testing.T) {
 }
 
 func TestReadHistoricalRevisionWithoutParentOrCurrentPath(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	base := f.git("rev-parse", "HEAD")
 	f.git("mv", "--", "文件 name.txt", "renamed.txt")
@@ -91,6 +94,7 @@ func TestReadHistoricalRevisionWithoutParentOrCurrentPath(t *testing.T) {
 }
 
 func TestFileHistoryObjectOnlyNewlinePath(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("config", "core.protectNTFS", "false")
 	path := "object\npath.txt"

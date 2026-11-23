@@ -13,6 +13,7 @@ import (
 )
 
 func TestPatchStageUnstageDiscardDistinctHunks(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	p := "文件 name.txt"
 	var lines []string
@@ -72,6 +73,7 @@ func TestPatchStageUnstageDiscardDistinctHunks(t *testing.T) {
 }
 
 func TestPatchRejectsStaleDiskAndCancellation(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	p := "文件 name.txt"
 	f.write(p, "changed\n")
@@ -97,6 +99,7 @@ func TestPatchRejectsStaleDiskAndCancellation(t *testing.T) {
 }
 
 func TestPatchSpecialPathAndNoFinalNewline(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	p := "-文件 [name].txt"
 	f.write(p, "before")
@@ -117,6 +120,7 @@ func TestPatchSpecialPathAndNoFinalNewline(t *testing.T) {
 }
 
 func TestPatchRejectsUnsupportedChangesAndStaleIndex(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	p := "文件 name.txt"
 	ctx := context.Background()
@@ -150,6 +154,7 @@ func TestPatchRejectsUnsupportedChangesAndStaleIndex(t *testing.T) {
 }
 
 func TestPatchDiscardRejectsCRLFAndTransformAttributes(t *testing.T) {
+	t.Parallel()
 	for _, attributes := range []bool{false, true} {
 		t.Run(fmt.Sprint(attributes), func(t *testing.T) {
 			f := newWorkflow(t)
@@ -177,6 +182,7 @@ func TestPatchDiscardRejectsCRLFAndTransformAttributes(t *testing.T) {
 }
 
 func TestPatchUnstagePreservesUnrelatedBinaryWorkingFile(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	p := "文件 name.txt"
 	f.write(p, "staged text\n")

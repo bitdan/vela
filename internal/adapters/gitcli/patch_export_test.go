@@ -70,6 +70,7 @@ func TestPatchExportAppliesSelectedBinaryRenameAndDeletion(t *testing.T) {
 }
 
 func TestPatchExportHistoricalRootBoundsAndCancellation(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	repo := f.read()
 	file := domain.File{Path: "文件 name.txt", Status: "A"}
@@ -94,6 +95,7 @@ func TestPatchExportHistoricalRootBoundsAndCancellation(t *testing.T) {
 }
 
 func TestPatchExportRejectsRawNULForcedText(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("forced.dat", "before\x00bytes")
 	f.write(".gitattributes", "forced.dat diff\n")
@@ -107,6 +109,7 @@ func TestPatchExportRejectsRawNULForcedText(t *testing.T) {
 }
 
 func TestHistoricalPatchExportUsesCanonicalGitlinkDiff(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	first := f.git("rev-parse", "HEAD")
 	f.git("update-index", "--add", "--cacheinfo", "160000,"+first+",sub")

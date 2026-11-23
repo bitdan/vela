@@ -17,7 +17,7 @@ func SelectParsedImportedPatch(input domain.ImportedPatch, selected map[string][
 		return domain.ImportedPatch{}, errors.New("capture a supported patch before selecting hunks")
 	}
 	for path := range selected {
-		if !slices.Contains(input.Paths, path) {
+		if !slices.ContainsFunc(input.Files, func(file domain.PatchDocument) bool { return file.Path == path }) {
 			return domain.ImportedPatch{}, fmt.Errorf("unknown patch path %q", path)
 		}
 	}
@@ -33,22 +33,38 @@ func SelectParsedImportedPatch(input domain.ImportedPatch, selected map[string][
 			return domain.ImportedPatch{}, errors.New("duplicate captured patch file")
 		}
 		mode := input.Modes[file.Path]
-		if mode != "100644" && mode != "100755" {
+		if mode != "100644" && mode != "100755" && !(file.Kind == "R" && mode == "") {
 			return domain.ImportedPatch{}, errors.New("unsupported captured patch mode")
 		}
-		part := domain.PatchDocument{Path: file.Path, Header: file.Header}
+		part := file
+		part.Hunks = nil
 		result.WriteString(file.Header)
-		for i, index := range indices {
-			if index < 0 || index >= len(file.Hunks) || i > 0 && index == indices[i-1] {
-				return domain.ImportedPatch{}, fmt.Errorf("invalid hunk selection for %q", file.Path)
+		if file.Kind != "" {
+			if len(indices) != 1 || indices[0] != 0 {
+				return domain.ImportedPatch{}, errors.New("structural, binary and mode changes must be selected as whole files")
 			}
-			part.Hunks = append(part.Hunks, file.Hunks[index])
-			result.WriteString(file.Hunks[index].Text)
+			part.Hunks = slices.Clone(file.Hunks)
+			for _, h := range file.Hunks {
+				result.WriteString(h.Text)
+			}
+			result.WriteString(file.Payload)
+		} else {
+			for i, index := range indices {
+				if index < 0 || index >= len(file.Hunks) || i > 0 && index == indices[i-1] {
+					return domain.ImportedPatch{}, fmt.Errorf("invalid hunk selection for %q", file.Path)
+				}
+				part.Hunks = append(part.Hunks, file.Hunks[index])
+				result.WriteString(file.Hunks[index].Text)
+			}
 		}
 		doc.Files = append(doc.Files, part)
 		doc.Paths = append(doc.Paths, file.Path)
 		doc.Modes[file.Path] = mode
-		doc.Hunks += len(indices)
+		if file.OldPath != "" {
+			doc.Paths = append(doc.Paths, file.OldPath)
+			doc.Modes[file.OldPath] = mode
+		}
+		doc.Hunks += len(part.Hunks)
 		if doc.Hunks > MaxImportedPatchHunks || result.Len() > MaxImportedPatchBytes {
 			return domain.ImportedPatch{}, errors.New("selected patch exceeds import limits")
 		}

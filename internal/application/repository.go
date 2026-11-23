@@ -22,6 +22,7 @@ type RepositoryRevisionTreeReader interface {
 }
 
 type RepositoryComparisonReader interface {
+	ReadComparisonChanges(context.Context, string, domain.RevisionComparison, []string) ([]domain.ComparisonChangeGroup, error)
 	ReadMissingBranchComparison(context.Context, domain.Repository, string) (domain.RevisionComparison, error)
 	ReadBranchComparison(context.Context, domain.Repository, string, bool) (domain.RevisionComparison, error)
 	ReadComparisonCommits(context.Context, string, domain.RevisionComparison, int, int) (domain.CommitLogPage, error)

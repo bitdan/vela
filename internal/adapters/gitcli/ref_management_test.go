@@ -10,6 +10,7 @@ import (
 )
 
 func TestRefManagementRoundtrip(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("branch", "topic")
 	beforeHead, beforeIndex, beforeWork := f.git("rev-parse", "HEAD"), f.git("ls-files", "--stage"), f.git("status", "--porcelain=v2")
@@ -41,6 +42,7 @@ func TestRefManagementRoundtrip(t *testing.T) {
 }
 
 func TestRefManagementSafety(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("branch", "topic")
 	for _, op := range []domain.RepositoryOperation{

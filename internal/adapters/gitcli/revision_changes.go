@@ -42,7 +42,11 @@ func (g *Executor) ReadRevisionChanges(ctx context.Context, root, revision strin
 	if err != nil {
 		return nil, err
 	}
-	fields := nulFields(out.stdout)
+	return parseComparisonChanges(out.stdout)
+}
+
+func parseComparisonChanges(output string) ([]domain.File, error) {
+	fields := nulFields(output)
 	var result []domain.File
 	for i := 0; i < len(fields); {
 		status := fields[i]

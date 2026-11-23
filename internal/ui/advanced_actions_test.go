@@ -23,6 +23,7 @@ func advancedWorkspace(t *testing.T) (*Workspace, *native.Tester) {
 
 func TestAdvancedResetConfirmation(t *testing.T) {
 	a, tt := advancedWorkspace(t)
+	a.Model.Active().Repository.CurrentBranch = "feature/reset"
 	calls := 0
 	a.OperateRepository = func(_ context.Context, repo domain.Repository, op domain.RepositoryOperation, done func(domain.Repository, error, error)) {
 		calls++
@@ -36,7 +37,7 @@ func TestAdvancedResetConfirmation(t *testing.T) {
 	if a.repositoryOperation == nil {
 		t.Fatal("reset command did not open confirmation")
 	}
-	if !tt.HasText("selected") || !tt.HasText("main") {
+	if !tt.HasText("selected") || !tt.HasText("feature/reset") {
 		t.Fatal("confirmation omitted target")
 	}
 	if err := tt.Click("Reset mode"); err != nil {
@@ -293,6 +294,7 @@ func TestAdvancedWorktreeOpenPreservesSession(t *testing.T) {
 
 func TestAdvancedCancellationDoesNotOverwriteAnotherRepository(t *testing.T) {
 	a, tt := advancedWorkspace(t)
+	a.Model.Active().Repository.CurrentBranch = "feature/reset"
 	snapshot := a.Model.Active().Repository
 	var pending func(domain.Repository, error, error)
 	var operationContext context.Context

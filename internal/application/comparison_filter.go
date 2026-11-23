@@ -2,6 +2,8 @@ package application
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,7 +19,17 @@ func ValidateComparisonLogFilter(filter domain.ComparisonLogFilter) error {
 		}
 	}
 	if strings.ContainsAny(filter.Message, "\r\n") || strings.ContainsAny(filter.Author, "\r\n") {
-		return errors.New("message and author filters must be single-line literal text")
+		return errors.New("message and author filters must be single-line text")
+	}
+	if filter.Hash != "" && (len(filter.Hash) < 4 || len(filter.Hash) > 64 || strings.Trim(strings.ToLower(filter.Hash), "0123456789abcdef") != "") {
+		return errors.New("hash must be a hexadecimal prefix of 4 to 64 characters")
+	}
+	if filter.Regex {
+		for _, value := range []string{filter.Message, filter.Author} {
+			if _, err := regexp.Compile(value); err != nil {
+				return fmt.Errorf("invalid regular expression: %w", err)
+			}
+		}
 	}
 	for _, value := range []string{filter.Since, filter.Until} {
 		if value != "" {
@@ -33,4 +45,25 @@ func ValidateComparisonLogFilter(filter domain.ComparisonLogFilter) error {
 		return errors.New("choose a literal repository-relative file or directory")
 	}
 	return nil
+}
+
+// ComparisonTextMatcher validates and compiles once per query. Using Go's
+// bounded-time regexp engine gives the UI and adapter the same regex syntax.
+func ComparisonTextMatcher(filter domain.ComparisonLogFilter) (func(domain.Commit) bool, error) {
+	if err := ValidateComparisonLogFilter(filter); err != nil {
+		return nil, err
+	}
+	pattern := func(value string) *regexp.Regexp {
+		if !filter.Regex {
+			value = regexp.QuoteMeta(value)
+		}
+		if !filter.CaseSensitive {
+			value = "(?i)" + value
+		}
+		return regexp.MustCompile("(?m)" + value)
+	}
+	message, author := pattern(filter.Message), pattern(filter.Author)
+	return func(c domain.Commit) bool {
+		return strings.HasPrefix(c.Hash, strings.ToLower(filter.Hash)) && message.MatchString(c.Subject+"\n"+c.Body) && author.MatchString(c.Author+" <"+c.AuthorEmail+">")
+	}, nil
 }

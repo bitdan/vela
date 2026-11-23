@@ -266,9 +266,24 @@ func connectReadTasks(a *ui.Workspace, invalidate func()) {
 			done(v0, v1)
 		})
 	}
+	originalComparisonChanges := a.ReadRepositoryComparisonChanges
+	a.ReadRepositoryComparisonChanges = func(ctx context.Context, root string, comparison domain.RevisionComparison, ids []string, done func([]domain.ComparisonChangeGroup, error)) {
+		ctx, finish, err := trackTask(a, invalidate, ctx, root, "Read Comparison Changes", taskKey("ReadComparisonChanges", comparison.Left, comparison.Right, comparison.AncestryBoundary, ids), 2*time.Minute, nil)
+		if err != nil {
+			done(nil, err)
+			return
+		}
+		originalComparisonChanges(ctx, root, comparison, ids, func(groups []domain.ComparisonChangeGroup, err error) {
+			if err == nil {
+				err = ctx.Err()
+			}
+			finish(err, "")
+			done(groups, err)
+		})
+	}
 	originalReadRepositoryComparisonCommits := a.ReadRepositoryComparisonCommits
 	a.ReadRepositoryComparisonCommits = func(ctx context.Context, root string, comparison domain.RevisionComparison, offset, limit int, done func(domain.CommitLogPage, error)) {
-		ctx, finish, err := trackTask(a, invalidate, ctx, root, "Read Repository Comparison Commits", taskKey("ReadRepositoryComparisonCommits", comparison.Left, comparison.Right, comparison.Filter.Message, comparison.Filter.Author, comparison.Filter.Since, comparison.Filter.Until, comparison.Filter.Path, offset, limit), 2*time.Minute, nil)
+		ctx, finish, err := trackTask(a, invalidate, ctx, root, "Read Repository Comparison Commits", taskKey("ReadRepositoryComparisonCommits", comparison.Left, comparison.Right, comparison.Filter, comparison.AncestryBoundary, offset, limit), 2*time.Minute, nil)
 		if err != nil {
 			done(*new(domain.CommitLogPage), err)
 			return

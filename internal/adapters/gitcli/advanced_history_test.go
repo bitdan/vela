@@ -13,6 +13,7 @@ import (
 )
 
 func TestRevisionTreeAndDetachedCheckout(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	if err := os.MkdirAll(filepath.Join(f.root, "dir"), 0700); err != nil {
 		t.Fatal(err)
@@ -61,6 +62,7 @@ func TestRevisionTreeAndDetachedCheckout(t *testing.T) {
 }
 
 func TestRestoreRevisionKeepsHeadAndIndex(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	if err := os.MkdirAll(filepath.Join(f.root, "deleted"), 0700); err != nil {
 		t.Fatal(err)
@@ -96,6 +98,7 @@ func TestRestoreRevisionKeepsHeadAndIndex(t *testing.T) {
 }
 
 func TestHistoricalWriteSafety(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.write("ignored.txt", "historical\n")
 	f.git("add", ".")
@@ -133,6 +136,7 @@ func TestHistoricalWriteSafety(t *testing.T) {
 }
 
 func TestSelectedHistoricalChangesAndRevert(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	base := f.git("rev-parse", "HEAD")
 	f.git("checkout", "-b", "topic")
@@ -172,6 +176,7 @@ func TestSelectedHistoricalChangesAndRevert(t *testing.T) {
 }
 
 func TestSelectedHistoricalRootAndMergeMainline(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	root := f.git("rev-parse", "HEAD")
 	rootFiles, err := f.g.ReadRevisionChanges(context.Background(), f.root, root, 0)
@@ -228,6 +233,7 @@ func TestSelectedHistoricalRootAndMergeMainline(t *testing.T) {
 }
 
 func TestSelectedHistoricalTargetSideRename(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("checkout", "-b", "topic")
 	f.write("文件 name.txt", "incoming\n")
@@ -245,6 +251,7 @@ func TestSelectedHistoricalTargetSideRename(t *testing.T) {
 }
 
 func TestSelectedHistoricalConflictContinueAndSkip(t *testing.T) {
+	t.Parallel()
 	for _, continueIt := range []bool{false, true} {
 		t.Run(map[bool]string{false: "skip", true: "continue"}[continueIt], func(t *testing.T) {
 			f := newWorkflow(t)
@@ -283,6 +290,7 @@ func TestSelectedHistoricalConflictContinueAndSkip(t *testing.T) {
 }
 
 func TestHistoricalReadCancellationAndStaleWorktree(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	before := f.read()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -301,6 +309,7 @@ func TestHistoricalReadCancellationAndStaleWorktree(t *testing.T) {
 }
 
 func TestHistoricalObjectsIgnoreReplacementRefs(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	original := f.git("rev-parse", "HEAD")
 	f.write("文件 name.txt", "replacement\n")
@@ -327,6 +336,7 @@ func TestHistoricalObjectsIgnoreReplacementRefs(t *testing.T) {
 }
 
 func TestHistoricalWindowsPathAliases(t *testing.T) {
+	t.Parallel()
 	if filepath.Separator != '\\' {
 		t.Skip("Windows case-folding policy")
 	}
@@ -360,6 +370,7 @@ func TestHistoricalWindowsPathAliases(t *testing.T) {
 }
 
 func TestSelectedHistoricalRenameConflictAndAbort(t *testing.T) {
+	t.Parallel()
 	f := newWorkflow(t)
 	f.git("checkout", "-b", "topic")
 	f.git("mv", "文件 name.txt", "renamed.txt")

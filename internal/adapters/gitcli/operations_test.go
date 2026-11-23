@@ -13,6 +13,7 @@ import (
 )
 
 func TestPhase3BranchAndRemoteOperations(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	local := filepath.Join(root, "local")
 	remote := filepath.ToSlash(filepath.Join(root, "remote.git"))

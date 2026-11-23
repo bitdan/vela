@@ -24,6 +24,7 @@ func candidateWorkflow(t *testing.T) (*workflowFixture, domain.Repository) {
 }
 
 func TestBisectCandidateWorktreeOutsideLoadedHistory(t *testing.T) {
+	t.Parallel()
 	f, snapshot := candidateWorkflow(t)
 	if snapshot.Bisect.Candidate == snapshot.Head {
 		t.Fatal("fixture candidate is not independent of HEAD")
@@ -52,6 +53,7 @@ func TestBisectCandidateWorktreeOutsideLoadedHistory(t *testing.T) {
 }
 
 func TestBisectCandidateWorktreeRejectsChangedSearch(t *testing.T) {
+	t.Parallel()
 	f, snapshot := candidateWorkflow(t)
 	path := filepath.Join(t.TempDir(), "stale")
 	op := domain.RepositoryOperation{Kind: domain.CreateWorktree, Mode: "Detached", Source: snapshot.Bisect.Candidate, Path: path, BisectVersion: snapshot.Bisect.Version}
@@ -76,6 +78,7 @@ func TestBisectCandidateWorktreeRejectsChangedSearch(t *testing.T) {
 }
 
 func TestBisectCandidateWorktreeValidatesRequest(t *testing.T) {
+	t.Parallel()
 	f, snapshot := candidateWorkflow(t)
 	path := filepath.Join(t.TempDir(), "invalid")
 	op := domain.RepositoryOperation{Kind: domain.CreateWorktree, Mode: "Detached", Source: snapshot.Head, Path: path, BisectVersion: snapshot.Bisect.Version}
@@ -105,6 +108,7 @@ func TestBisectCandidateWorktreeValidatesRequest(t *testing.T) {
 }
 
 func TestBisectCandidateWorktreeRejectsIdenticalRestart(t *testing.T) {
+	t.Parallel()
 	f, snapshot := candidateWorkflow(t)
 	op := domain.RepositoryOperation{Kind: domain.CreateWorktree, Mode: "Detached", Source: snapshot.Bisect.Candidate, Path: filepath.Join(t.TempDir(), "old-dialog"), BisectVersion: snapshot.Bisect.Version}
 	if err := f.run(domain.RepositoryOperation{Kind: domain.ResetBisect}); err != nil {

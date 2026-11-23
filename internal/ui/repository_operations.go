@@ -52,6 +52,9 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 	if reason := a.protectedCommandReason(id, target); reason != "" {
 		return reason
 	}
+	if id == resetRevision && a.updateDirtyBuffer(repo.Root) {
+		return "Save or discard unsaved source documents before resetting"
+	}
 	switch id {
 	case continueMerge, abortMerge, continueRebase, skipRebase, abortRebase:
 		if a.updateDirtyBuffer(repo.Root) {
@@ -410,6 +413,10 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 }
 
 func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
+	if s.op.Kind == domain.ResetRevision && a.updateDirtyBuffer(s.root) {
+		s.message = "Save or discard unsaved source documents before resetting"
+		return
+	}
 	if reason := a.shelfApplyReason(s); reason != "" {
 		s.message = reason
 		return

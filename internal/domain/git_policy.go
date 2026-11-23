@@ -44,6 +44,11 @@ func ProtectedBranch(patterns, branch string) (bool, error) {
 // merges and non-forced pushes. Recovery commands remain reachable.
 func (p RepositorySafetyPolicy) CheckOperation(repo Repository, op RepositoryOperation) error {
 	branch := repo.CurrentBranch
+	// Resetting Index/worktree to the exact current HEAD does not rewrite
+	// protected history. Confirmation and Git operation-state checks still apply.
+	if op.Kind == ResetRevision && repo.Head != "" && op.Source == repo.Head && (op.Mode == "Mixed" || op.Mode == "Hard") {
+		return nil
+	}
 	switch op.Kind {
 	case RenameBranch, DeleteBranch:
 		branch = strings.TrimPrefix(op.Source, "refs/heads/")

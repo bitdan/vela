@@ -113,6 +113,7 @@ type Workspace struct {
 	branchComparison                *branchComparisonDialog
 	ReadRepositoryComparison        func(context.Context, domain.Repository, string, string, func(domain.RevisionComparison, error))
 	ReadRepositoryComparisonCommits func(context.Context, string, domain.RevisionComparison, int, int, func(domain.CommitLogPage, error))
+	ReadRepositoryComparisonChanges func(context.Context, string, domain.RevisionComparison, []string, func([]domain.ComparisonChangeGroup, error))
 	lastRealRoot                    string
 	Model                           *application.App
 	Layout                          application.Layout
