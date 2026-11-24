@@ -80,6 +80,10 @@ func attachGitProcess(job uintptr, pid uint32) error {
 }
 
 func resumeGitProcess(pid uint32) error {
+	if err := resumeGitProcessSnapshot(pid); err == nil {
+		return nil
+	}
+	// Older Windows or unavailable PSS rights retain the safe Toolhelp path.
 	snapshot, err := syscall.CreateToolhelp32Snapshot(0x4, 0) // TH32CS_SNAPTHREAD
 	if err != nil {
 		return err

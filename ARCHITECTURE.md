@@ -37,7 +37,7 @@ Toolbar、菜单、右键菜单、快捷键和 Actions 共用稳定 Command ID�
 
 ## Git 执行与写入安全
 
-所有 Git 操作经过同一 Executor，使用 exec.CommandContext、独立参数、明确工作目录和受控环境。禁止 Shell 拼接；stdout、stderr 和退出码分别保留。设置超时及输出上限，错误保留上下文，日志不输出凭据。Windows 为每条 Git 命令创建独立 Job Object，进程以挂起状态加入后再恢复，避免子 helper 逃过绑定；取消/超时终止本次进程树并等待退出，不按 PID/进程名扫描终止，不影响其他请求。正常完成释放 Job，不终止可合法常驻的凭据 helper。
+所有 Git 操作经过同一 Executor，使用 exec.CommandContext、独立参数、明确工作目录和受控环境。禁止 Shell 拼接；stdout、stderr 和退出码分别保留。设置超时及输出上限，错误保留上下文，日志不输出凭据。Windows 为每条 Git 命令创建独立 Job Object，进程以挂起状态加入后再恢复，避免子 helper 逃过绑定；优先通过 PSS_CAPTURE_THREADS 仅捕获目标进程的线程 ID，避免每条命令枚举整个系统的线程；API 或权限不可用时回退 Toolhelp。取消/超时终止本次进程树并等待退出，不按 PID/进程名扫描终止，不影响其他请求。正常完成释放 Job，不终止可合法常驻的凭据 helper。
 
 优先使用 porcelain、固定格式和 NUL 分隔解析状态、日志、路径、引用和 Worktree。不把本地化 stderr 当协议，也不假设一行就是一个文件名。路径解析覆盖中文、空格、换行、重命名、模式、二进制和冲突；超限必须报错。
 
