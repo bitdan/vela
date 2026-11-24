@@ -125,6 +125,10 @@ type Workspace struct {
 	searchFocus                     *editor.State
 	focusedEditor                   *editor.State
 	confirmExit, exitApproved       bool
+	exitDiscardDrafts               bool
+	sessionSave                     *readRequest
+	sessionSaveError                string
+	SaveWorkspaceSession            func(context.Context, application.WorkspaceSnapshot, func(error))
 	CloseWindow                     func()
 	clipboard                       *string
 	clipboardNotice                 string
@@ -402,14 +406,19 @@ func (a *Workspace) View(c *ui.Context) {
 		a.run(closePreview, commandTarget{})
 	}
 	if a.confirmExit {
-		title, message := "Discard mock edits?", "Edited mock files are kept in memory for this session."
-		if a.hasUnsavedMergeDrafts() || a.hasUnsavedRealFiles() {
-			title, message = "Discard unsaved edits?", "Unsaved editor changes and merge drafts will be lost."
-		}
-		if ui.AlertDialog(c, &a.confirmExit, title, message, "Cancel", "Discard and Close") == 1 {
-			a.exitApproved = true
-			if a.CloseWindow != nil {
-				a.CloseWindow()
+		if a.canKeepSessionDrafts() || a.sessionSave != nil || a.sessionSaveError != "" {
+			a.exitDraftDialog(c, p)
+		} else {
+			title, message := "Discard mock edits?", "Edited mock files are kept in memory for this session."
+			if a.hasUnsavedMergeDrafts() || a.hasUnsavedRealFiles() {
+				title, message = "Discard unsaved edits?", "Unsaved editor changes and merge drafts will be lost."
+			}
+			if ui.AlertDialog(c, &a.confirmExit, title, message, "Cancel", "Discard and Close") == 1 {
+				a.exitApproved = true
+				a.exitDiscardDrafts = true
+				if a.CloseWindow != nil {
+					a.CloseWindow()
+				}
 			}
 		}
 	}

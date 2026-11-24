@@ -358,6 +358,24 @@ func run(layoutPath string) error {
 			}()
 		}
 		workspace.CloseWindow = func() { go mygo.RunOnMain(window.Close) }
+		workspace.SaveWorkspaceSession = func(ctx context.Context, snapshot application.WorkspaceSnapshot, done func(error)) {
+			// Snapshot and configuration errors are captured on the UI thread.
+			loadErr := sessionErr
+			go func() {
+				saveErr := ctx.Err()
+				if saveErr == nil {
+					saveErr = replaceConfig(sessionPath, loadErr, adapters.ErrInvalidSession, func() error { return adapters.SaveSession(sessionPath, snapshot) })
+				}
+				mygo.RunOnMain(func() {
+					if saveErr == nil {
+						sessionErr = nil
+						initial = snapshot
+					}
+					done(saveErr)
+					window.Invalidate()
+				})
+			}()
+		}
 		connectReadTasks(workspace, window.Invalidate)
 		connectWriteTasks(workspace, window.Invalidate)
 		workspace.StartSessionRestore()

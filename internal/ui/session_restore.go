@@ -132,6 +132,12 @@ func (a *Workspace) restoreLoadedRepository() {
 			ok = true
 		}
 		if !ok {
+			if entry.Draft != nil && entry.Code && entry.Source == "project" {
+				file = domain.File{Path: entry.Path}
+				ok = true
+			}
+		}
+		if !ok {
 			failed = append(failed, entry)
 			a.record("Could not restore tab · " + entry.Path + " is not in the current repository snapshot")
 			next()
@@ -143,11 +149,19 @@ func (a *Workspace) restoreLoadedRepository() {
 				return
 			}
 			if err != nil {
-				failed = append(failed, entry)
-				a.record("Could not restore tab · " + entry.Path + " · " + err.Error())
+				if entry.Draft != nil && entry.Code && entry.Source == "project" {
+					// A missing/unreadable file must not hide the user's draft.
+					a.openCode(entry.Source, domain.File{Path: entry.Path})
+					a.restoreEditorDraft(&r.tabs[r.active], entry)
+					a.restoreEditorMetadata(&r.tabs[r.active], entry)
+				} else {
+					failed = append(failed, entry)
+					a.record("Could not restore tab · " + entry.Path + " · " + err.Error())
+				}
 			} else {
 				if entry.Code {
 					a.openCode(entry.Source, file)
+					a.restoreEditorDraft(&r.tabs[r.active], entry)
 					a.restoreEditorMetadata(&r.tabs[r.active], entry)
 				} else {
 					a.openDiff(entry.Source, file)
@@ -155,7 +169,7 @@ func (a *Workspace) restoreLoadedRepository() {
 				tab := &r.tabs[r.active]
 				tab.pinned = entry.Pinned
 				if tab.code != nil {
-					cursor := max(0, min(entry.Cursor, len(file.New)))
+					cursor := max(0, min(entry.Cursor, len(tab.code.Buffer.String())))
 					tab.code.Select(cursor, cursor)
 					tab.code.SetScrollY(max(0, entry.ScrollY))
 				} else {

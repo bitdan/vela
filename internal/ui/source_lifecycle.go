@@ -159,6 +159,9 @@ func (a *Workspace) runSourceDecision(id commandID) {
 	case discardCloseSource:
 		_, entry := a.decisionEntry(s)
 		s.buffer.Reset(entry.file.New)
+		if entry.document != nil {
+			entry.document.draftBase = nil
+		}
 		a.closeDecidedSource(s)
 	case saveCloseSource:
 		s.saving, s.cancelClose = true, false
@@ -242,6 +245,9 @@ func (a *Workspace) reloadDecidedSource(s *sourceFileDecision) {
 			entry.code.Select(cursor, cursor)
 			entry.code.ReadOnly = a.sourceReadOnly("project", file)
 			entry.file = file
+			if entry.document != nil {
+				entry.document.draftBase = nil
+			}
 			applyEditorFileType(entry)
 		}
 		for i := range r.tabs {

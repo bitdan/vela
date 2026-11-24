@@ -51,6 +51,7 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 				saved.ChangeKind, saved.OldPath = tab.file.Status, tab.file.OldPath
 			}
 			if tab.code != nil {
+				saved.Draft = a.snapshotEditorDraft(s.Repository.Root, &tab)
 				if tab.document != nil {
 					saved.Bookmarks = normalizeBookmarks(tab.document.bookmarks, tab.code.Buffer.LineCount())
 					saved.FileType = tab.document.fileType
@@ -63,12 +64,18 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 			}
 			repo.Tabs = append(repo.Tabs, saved)
 		}
+		if split := r.split; split != nil && a.snapshotEditorDraft(s.Repository.Root, split) != nil && !slices.ContainsFunc(repo.Tabs, func(t application.TabSnapshot) bool {
+			return t.Source == split.source && t.Path == split.path && t.Code
+		}) {
+			repo.Tabs = append(repo.Tabs, application.TabSnapshot{Source: split.source, Path: split.path, Code: true, Pinned: split.pinned, Cursor: split.code.Cursor(), ScrollY: split.code.ScrollY(), Draft: a.snapshotEditorDraft(s.Repository.Root, split)})
+		}
 		for _, pending := range r.pendingTabs {
 			if !slices.ContainsFunc(repo.Tabs, func(t application.TabSnapshot) bool {
 				return t.Source == pending.Source && t.Path == pending.Path && t.Code == pending.Code
 			}) {
 				pending.Bookmarks = slices.Clone(pending.Bookmarks)
 				pending.Comparison = cloneComparisonSnapshot(pending.Comparison)
+				pending.Draft = cloneEditorDraft(pending.Draft)
 				repo.Tabs = append(repo.Tabs, pending)
 			}
 		}
@@ -83,6 +90,13 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 	for _, saved := range a.savedRepositories {
 		if !slices.ContainsFunc(out.Repositories, func(s application.RepositorySnapshot) bool { return s.Root == saved.Root }) {
 			out.Repositories = append(out.Repositories, cloneRepositorySnapshot(saved))
+		}
+	}
+	if a.exitDiscardDrafts {
+		for i := range out.Repositories {
+			for j := range out.Repositories[i].Tabs {
+				out.Repositories[i].Tabs[j].Draft = nil
+			}
 		}
 	}
 	return out
@@ -150,6 +164,7 @@ func cloneRepositorySnapshot(saved application.RepositorySnapshot) application.R
 	for i := range saved.Tabs {
 		saved.Tabs[i].Bookmarks = slices.Clone(saved.Tabs[i].Bookmarks)
 		saved.Tabs[i].Comparison = cloneComparisonSnapshot(saved.Tabs[i].Comparison)
+		saved.Tabs[i].Draft = cloneEditorDraft(saved.Tabs[i].Draft)
 	}
 	saved.WorkingSelection = slices.Clone(saved.WorkingSelection)
 	saved.StagedSelection = slices.Clone(saved.StagedSelection)

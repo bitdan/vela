@@ -83,6 +83,9 @@ func (a *Workspace) openCode(source string, f domain.File) {
 			current.code.Select(cursor, cursor)
 			current.code.SetScrollY(scroll)
 			current.file = f
+			if current.document != nil {
+				current.document.draftBase = nil
+			}
 			applyEditorFileType(current)
 			if split := a.repo().split; split != nil && split.code != nil && split.code.Buffer == buffer {
 				split.file = f
@@ -130,6 +133,9 @@ func (a *Workspace) splitTab(id string, vertical, move bool) {
 
 func (a *Workspace) hasUnsavedTabs() bool {
 	for _, repo := range a.repos {
+		if repo.split != nil && repo.split.modified() {
+			return true
+		}
 		for _, tab := range repo.tabs {
 			if tab.code != nil && tab.code.Buffer.Modified() {
 				return true
@@ -152,6 +158,9 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	if a.sessionSave != nil {
+		return false
+	}
 	if s := a.repositoryOperation; s != nil {
 		stopRead(&s.shelfHunkRead)
 	}

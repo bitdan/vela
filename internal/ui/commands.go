@@ -79,6 +79,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	keepDraftsClose: "Keep Drafts and Close", discardDraftsClose: "Discard and Close", cancelDraftClose: "Cancel",
 	previewShelfHunks: "Choose Shelf Hunks", toggleShelfHunk: "Toggle Shelf Hunk", wholeShelfFile: "Restore Whole Shelved File",
 	applyComparisonFilters: "Apply Comparison Filters", clearComparisonFilters: "Clear Comparison Filters",
 	toggleShelfFile: "Toggle Unshelve File", selectShelfAll: "Select All Unshelve Files", clearShelfSelection: "Clear Unshelve File Selection",
@@ -126,6 +127,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if id == keepDraftsClose || id == discardDraftsClose || id == cancelDraftClose {
+		return a.draftCloseDisabled(id)
+	}
 	if isShelfSelectionCommand(id) {
 		return a.shelfSelectionDisabled(id, target)
 	}
@@ -363,6 +367,10 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if id == keepDraftsClose || id == discardDraftsClose || id == cancelDraftClose {
+		a.runDraftClose(id)
 		return
 	}
 	if isShelfSelectionCommand(id) {

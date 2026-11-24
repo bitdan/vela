@@ -89,6 +89,9 @@ func saveJSON(path string, value any) error {
 	}
 	defer os.Remove(tmp.Name())
 	writeErr := json.NewEncoder(tmp).Encode(value)
+	if writeErr == nil {
+		writeErr = tmp.Sync()
+	}
 	if err := errors.Join(writeErr, tmp.Close()); err != nil {
 		return fmt.Errorf("write layout: %w", err)
 	}
