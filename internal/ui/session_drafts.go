@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -89,6 +90,29 @@ func (a *Workspace) restoreEditorDraft(t *tab, saved application.TabSnapshot) {
 	if changed {
 		a.record("Recovered draft · " + t.path + " · disk changed or unavailable; review/reload before saving")
 	}
+}
+
+// Explicit navigation may cancel the startup reader. Opening that same Project
+// identity consumes its saved draft rather than hiding it behind a clean tab.
+func (a *Workspace) recoverPendingEditorDraft(t *tab) {
+	if a.Model.Active().Repository.Root == "" || t.source != "project" || t.code == nil || t.modified() {
+		return
+	}
+	r := a.repo()
+	i := slices.IndexFunc(r.pendingTabs, func(s application.TabSnapshot) bool {
+		return s.Code && s.Source == t.source && s.Path == t.path && s.Draft != nil
+	})
+	if i < 0 {
+		return
+	}
+	saved := r.pendingTabs[i]
+	a.restoreEditorDraft(t, saved)
+	a.restoreEditorMetadata(t, saved)
+	t.pinned = saved.Pinned
+	cursor := max(0, min(saved.Cursor, t.code.Buffer.Len()))
+	t.code.Select(cursor, cursor)
+	t.code.SetScrollY(max(0, saved.ScrollY))
+	r.pendingTabs = slices.Delete(r.pendingTabs, i, i+1)
 }
 
 // Only contents and their identities matter; cursor movement during IO is safe.

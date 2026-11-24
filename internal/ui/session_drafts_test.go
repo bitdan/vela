@@ -31,6 +31,81 @@ func TestProjectDraftSnapshotContainsUnsavedText(t *testing.T) {
 	}
 }
 
+func TestProjectDraftManualOpenDuringRestoreKeepsPendingDraft(t *testing.T) {
+	root := t.TempDir()
+	name := "你好 file.go"
+	saved := application.WorkspaceSnapshot{ActiveRoot: root, Repositories: []application.RepositorySnapshot{{Root: root, Tabs: []application.TabSnapshot{{Source: "project", Path: name, Code: true, Draft: &application.EditorDraftSnapshot{Text: "saved draft", BaseText: "old disk", DiskVersion: "v1", LineEnding: "\n"}}}}}}
+	a := New(application.New(), application.DefaultLayout())
+	a.RestoreSession(saved)
+	a.ReadRepository = func(_ context.Context, _ string, done func(domain.Repository, error)) {
+		done(sessionRepository(root), nil)
+	}
+	var late func(domain.File, error)
+	calls := 0
+	a.ReadRepositoryFile = func(_ context.Context, _, _ string, f domain.File, done func(domain.File, error)) {
+		calls++
+		if calls == 1 {
+			late = done
+			return
+		}
+		f.New = "fresh disk"
+		f.DiskVersion = "v2"
+		done(f, nil)
+	}
+	a.StartSessionRestore()
+	a.run(openCode, commandTarget{source: "project", file: domain.File{Path: name}})
+	late(domain.File{Path: name, New: "late", DiskVersion: "v3"}, nil)
+	entry := a.activeDocument()
+	if entry == nil || entry.code.Buffer.String() != "saved draft" || !entry.modified() || len(sessionDraftContents(a.SessionSnapshot())) != 1 || a.RequestClose() {
+		t.Fatal("manual open erased pending saved draft")
+	}
+	// An explicit discard of the recovered tab must not resurrect pending data.
+	entry.code.Buffer.Reset(entry.file.New)
+	if len(sessionDraftContents(a.SessionSnapshot())) != 0 {
+		t.Fatal("consumed pending draft resurrected after discard")
+	}
+}
+
+func TestProjectDraftRefreshReplacesRecoveredBaseline(t *testing.T) {
+	a := New(application.New(), application.DefaultLayout())
+	repo := sessionRepository(t.TempDir())
+	a.Model.Switch(a.installRepository(repo))
+	name := "你好 file.go"
+	a.openCode("project", domain.File{Path: name, New: "A", DiskVersion: "v1"})
+	a.restoreEditorDraft(a.activeDocument(), application.TabSnapshot{Draft: &application.EditorDraftSnapshot{Text: "draft", BaseText: "A", DiskVersion: "v1", LineEnding: "\n"}})
+	a.splitTab(a.activeDocument().id, true, false)
+	buffer := a.activeDocument().code.Buffer
+	if !buffer.Undo() || buffer.Modified() {
+		t.Fatal("fixture did not undo to saved baseline")
+	}
+	a.ReadRepositoryFile = func(_ context.Context, _, _ string, f domain.File, done func(domain.File, error)) {
+		f.New = "B"
+		f.DiskVersion = "v2"
+		done(f, nil)
+	}
+	a.refreshOpenFileViews(repo.Root, name)
+	if buffer.String() != "B" || a.repo().split.file.DiskVersion != "v2" {
+		t.Fatal("refresh fixture failed")
+	}
+	buffer.Set("A")
+	s := a.SessionSnapshot()
+	for _, r := range s.Repositories {
+		for _, tab := range r.Tabs {
+			if tab.Draft != nil && (tab.Draft.BaseText != "B" || tab.Draft.Text != "A") {
+				t.Fatalf("obsolete recovered baseline: %+v", tab.Draft)
+			}
+		}
+	}
+	b := New(application.New(), application.DefaultLayout())
+	b.RestoreSession(s)
+	b.ReadRepository = func(_ context.Context, _ string, done func(domain.Repository, error)) { done(repo, nil) }
+	b.ReadRepositoryFile = a.ReadRepositoryFile
+	b.StartSessionRestore()
+	if b.activeDocument() == nil || !b.activeDocument().modified() || b.activeDocument().code.Buffer.String() != "A" || len(sessionDraftContents(b.SessionSnapshot())) != 1 {
+		t.Fatal("refresh made recovered draft clean and lost close protection")
+	}
+}
+
 func TestProjectDraftRealDiskRoundtripAndStaleSave(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()

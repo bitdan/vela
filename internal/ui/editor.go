@@ -92,6 +92,7 @@ func (a *Workspace) openCode(source string, f domain.File) {
 				split.code.ReadOnly = current.code.ReadOnly
 			}
 		}
+		a.recoverPendingEditorDraft(current)
 		return
 	}
 	buffer := editor.NewBuffer(f.New)
@@ -108,6 +109,7 @@ func (a *Workspace) openCode(source string, f domain.File) {
 		r.tabs[r.active].title = "Blame · " + path.Base(f.Path)
 		r.tabs[r.active].context = "Blame · " + strings.TrimPrefix(source, "blame:")
 	}
+	a.recoverPendingEditorDraft(&r.tabs[r.active])
 }
 
 func (a *Workspace) splitTab(id string, vertical, move bool) {
