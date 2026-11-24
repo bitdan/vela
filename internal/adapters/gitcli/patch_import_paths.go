@@ -17,12 +17,17 @@ import (
 type importedPathRole struct {
 	existing, structural, raw, modeChange bool
 	mode                                  string
+	lineEnding                            string
 	size                                  int
 }
 
 func importedPatchRoles(doc domain.ImportedPatch) (map[string]importedPathRole, error) {
 	roles := map[string]importedPathRole{}
 	for _, file := range doc.Files {
+		lineEnding, err := application.ImportedPatchLineEnding(file)
+		if err != nil {
+			return nil, err
+		}
 		name, err := application.ResolveImportedPatchPath(file.Path, doc.Strip, doc.Directory)
 		if err != nil {
 			return nil, err
@@ -32,7 +37,7 @@ func importedPatchRoles(doc domain.ImportedPatch) (map[string]importedPathRole, 
 			return nil, errors.New("Windows does not preserve Unix executable modes; choose Index only for permission changes")
 		}
 		raw := file.Binary || len(file.Hunks) == 0 && (file.Kind == "P" || file.Kind == "R")
-		role := importedPathRole{existing: true, structural: file.Kind != "", raw: raw, modeChange: modeChange, mode: file.OldMode, size: -1}
+		role := importedPathRole{existing: true, structural: file.Kind != "", raw: raw, modeChange: modeChange, mode: file.OldMode, size: -1, lineEnding: lineEnding}
 		if file.Binary {
 			role.size = file.OldSize
 		}
@@ -208,8 +213,11 @@ func (g *Executor) fingerprintImportedPaths(ctx context.Context, repo domain.Rep
 				if err != nil {
 					return err
 				}
-				if file.DiskVersion == "" || strings.Contains(file.New, "\r") {
-					return errors.New("patch import requires regular LF text files")
+				if file.DiskVersion == "" {
+					return errors.New("patch import requires regular UTF-8 text files")
+				}
+				if err := validateImportedTextEOL(file.New, role, doc.Target == "Working tree"); err != nil {
+					return err
 				}
 				version = file.DiskVersion
 			}
@@ -228,12 +236,25 @@ func (g *Executor) fingerprintImportedPaths(ctx context.Context, repo domain.Rep
 				if err != nil {
 					return err
 				}
-				if strings.Contains(text, "\r") {
-					return errors.New("patch import requires LF text in the index")
+				if err := validateImportedTextEOL(text, role, doc.Target == "Index only"); err != nil {
+					return err
 				}
 			}
 		}
 		fmt.Fprintf(digest, "\x00%s\x00%s\x00%s", name, mode, version)
 	}
 	return ctx.Err()
+}
+
+func validateImportedTextEOL(text string, role importedPathRole, target bool) error {
+	ending, err := application.UniformTextLineEnding(text)
+	if err != nil {
+		return err
+	}
+	// Matching content EOL prevents insertion-only/no-context patches from
+	// introducing mixed line endings into the rest of an existing target.
+	if target && role.existing && ending != "" && role.lineEnding != "" && ending != role.lineEnding {
+		return errors.New("patch and existing target line endings differ; mixed line endings are unsupported")
+	}
+	return nil
 }
