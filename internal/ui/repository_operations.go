@@ -11,6 +11,11 @@ import (
 )
 
 type repositoryOperationDialog struct {
+	shelfHunkDocs                map[string]domain.PatchDocument
+	shelfHunkChosen              map[string][]bool
+	shelfHunkPath                string
+	shelfHunkRead                *readRequest
+	shelfHunkList                ui.ListState
 	shelfFiles                   []domain.File
 	shelfChosen                  map[string]bool
 	shelfList                    ui.ListState
@@ -404,6 +409,7 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 			s.cancel()
 			s.open = true
 		} else {
+			stopRead(&s.shelfHunkRead)
 			if s.historyChanges != nil {
 				stopRead(&s.historyChanges.request)
 			}

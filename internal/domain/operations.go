@@ -87,6 +87,7 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	ShelfHunks                     []ShelfHunkSelection
 	Safety                         RepositorySafetyPolicy
 	UpdateMethod, UpdateCleanup    string
 	ConfirmUpdateCleanup           bool
@@ -107,6 +108,13 @@ type RepositoryOperation struct {
 	PatchVersion                   string
 	HunkIndex                      int
 	IncludeUntracked, RestoreIndex bool
+}
+
+// An absent record means whole-file restore; an explicit empty Hunk list is
+// invalid and must never expand the selection.
+type ShelfHunkSelection struct {
+	Path, Version string
+	Hunks         []int
 }
 
 // NetworkPolicy is copied at dispatch; it never reads mutable UI preferences.

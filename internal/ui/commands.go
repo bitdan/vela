@@ -79,6 +79,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	previewShelfHunks: "Choose Shelf Hunks", toggleShelfHunk: "Toggle Shelf Hunk", wholeShelfFile: "Restore Whole Shelved File",
 	applyComparisonFilters: "Apply Comparison Filters", clearComparisonFilters: "Clear Comparison Filters",
 	toggleShelfFile: "Toggle Unshelve File", selectShelfAll: "Select All Unshelve Files", clearShelfSelection: "Clear Unshelve File Selection",
 	toggleImportedFile: "Toggle Imported Patch File", toggleImportedHunk: "Toggle Imported Patch Hunk", selectImportedAll: "Select All Imported Hunks", clearImportedSelection: "Clear Imported Hunk Selection", toggleImportedReverse: "Reverse Imported Patch",
@@ -724,6 +725,9 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 			}
 		}
 	case selectRepo:
+		if s := a.repositoryOperation; s != nil {
+			stopRead(&s.shelfHunkRead)
+		}
 		a.selectRepository(target.index)
 	case selectBranch:
 		a.Model.Active().Branch = target.source

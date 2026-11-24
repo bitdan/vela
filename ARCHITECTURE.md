@@ -53,7 +53,7 @@ Git Patch 的解析、预检和写入与 MyGo Diff 显示分离。Hunk 写入重
 
 二进制 Patch 通过标准库 zlib 和有界 Git base85 解码校验两方向数据，限制 literal、delta 指令、源与结果尺寸；不自行执行 delta。Adapter 使用有界原始磁盘/Blob 读取计算指纹，文本编辑器仍只接收编码补丁。文件模式保留正反两侧身份，Index only 依当前方向复核 Index 模式；Windows 明确拒绝工作区执行位变更，不能把系统无法表达的模式宣称已写入。
 
-Shelf 用私有引用保存 stash-compatible 对象，不复用 refs/stash。独立临时 Index 构造选中暂存/工作树，发布快照后才清理工作路径；私有引用通过 CAS 管理。部分 Unshelve 保留完整原 Shelf；投影树的完整差异必须是显式选择的子集，防止文件/目录替换带入未选路径。恢复可能影响目标侧重命名路径，须锁定相关源编辑器并刷新全部可变视图。
+Shelf 用私有引用保存 stash-compatible 对象，不复用 refs/stash。独立临时 Index 构造选中暂存/工作树，发布快照后才清理工作路径；私有引用通过 CAS 管理。Hunk 选择复用原生 Patch 读取端口，版本绑定 Shelf OID 与仓库/磁盘身份。混合恢复先从 Base 及整文件子集构造临时树，再在临时 Index 应用显式 Hunk；投影 Index 树等于 Base，完整差异必须属于所选路径。只将投影对象传给 git stash apply，原 Shelf 对象仍用于 CAS；不从原暂存树带入未选内容。部分 Unshelve 保留完整原 Shelf；投影树的完整差异必须是显式选择的子集，防止文件/目录替换带入未选路径。恢复可能影响目标侧重命名路径，须锁定相关源编辑器并刷新全部可变视图。
 
 Project 文件操作先捕获并校验源树及目标身份，拒绝覆盖目标和 Git 元数据。同仓库移动先安全复制再回收源项，删除使用回收站，不降级永久删除。写入占用统一忙碌/取消状态；更新路径时保留 Buffer 和编辑状态。
 

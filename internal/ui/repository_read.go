@@ -37,6 +37,9 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	if s := a.repositoryOperation; s != nil {
+		stopRead(&s.shelfHunkRead)
+	}
 	a.stopBackgroundTasks()
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()

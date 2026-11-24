@@ -23,6 +23,9 @@ func (g *Executor) ReadPatch(ctx context.Context, repo domain.Repository, source
 }
 
 func (g *Executor) readPatch(ctx context.Context, repo domain.Repository, source, path string) (domain.PatchDocument, error) {
+	if strings.HasPrefix(source, "shelf:") {
+		return g.readShelfPatch(ctx, repo, source, path)
+	}
 	var doc domain.PatchDocument
 	if !validGitPath(path) || (source != "working" && source != "staged") {
 		return doc, errors.New("select a working or staged file")

@@ -199,8 +199,8 @@ func (a *Workspace) shelfFields(c *ui.Context, p tokens, s *repositoryOperationD
 		ui.TextInput(c, &s.op.Message).Label("Shelf name").FillWidth().Disabled(busy)
 	case domain.ApplyShelf:
 		a.shelfApplyFiles(c, p, s, busy)
-		ui.Checkbox(c, &s.op.RestoreIndex, "Restore original staged state").Disabled(busy)
-		partial := len(s.op.Paths) < len(s.shelfFiles)
+		ui.Checkbox(c, &s.op.RestoreIndex, "Restore original staged state").Disabled(busy || len(s.op.ShelfHunks) > 0 || s.shelfHunkRead != nil)
+		partial := len(s.op.Paths) < len(s.shelfFiles) || len(s.op.ShelfHunks) > 0
 		ui.Checkbox(c, &s.op.RemoveApplied, "Move complete entry to Recently Deleted after successful apply").Disabled(busy || partial)
 		if partial {
 			ui.Text(c, "Partial restore retains every saved file in the original shelf, including applied files. Rename source/destination paths are listed separately; select both to restore the complete rename.").FillWidth().TextColor(p.theme.TextMuted)
