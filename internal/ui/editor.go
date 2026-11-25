@@ -368,6 +368,7 @@ func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 				reason := a.disabledFor(saveSourceFile, commandTarget{tabID: entry.id})
 				ui.Button(c, "Save").Label("Save Source File").Height(controlHeight).Disabled(reason != "").Tooltip(reason).OnClick(func() { a.run(saveSourceFile, commandTarget{tabID: entry.id}) })
 				ui.Text(c, "Ctrl+S").TextColor(p.theme.TextMuted).FontSize(p.textSize(smallText))
+				a.inlineBlameControls(c, p)
 			})
 		}
 		entry.code.Font, entry.code.TabSize = a.editorPreferences()

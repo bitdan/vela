@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -72,7 +73,8 @@ func run(layoutPath string) error {
 	var projectReplacer application.ProjectReplacer = git
 	var background application.BackgroundRepository = git
 	monitor := &repositoryWatch{}
-	defer monitor.close()
+	defer workspace.StopEditorActivity()
+	monitor.close()
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
@@ -385,12 +387,37 @@ func run(layoutPath string) error {
 		}
 		connectReadTasks(workspace, window.Invalidate)
 		connectWriteTasks(workspace, window.Invalidate)
+		workspace.WatchEditorActivity = func(ctx context.Context, tick func()) {
+			go func() {
+				var queued atomic.Bool
+				ticker := time.NewTicker(150 * time.Millisecond)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						if !queued.CompareAndSwap(false, true) {
+							continue
+						}
+						mygo.RunOnMain(func() {
+							defer queued.Store(false)
+							if ctx.Err() == nil {
+								tick()
+								window.Invalidate()
+							}
+						})
+					}
+				}
+			}()
+		}
 		workspace.StartSessionRestore()
 		window.OnClose(func(e *mygo.CloseEvent) {
 			if !workspace.RequestClose() {
 				e.PreventDefault()
 				window.Invalidate()
 			} else {
+				workspace.StopEditorActivity()
 				monitor.close()
 			}
 		})

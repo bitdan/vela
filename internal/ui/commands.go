@@ -79,6 +79,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	toggleInlineBlame: "Inline Blame", inlineCommitDetails: "Line Commit Details", closeInlineDetails: "Close Line Commit Details",
 	squashCommit: "Squash Selected Commits…", confirmSquash: "Squash Commits", cancelSquash: "Cancel Squash", refreshSquash: "Preview Squash",
 	clearHunkLines: "Clear Changed Lines", selectAllHunkLines: "Select All Changed Lines",
 	toggleHunkLineMode: "Choose Individual Changed Lines", toggleHunkLine: "Toggle Changed Git Line", applyHunkSelection: "Apply Git Hunk Selection",
@@ -130,6 +131,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isInlineBlameCommand(id) {
+		return a.inlineDisabled(id)
+	}
 	if isSquashCommand(id) {
 		return a.squashDisabled(id, target)
 	}
@@ -378,6 +382,12 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 }
 
 func (a *Workspace) run(id commandID, target commandTarget) {
+	if isInlineBlameCommand(id) {
+		if a.disabledFor(id, target) == "" {
+			a.runInlineBlame(id)
+		}
+		return
+	}
 	if a.disabledFor(id, target) != "" {
 		return
 	}

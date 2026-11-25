@@ -102,3 +102,5 @@ Keep Drafts and Close 通过窄异步 SaveWorkspaceSession 端口在关闭前完
 只在阶段验收、发布、定向验证不足或用户明确要求时运行仓库级检查。未执行的测试、性能和视觉验证明确标记，不用编译成功替代验收。当前执行限制和状态只维护在 [当前清单](docs/current.md)。
 
 项目说明仅维护 README、VELA_SPEC、ARCHITECTURE 和 docs/current 四份 Markdown；保留 IDEA 参考图与许可证。AGENTS.md 是本地工作规则，不纳入提交。不再新增 ADR、分批报告、计划或过程文档；必要的架构变化直接更新本文。
+
+行内 Blame 复用固定 OID 读取端口并携带精确 Blob Text。UI 的显式开关启动 Bootstrap 150ms 活动观察，后台仅排入合并的主线程 tick；View 不启动 IO。缓存身份包含仓库/导航、HEAD、工作树版本、标签、State/Buffer 版本和磁盘版本，先比对 Buffer/HEAD 原始文本，再异步确认磁盘内容及版本；光标移动复用缓存。Inlay 使用锁定版本 editor.State.SetInlays，详情独立固定 OID Log 页，不污染全局 Log 选择；实际关闭窗口取消观察与排队回调。

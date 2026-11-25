@@ -127,6 +127,8 @@ type Workspace struct {
 	shiftTaps                       shiftGesture
 	searchFocus                     *editor.State
 	focusedEditor                   *editor.State
+	inlineBlame                     inlineBlameState
+	WatchEditorActivity             func(context.Context, func())
 	confirmExit, exitApproved       bool
 	exitDiscardDrafts               bool
 	sessionSave                     *readRequest
@@ -365,6 +367,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.squash != nil {
 		a.squashView(c, p)
+	}
+	if a.inlineBlame.detailsOpen {
+		a.inlineDetailsView(c, p)
 	}
 	if a.fileHistory != nil {
 		a.fileHistoryView(c, p)

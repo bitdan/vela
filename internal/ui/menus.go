@@ -355,7 +355,7 @@ func (a *Workspace) editorGitMenu(m *ui.Menu, t commandTarget) {
 	m.Separator()
 	a.menuGroup(m, t, previewDiff, compareRevision)
 	a.branchCompareMenu(m, t)
-	a.menuGroup(m, t, fileHistory, showBlame, historySelection)
+	a.menuGroup(m, t, fileHistory, showBlame, toggleInlineBlame, inlineCommitDetails, historySelection)
 	a.menuNamed(m, openRevision, t, "Show Current Revision", "")
 	a.menu(m, rollback, t)
 	m.Separator()
