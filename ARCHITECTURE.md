@@ -106,3 +106,5 @@ Keep Drafts and Close 通过窄异步 SaveWorkspaceSession 端口在关闭前完
 行内 Blame 复用固定 OID 读取端口并携带精确 Blob Text。UI 的显式开关启动 Bootstrap 150ms 活动观察，后台仅排入合并的主线程 tick；View 不启动 IO。缓存身份包含仓库/导航、HEAD、工作树版本、标签、State/Buffer 版本和磁盘版本，先比对 Buffer/HEAD 原始文本，再异步确认磁盘内容及版本；光标移动复用缓存。Inlay 使用锁定版本 editor.State.SetInlays，详情独立固定 OID Log 页，不污染全局 Log 选择；实际关闭窗口取消观察与排队回调。
 
 Shelf 分组为 Application.ShelfGrouping 的有界纯元数据，以稳定 Shelf ID 映射稳定 group ID。repoView 按仓库持有，RepositorySnapshot 可选保存并在捕获/恢复/未加载仓库转存时深复制；Adapter 会话读写验证上限、命名和外键。刷新不裁剪暂不可用条目关联，删除组仅将成员移回默认组。UI 过滤保持原始条目索引及 ID/OID 命令校验，CRUD 不进入 Git 写端口。
+
+提交消息编辑通过 RepositoryCommitRewriteReader 返回不可变 CommitRewritePreview，和 Squash 共用有界单父范围校验；操作类型进入不透明版本前缀和任务键。UI 复用原生提交范围确认/消息草稿及编辑器写保护，操作使用独立 RewordCommit 与确认字段；commit-tree 保留所选树/父/作者，后代交给原生 Rebase，完成后复核最终树与磁盘版本。

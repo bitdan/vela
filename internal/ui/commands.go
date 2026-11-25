@@ -81,6 +81,7 @@ type commandTarget struct {
 var commands = map[commandID]string{
 	newShelfGroup: "New Shelf Group…", renameShelfGroup: "Rename Shelf Group…", deleteShelfGroup: "Delete Shelf Group…", moveShelfGroup: "Move Shelf to Group", filterShelfGroup: "Filter Shelf Group", applyShelfGroup: "Apply Shelf Group", cancelShelfGroup: "Cancel Shelf Group",
 	toggleInlineBlame: "Inline Blame", inlineCommitDetails: "Line Commit Details", closeInlineDetails: "Close Line Commit Details",
+	confirmHistoryRewrite: "Apply History Rewrite", cancelHistoryRewrite: "Cancel History Rewrite", refreshHistoryRewrite: "Preview History Rewrite",
 	squashCommit: "Squash Selected Commits…", confirmSquash: "Squash Commits", cancelSquash: "Cancel Squash", refreshSquash: "Preview Squash",
 	clearHunkLines: "Clear Changed Lines", selectAllHunkLines: "Select All Changed Lines",
 	toggleHunkLineMode: "Choose Individual Changed Lines", toggleHunkLine: "Toggle Changed Git Line", applyHunkSelection: "Apply Git Hunk Selection",
@@ -405,7 +406,11 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		return
 	}
 	if isSquashCommand(id) {
-		a.runSquash(id)
+		if rewriteEntryCommand(id) {
+			a.openCommitRewrite(id, target)
+		} else {
+			a.runSquash(id)
+		}
 		return
 	}
 	if isHunkLineCommand(id) {

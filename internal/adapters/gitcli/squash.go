@@ -25,8 +25,16 @@ func (g *Executor) PreviewSquash(ctx context.Context, repo domain.Repository, se
 }
 
 func (g *Executor) squashPreview(ctx context.Context, repo domain.Repository, selection []string) (domain.SquashPreview, error) {
-	var plan domain.SquashPreview
-	if err := application.ValidateSquashSelection(selection); err != nil {
+	plan, err := g.commitRangePreview(ctx, repo, selection, 2)
+	if err == nil {
+		err = application.ValidateSquashMessage(plan.Message)
+	}
+	return plan, err
+}
+
+func (g *Executor) commitRangePreview(ctx context.Context, repo domain.Repository, selection []string, minimum int) (domain.CommitRewritePreview, error) {
+	var plan domain.CommitRewritePreview
+	if err := application.ValidateCommitRangeSelection(selection, minimum); err != nil {
 		return plan, err
 	}
 	if repo.Head == "" || repo.CurrentBranch == "Detached HEAD" || repo.Bisect.Active() {
@@ -154,9 +162,6 @@ func (g *Executor) squashPreview(ctx context.Context, repo domain.Repository, se
 		return plan, err
 	}
 	plan.Message = strings.TrimSpace(plan.Message)
-	if err := application.ValidateSquashMessage(plan.Message); err != nil {
-		return plan, err
-	}
 	if _, _, err := g.verifyCheckout(ctx, repo); err != nil {
 		return plan, err
 	}

@@ -15,6 +15,8 @@ func (a *Workspace) TaskOperationName(op domain.RepositoryOperation) string {
 		return s.label
 	}
 	switch op.Kind {
+	case domain.RewordCommit:
+		return "Edit Commit Message"
 	case domain.SquashCommits:
 		return "Squash Commits"
 	case domain.StageHunk:

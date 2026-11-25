@@ -18,6 +18,7 @@ const (
 )
 
 type squashDialog struct {
+	kind             domain.RepositoryOperationKind
 	snapshot         domain.Repository
 	selection        []string
 	plan             domain.SquashPreview
@@ -29,12 +30,12 @@ type squashDialog struct {
 }
 
 func isSquashCommand(id commandID) bool {
-	return id == squashCommit || id == confirmSquash || id == cancelSquash || id == refreshSquash
+	return rewriteEntryCommand(id) || id == confirmHistoryRewrite || id == cancelHistoryRewrite || id == refreshHistoryRewrite || id == squashCommit || id == confirmSquash || id == cancelSquash || id == refreshSquash
 }
 
 func (a *Workspace) squashBaseReason() string {
 	r := a.Model.Active().Repository
-	if r.Root == "" || a.PreviewRepositorySquash == nil || a.OperateRepository == nil {
+	if r.Root == "" || a.OperateRepository == nil {
 		return "Open a local repository with Squash available"
 	}
 	if r.Head == "" || r.CurrentBranch == "Detached HEAD" || r.ResolvingConflicts() || r.Bisect.Active() {
@@ -60,6 +61,18 @@ func (a *Workspace) squashBaseReason() string {
 }
 
 func (a *Workspace) squashDisabled(id commandID, t commandTarget) string {
+	if rewriteEntryCommand(id) {
+		return a.rewriteEntryDisabled(id, t)
+	}
+	if id == cancelHistoryRewrite {
+		id = cancelSquash
+	}
+	if id == confirmHistoryRewrite {
+		id = confirmSquash
+	}
+	if id == refreshHistoryRewrite {
+		id = refreshSquash
+	}
 	if id == cancelSquash {
 		if a.squash == nil {
 			return "No Squash dialog"
@@ -70,6 +83,9 @@ func (a *Workspace) squashDisabled(id commandID, t commandTarget) string {
 		return reason
 	}
 	if id == squashCommit {
+		if a.PreviewRepositorySquash == nil {
+			return "Squash preview is unavailable"
+		}
 		if a.squash != nil || a.repositoryOperation != nil || a.patchDialog != nil || a.patchImport != nil || a.commitConfirmation != nil {
 			return "Close the current repository dialog"
 		}
@@ -112,11 +128,11 @@ func (a *Workspace) runSquash(id commandID) {
 	case squashCommit:
 		a.squash = &squashDialog{selection: slices.Sorted(a.repo().logChosen.All())}
 		a.previewSquash()
-	case refreshSquash:
+	case refreshSquash, refreshHistoryRewrite:
 		a.previewSquash()
-	case confirmSquash:
+	case confirmSquash, confirmHistoryRewrite:
 		a.applySquash()
-	case cancelSquash:
+	case cancelSquash, cancelHistoryRewrite:
 		if s := a.squash; s != nil {
 			if s.busy {
 				if s.cancel != nil {
@@ -147,7 +163,7 @@ func (a *Workspace) previewSquash() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	request := &readRequest{cancel: cancel}
 	s.request = request
-	a.PreviewRepositorySquash(ctx, s.snapshot, slices.Clone(s.selection), func(plan domain.SquashPreview, err error) {
+	done := func(plan domain.SquashPreview, err error) {
 		if a.squash != s || s.request != request || a.Model.Active().Repository.Root != s.snapshot.Root {
 			return
 		}
@@ -156,17 +172,17 @@ func (a *Workspace) previewSquash() {
 		}
 		stopRead(&s.request)
 		if err != nil {
-			s.problem = "Could not preview Squash · " + err.Error()
+			s.problem = "Could not preview " + s.title() + " · " + err.Error()
 			return
 		}
 		actual, expected := slices.Clone(plan.Selected), slices.Clone(s.selection)
 		slices.Sort(actual)
 		slices.Sort(expected)
 		if plan.Version == "" || !slices.Equal(actual, expected) || len(plan.Selected)+len(plan.Replay) > 1000 {
-			s.problem = "Git returned an invalid Squash identity"
+			s.problem = "Git returned an invalid commit-range identity"
 			return
 		}
-		if err := application.ValidateSquashMessage(plan.Message); err != nil {
+		if err := application.ValidateSquashMessage(plan.Message); s.operationKind() == domain.SquashCommits && err != nil {
 			s.problem = err.Error()
 			return
 		}
@@ -174,7 +190,12 @@ func (a *Workspace) previewSquash() {
 		if s.message == "" {
 			s.message = plan.Message
 		}
-	})
+	}
+	if s.operationKind() == domain.SquashCommits {
+		a.PreviewRepositorySquash(ctx, s.snapshot, slices.Clone(s.selection), done)
+	} else {
+		a.PreviewCommitRewrite(ctx, s.snapshot, s.operationKind(), slices.Clone(s.selection), done)
+	}
 }
 
 func (a *Workspace) applySquash() {
@@ -185,15 +206,18 @@ func (a *Workspace) applySquash() {
 	s.problem = ""
 	restoreEditors := a.lockShelfEditors()
 	op := domain.RepositoryOperation{Kind: domain.SquashCommits, SquashSelection: slices.Clone(s.selection), SquashVersion: s.plan.Version, ConfirmSquash: s.ack, Message: s.message}
-	a.beginRepositoryWrite(s.snapshot.Root, "Squashing commits…", cancel)
+	if s.operationKind() != domain.SquashCommits {
+		op = domain.RepositoryOperation{Kind: s.operationKind(), RewriteSelection: slices.Clone(s.selection), RewriteVersion: s.plan.Version, ConfirmRewrite: s.ack, Message: s.message}
+	}
+	a.beginRepositoryWrite(s.snapshot.Root, s.title()+"…", cancel)
 	a.OperateRepository(ctx, s.snapshot, op, func(updated domain.Repository, err, refreshErr error) {
 		cancel()
 		restoreEditors()
 		s.cancel = nil
 		s.busy = false
-		message := "Squash completed"
+		message := s.title() + " completed"
 		if err != nil {
-			message = "Squash stopped · " + err.Error()
+			message = s.title() + " stopped · " + err.Error()
 			s.problem = message
 			s.plan.Version = ""
 			s.ack = false
@@ -225,7 +249,7 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, .28))
 		panel.Width(min(w-32, 760)).MaxHeight(h-48).Background(p.panel).Border(1, p.theme.Border).Radius(6).Column().Label("Squash dialog").Children(func() {
-			heading(c, p, "Squash Commits", s.snapshot.CurrentBranch)
+			heading(c, p, s.title(), s.snapshot.CurrentBranch)
 			ui.Column(c).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Text(c, s.snapshot.Root).FillWidth().SingleLine().Ellipsis("…")
 				if s.request != nil {
@@ -244,8 +268,12 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 					}).FillWidth().Height(min(float32(len(s.plan.Selected))*rowHeight, 5*rowHeight)).Label("Squash selected commit range")
 					ui.Text(c, "Author kept from oldest selected commit: "+s.plan.Author).FillWidth()
 				}
-				ui.TextArea(c, &s.message).Label("Squash commit message").Height(150).FillWidth().Disabled(s.busy || s.request != nil)
-				ui.Text(c, "Successful Squash keeps the final file tree. Git may stop during replay; use native Rebase Continue or Abort. Cancellation does not promise rollback.").FillWidth().TextColor(p.theme.TextMuted)
+				messageLabel := "Squash commit message"
+				if s.operationKind() != domain.SquashCommits {
+					messageLabel = "History rewrite message"
+				}
+				ui.TextArea(c, &s.message).Label(messageLabel).Height(150).FillWidth().Disabled(s.busy || s.request != nil)
+				ui.Text(c, s.title()+" keeps the final file tree. Git may stop during replay; use native Rebase Continue or Abort. Cancellation does not promise rollback.").FillWidth().TextColor(p.theme.TextMuted)
 				ui.Checkbox(c, &s.ack, "Rewrite the selected range and its later commits").Disabled(s.busy || s.request != nil || s.plan.Version == "")
 				if s.problem != "" {
 					ui.Text(c, s.problem).FillWidth().TextColor(p.theme.Danger)
@@ -253,11 +281,18 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 			})
 			ui.Row(c).FillWidth().Padding(inset).Gap(gap).Justify(ui.End).Children(func() {
 				ui.Button(c, "Cancel").Label("Cancel Squash").OnClick(func() { a.run(cancelSquash, commandTarget{}) })
-				for _, id := range []commandID{refreshSquash, confirmSquash} {
+				actions := []commandID{refreshSquash, confirmSquash}
+				if s.operationKind() != domain.SquashCommits {
+					actions = []commandID{refreshHistoryRewrite, confirmHistoryRewrite}
+				}
+				for _, id := range actions {
 					reason := a.disabledFor(id, commandTarget{})
 					label := commandLabel(id)
 					if id == confirmSquash {
 						label = "Run Squash Commits"
+					}
+					if id == confirmHistoryRewrite {
+						label = "Run History Rewrite"
 					}
 					ui.Button(c, commandLabel(id)).Label(label).Disabled(reason != "").Tooltip(reason).OnClick(func() { a.run(id, commandTarget{}) })
 				}

@@ -62,6 +62,7 @@ const (
 	CherryPickSelected
 	RevertSelected
 	SquashCommits
+	RewordCommit
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.
@@ -88,6 +89,9 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	RewriteSelection               []string
+	RewriteVersion                 string
+	ConfirmRewrite                 bool
 	SquashSelection                []string
 	SquashVersion                  string
 	ConfirmSquash                  bool
