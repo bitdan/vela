@@ -161,3 +161,23 @@ func TestInlineBlameEmptyErrorSplitAndLateUndo(t *testing.T) {
 		t.Fatal("close retained editor")
 	}
 }
+
+func TestInlineBlameResumesAfterUnchangedTask(t *testing.T) {
+	a := inlineFixture(t)
+	reads := 0
+	a.ReadRepositoryBlame = func(_ context.Context, _, _, _ string, done func(domain.BlameDocument, error)) {
+		reads++
+		done(inlineDoc(a), nil)
+	}
+	a.run(toggleInlineBlame, commandTarget{})
+	a.repositoryWrite = a.Model.Active().Repository.Root
+	a.tickInlineBlame()
+	if a.inlineBlame.line.Commit != "" {
+		t.Fatal("write retained hint")
+	}
+	a.repositoryWrite = ""
+	a.tickInlineBlame()
+	if a.inlineBlame.line.Author != "Alice" || reads != 2 {
+		t.Fatal("same-identity task permanently suppressed hint")
+	}
+}

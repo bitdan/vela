@@ -22,6 +22,7 @@ type inlineIdentity struct {
 	code                                *editor.State
 }
 type inlineBlameState struct {
+	paused              bool
 	enabled             bool
 	watchCancel         context.CancelFunc
 	identity            inlineIdentity
@@ -126,6 +127,7 @@ func (a *Workspace) clearInlineBlame() {
 	s.details = nil
 	s.detailsOpen = false
 	s.status = ""
+	s.paused = false
 }
 func (a *Workspace) inlineTarget() inlineIdentity {
 	entry := a.sourceSaveEntry(commandTarget{})
@@ -157,8 +159,13 @@ func (a *Workspace) tickInlineBlame() {
 		s.line = domain.BlameLine{}
 		stopRead(&s.request)
 		s.doc = nil
+		s.paused = true
 		s.status = "Blame paused for unsaved changes or active tasks"
 		return
+	}
+	if s.paused {
+		s.paused = false
+		s.status = ""
 	}
 	if s.doc != nil {
 		a.showInlineLine()

@@ -74,7 +74,7 @@ func run(layoutPath string) error {
 	var background application.BackgroundRepository = git
 	monitor := &repositoryWatch{}
 	defer workspace.StopEditorActivity()
-	monitor.close()
+	defer monitor.close()
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
 			Title: "vela", Width: 1440, Height: 900, MinWidth: 900, MinHeight: 620,
