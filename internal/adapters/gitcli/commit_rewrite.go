@@ -26,10 +26,21 @@ func (g *Executor) commitRewritePreview(ctx context.Context, repo domain.Reposit
 		}
 	case domain.FixupCommits:
 		minimum, prefix = 2, "fixup:"
+	case domain.DropCommit:
+		if len(ids) != 1 {
+			return domain.CommitRewritePreview{}, errors.New("select exactly one commit to drop")
+		}
+		prefix = "drop:"
 	default:
 		return domain.CommitRewritePreview{}, errors.New("unsupported commit rewrite operation")
 	}
 	plan, err := g.commitRangePreview(ctx, repo, ids, minimum)
+	if err == nil && kind == domain.DropCommit {
+		if plan.Parent == "" {
+			return plan, errors.New("dropping a root commit is not supported")
+		}
+		plan.Affected, err = g.ReadRevisionChanges(ctx, repo.Root, plan.Selected[0], 0)
+	}
 	if err == nil && kind == domain.FixupCommits {
 		raw, e := g.read(ctx, repo.Root, "cat-file", "commit", plan.Selected[len(plan.Selected)-1])
 		err = e
@@ -61,6 +72,9 @@ func (g *Executor) rewriteCommit(ctx context.Context, repo domain.Repository, op
 	}
 	if op.RewriteVersion == "" || op.RewriteVersion != plan.Version {
 		return errors.New("history rewrite preview changed; preview again")
+	}
+	if op.Kind == domain.DropCommit {
+		return g.dropSelectedCommit(ctx, repo, op, plan)
 	}
 	application.ReportTaskProgress(ctx, "Creating rewritten commit")
 	args := []string{"commit-tree", plan.SelectedTree}

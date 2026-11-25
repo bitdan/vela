@@ -27,6 +27,7 @@ type squashDialog struct {
 	message, problem string
 	ack, busy        bool
 	list             ui.ListState
+	affected         ui.ListState
 }
 
 func isSquashCommand(id commandID) bool {
@@ -117,7 +118,7 @@ func (a *Workspace) squashDisabled(id commandID, t commandTarget) string {
 	if s.plan.Version == "" || !s.ack {
 		return "Preview and confirm the rewritten range"
 	}
-	if err := application.ValidateSquashMessage(s.message); s.operationKind() != domain.FixupCommits && err != nil {
+	if err := application.ValidateSquashMessage(s.message); s.operationKind() != domain.FixupCommits && s.operationKind() != domain.DropCommit && err != nil {
 		return err.Error()
 	}
 	return ""
@@ -256,7 +257,11 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 					ui.Text(c, "Checking private commit range and remote-tracking refs…")
 				}
 				if s.plan.Version != "" {
-					ui.Text(c, fmt.Sprintf("%d selected commits → 1 · %d later commits will be replayed", len(s.plan.Selected), len(s.plan.Replay))).FillWidth()
+					summary := fmt.Sprintf("%d selected commits → 1 · %d later commits will be replayed", len(s.plan.Selected), len(s.plan.Replay))
+					if s.operationKind() == domain.DropCommit {
+						summary = fmt.Sprintf("Remove %s · %d later commits will be replayed", s.plan.Selected[0], len(s.plan.Replay))
+					}
+					ui.Text(c, summary).FillWidth()
 					s.list.Key = func(i int) any { return s.plan.Selected[i] }
 					ui.List(c, &s.list, len(s.plan.Selected), func(i int) {
 						oid := s.plan.Selected[i]
@@ -266,15 +271,32 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 						}
 						ui.Text(c, label).FillWidth().SingleLine().Ellipsis("…").Tooltip(label)
 					}).FillWidth().Height(min(float32(len(s.plan.Selected))*rowHeight, 5*rowHeight)).Label("Squash selected commit range")
-					ui.Text(c, "Author kept from oldest selected commit: "+s.plan.Author).FillWidth()
+					if s.operationKind() != domain.DropCommit {
+						ui.Text(c, "Author kept from oldest selected commit: "+s.plan.Author).FillWidth()
+					} else {
+						ui.Text(c, "Changes introduced by this commit:").FillWidth()
+						s.affected.Key = func(i int) any { return s.plan.Affected[i].Path }
+						ui.List(c, &s.affected, len(s.plan.Affected), func(i int) {
+							f := s.plan.Affected[i]
+							ui.Text(c, f.Path).SingleLine().Ellipsis("…").Tooltip(f.Status + " " + f.OldPath + " → " + f.Path)
+						}).FillWidth().Height(min(float32(len(s.plan.Affected))*rowHeight, 5*rowHeight))
+					}
 				}
 				messageLabel := "Squash commit message"
 				if s.operationKind() != domain.SquashCommits {
 					messageLabel = "History rewrite message"
 				}
-				ui.TextArea(c, &s.message).Label(messageLabel).Height(150).FillWidth().Disabled(s.busy || s.request != nil || s.operationKind() == domain.FixupCommits)
-				ui.Text(c, s.title()+" keeps the final file tree. Git may stop during replay; use native Rebase Continue or Abort. Cancellation does not promise rollback.").FillWidth().TextColor(p.theme.TextMuted)
-				ui.Checkbox(c, &s.ack, "Rewrite the selected range and its later commits").Disabled(s.busy || s.request != nil || s.plan.Version == "")
+				if s.operationKind() != domain.DropCommit {
+					ui.TextArea(c, &s.message).Label(messageLabel).Height(150).FillWidth().Disabled(s.busy || s.request != nil || s.operationKind() == domain.FixupCommits)
+				}
+				warning := s.title() + " keeps the final file tree. Git may stop during replay; use native Rebase Continue or Abort. Cancellation does not promise rollback."
+				confirmation := "Rewrite the selected range and its later commits"
+				if s.operationKind() == domain.DropCommit {
+					warning = "Drop removes the selected commit and its changes. Dependent later commits may conflict; use native Rebase Continue, Skip or Abort. Cancellation does not promise rollback."
+					confirmation = "Remove the selected commit and its changes; replay later commits"
+				}
+				ui.Text(c, warning).FillWidth().TextColor(p.theme.TextMuted)
+				ui.Checkbox(c, &s.ack, confirmation).Disabled(s.busy || s.request != nil || s.plan.Version == "")
 				if s.problem != "" {
 					ui.Text(c, s.problem).FillWidth().TextColor(p.theme.Danger)
 				}

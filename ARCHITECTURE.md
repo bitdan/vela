@@ -108,3 +108,5 @@ Keep Drafts and Close 通过窄异步 SaveWorkspaceSession 端口在关闭前完
 Shelf 分组为 Application.ShelfGrouping 的有界纯元数据，以稳定 Shelf ID 映射稳定 group ID。repoView 按仓库持有，RepositorySnapshot 可选保存并在捕获/恢复/未加载仓库转存时深复制；Adapter 会话读写验证上限、命名和外键。刷新不裁剪暂不可用条目关联，删除组仅将成员移回默认组。UI 过滤保持原始条目索引及 ID/OID 命令校验，CRUD 不进入 Git 写端口。
 
 提交消息编辑通过 RepositoryCommitRewriteReader 返回不可变 CommitRewritePreview，和 Squash 共用有界单父范围校验；操作类型进入不透明版本前缀和任务键。UI 复用原生提交范围确认/消息草稿及编辑器写保护，操作使用独立 RewordCommit 与确认字段；commit-tree 保留所选树/父/作者，后代交给原生 Rebase，完成后复核最终树与磁盘版本。
+
+DropCommit 复用提交范围预览和专属版本，附加有界 Affected 文件列表供确认。执行不创建替代 commit-tree 对象，而以选中提交父节点为 onto，先保护未跟踪/忽略路径，再复核版本并执行原生 rebase --onto（含 HEAD），保留真实继续/跳过/中止元数据；Drop 不使用最终树不变断言，HEAD 删除核对最终引用等于原父。根提交明确拒绝。

@@ -19,6 +19,9 @@ func (s *squashDialog) operationKind() domain.RepositoryOperationKind {
 	return s.kind
 }
 func (s *squashDialog) title() string {
+	if s.operationKind() == domain.DropCommit {
+		return "Drop Commit"
+	}
 	if s.operationKind() == domain.FixupCommits {
 		return "Fixup Selected Commits"
 	}
@@ -33,13 +36,18 @@ func (a *Workspace) openCommitRewrite(id commandID, t commandTarget) {
 		return
 	}
 	kind, ids := domain.RewordCommit, []string{commit.Hash}
+	if id == dropCommit {
+		kind = domain.DropCommit
+	}
 	if id == fixupCommit {
 		kind, ids = domain.FixupCommits, slices.Sorted(a.repo().logChosen.All())
 	}
 	a.squash = &squashDialog{kind: kind, selection: ids}
 	a.previewSquash()
 }
-func rewriteEntryCommand(id commandID) bool { return id == editCommit || id == fixupCommit }
+func rewriteEntryCommand(id commandID) bool {
+	return id == editCommit || id == fixupCommit || id == dropCommit
+}
 func (a *Workspace) rewriteEntryDisabled(id commandID, t commandTarget) string {
 	if a.PreviewCommitRewrite == nil {
 		return "Commit rewrite preview is unavailable"
