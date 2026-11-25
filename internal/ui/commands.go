@@ -79,6 +79,7 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	newShelfGroup: "New Shelf Group…", renameShelfGroup: "Rename Shelf Group…", deleteShelfGroup: "Delete Shelf Group…", moveShelfGroup: "Move Shelf to Group", filterShelfGroup: "Filter Shelf Group", applyShelfGroup: "Apply Shelf Group", cancelShelfGroup: "Cancel Shelf Group",
 	toggleInlineBlame: "Inline Blame", inlineCommitDetails: "Line Commit Details", closeInlineDetails: "Close Line Commit Details",
 	squashCommit: "Squash Selected Commits…", confirmSquash: "Squash Commits", cancelSquash: "Cancel Squash", refreshSquash: "Preview Squash",
 	clearHunkLines: "Clear Changed Lines", selectAllHunkLines: "Select All Changed Lines",
@@ -131,6 +132,12 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isShelfGroupCommand(id) {
+		return a.shelfGroupDisabled(id, target)
+	}
+	if a.shelfGroupDialog != nil && id != selectRepo && id != cancelGitTask {
+		return "Close the Shelf group dialog"
+	}
 	if isInlineBlameCommand(id) {
 		return a.inlineDisabled(id)
 	}
@@ -382,6 +389,12 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 }
 
 func (a *Workspace) run(id commandID, target commandTarget) {
+	if isShelfGroupCommand(id) {
+		if a.disabledFor(id, target) == "" {
+			a.runShelfGroup(id, target)
+		}
+		return
+	}
 	if isInlineBlameCommand(id) {
 		if a.disabledFor(id, target) == "" {
 			a.runInlineBlame(id)

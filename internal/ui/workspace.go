@@ -32,6 +32,7 @@ type tab struct {
 }
 
 type repoView struct {
+	shelfGroups                                       application.ShelfGrouping
 	logChosen                                         ui.Selection[string]
 	historicalChosen                                  ui.Selection[string]
 	historicalSelectionRevision                       string
@@ -165,6 +166,7 @@ type Workspace struct {
 	InspectProjectPath              func(context.Context, domain.Repository, string, func(domain.ProjectPathSnapshot, error))
 	ManageProjectFiles              func(context.Context, domain.Repository, domain.ProjectFileOperation, func(domain.Repository, error, error))
 	OpenProjectFolder               func(string, string, func(error))
+	shelfGroupDialog                *shelfGroupDialog
 	changelistDialog                *changelistDialog
 	revisionBrowser                 *revisionBrowserDialog
 	ReadRepositoryRevisionTree      func(context.Context, string, string, string, func(domain.RevisionTree, error))
@@ -364,6 +366,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.patchDialog != nil {
 		a.patchDialogView(c, p)
+	}
+	if a.shelfGroupDialog != nil {
+		a.shelfGroupView(c, p)
 	}
 	if a.squash != nil {
 		a.squashView(c, p)

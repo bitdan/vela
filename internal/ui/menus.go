@@ -391,6 +391,7 @@ func (a *Workspace) branchCompareMenu(m *ui.Menu, t commandTarget) {
 }
 
 func (a *Workspace) shelfMenu(m *ui.Menu, t commandTarget) {
+	a.shelfMoveGroupMenu(m, t)
 	a.menuGroup(m, t, unshelve, restoreShelf)
 	m.Separator()
 	a.menuGroup(m, t, previewDiff, openDiff, compareLocal)

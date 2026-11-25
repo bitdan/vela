@@ -28,6 +28,8 @@ func (a *Workspace) SessionSnapshot() application.WorkspaceSnapshot {
 		r := &a.repos[i]
 		repo := application.RepositorySnapshot{Name: s.Repository.Name, Root: s.Repository.Root,
 			Message: s.Message, Working: s.Working, Staged: s.Staged, Branch: s.Branch, Historical: s.Historical}
+		groups := application.CloneShelfGrouping(r.shelfGroups)
+		repo.ShelfGroups = &groups
 		repo.WorkingSelection = slices.Sorted(r.workingChosen.All())
 		lists := application.CloneChangelists(s.Changelists)
 		lists.Normalize(s.Repository)
@@ -156,6 +158,10 @@ func (a *Workspace) RestoreSession(snapshot application.WorkspaceSnapshot) {
 }
 
 func cloneRepositorySnapshot(saved application.RepositorySnapshot) application.RepositorySnapshot {
+	if saved.ShelfGroups != nil {
+		groups := application.CloneShelfGrouping(*saved.ShelfGroups)
+		saved.ShelfGroups = &groups
+	}
 	if saved.Changelists != nil {
 		lists := application.CloneChangelists(*saved.Changelists)
 		saved.Changelists = &lists

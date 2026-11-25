@@ -281,6 +281,13 @@ Shelf 支持整文件及普通文本的完整 Git Hunk 恢复。
 
 保护分支默认包括 main/master，由 Settings → Git 配置，UI 和写前校验同时生效，冲突恢复入口保留。Mixed/Hard Reset 的目标若为精确的当前 HEAD OID，则不移动分支历史，允许进入原有确认流程；其他目标及 Soft Reset 仍受保护规则限制。Hard 仍须额外确认，进行中的 Git 操作、未保存编辑内容与磁盘版本保护保持生效。大文件/名称警告须针对当前 Index 重新确认。GPG 设置只覆盖 Commit/Amend，只保存公开密钥 ID/指纹；不启用时继承 Git 配置，签名失败不自动退回未签名提交。
 
+
+#### Shelf 手动分组
+
+入口：Shelf 工具栏 All Shelves 分组筛选、＋创建、⋯改名/删除；条目右键 Move to Group；Actions 复用同一命令。
+行为：1. 创建独立仓库的命名组；2. 按稳定 Shelf ID 移动到组或 Ungrouped；3. All Shelves 显示全部，Ungrouped 显示未分组，命名组只显示成员；4. 改名不影响成员，删除组先确认，所有成员回到 Ungrouped；5. 按现有会话保存/恢复生命周期持久化分组、成员及筛选，临时不可用仓库/条目不清除元数据。
+状态矩阵：正常支持上述操作；空白、控制字符、超过 80 Unicode 字符、忽略大小写重复及保留名称 All Shelves/Ungrouped 拒绝；最多 100 组和 10,000 条关联；过期 Shelf ID/OID 或不存在组禁用；无匹配显示空状态；错误保留编辑内容；取消不改变分组；组数据不存在 Git 冲突。安全：仅改本地会话元数据，不运行 Git，不改 Shelf OID/备份 refs、Index、工作区和 Unshelve 参数；会话读写均验证数据，关联深复制且按仓库隔离。明确不支持自动分组、嵌套组、多组成员、跨仓库共享和周期性崩溃恢复。
+
 ## 6. 统一 Command 规范
 
 所有 Git 操作都必须注册为统一 Command，不能在
