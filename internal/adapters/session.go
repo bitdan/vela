@@ -34,6 +34,9 @@ func LoadSession(path string) (application.WorkspaceSnapshot, error) {
 	if err := json.Unmarshal(data, &session); err != nil {
 		return application.WorkspaceSnapshot{}, fmt.Errorf("%w: %v", ErrInvalidSession, err)
 	}
+	if err := application.ValidateSessionShelfGroups(session); err != nil {
+		return application.WorkspaceSnapshot{}, fmt.Errorf("%w: %v", ErrInvalidSession, err)
+	}
 	if err := application.ValidateSessionDrafts(session); err != nil {
 		return application.WorkspaceSnapshot{}, fmt.Errorf("%w: %v", ErrInvalidSession, err)
 	}
@@ -41,6 +44,9 @@ func LoadSession(path string) (application.WorkspaceSnapshot, error) {
 }
 
 func SaveSession(path string, session application.WorkspaceSnapshot) error {
+	if err := application.ValidateSessionShelfGroups(session); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidSession, err)
+	}
 	if err := application.ValidateSessionDrafts(session); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidSession, err)
 	}

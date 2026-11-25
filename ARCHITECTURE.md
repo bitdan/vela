@@ -43,6 +43,8 @@ Toolbar、菜单、右键菜单、快捷键和 Actions 共用稳定 Command ID�
 
 同一仓库写操作串行化，涉及共享引用时必须考虑 CommonDir。内部锁不能阻止外部 Git；每次写前重新检查仓库身份、HEAD、Index、工作区、操作元数据和目标 ref。保护未跟踪/忽略文件、未保存 Buffer、链接及 Git 元数据，不使用 force 或 reject 静默降级。
 
+Squash 以独立窄预览端口返回固定选择、后续单父链、作者及不透明版本；版本绑定当前仓库、HEAD/Index/工作区和已知远端跟踪引用。合并对象复用所选最新提交的完整 tree、最早提交的父节点与作者，再次校验后发布。末尾范围使用 update-ref CAS，中间范围使用原生 rebase --onto 并禁用自动暂存、自动更新其他引用及自动 Squash；保留原生冲突/继续/中止元数据。正常完成核对原 HEAD tree；UI 保护源文档并刷新其磁盘版本，不能把失败或取消描述为自动回滚。
+
 历史链路按固定对象读取；canonicalHistory 禁止 replace 对象改变读取语义，并检查 shallow/grafts 祖先边界。工作快照通过版本指纹拒绝过期预览，不能把旧内容当作当前磁盘事实。
 
 Fetch、Pull、Push、Update 为独立操作。Commit 成功与 Push 失败分别报告。破坏性操作展示目标和影响后确认；冲突提供继续、解决、跳过或中止等真实 Git 支持的路径。取消只表示提出请求，不能承诺回滚。
@@ -52,6 +54,8 @@ Fetch、Pull、Push、Update 为独立操作。Commit 成功与 Push 失败分�
 Git Patch 的解析、预检和写入与 MyGo Diff 显示分离。Hunk 写入重新校验路径、HEAD、Index、磁盘指纹与 Hunk 身份；过期或不支持的类型直接拒绝。导入选择、方向、Strip 和目标目录绑定预检身份；检查与应用使用相同路径映射，拒绝越界及目标碰撞。导入的新增/删除/重命名、二进制和权限变更为不可拆分的整文件单元，普通修改保留 Hunk 选择，Stage/Unstage/Discard Hunk 的支持范围独立。解析同时核对 diff、扩展头和正文端点；重命名两端加入受保护路径集合，反向时翻转现存/缺失角色。Working tree 按磁盘存在性、Index only 按 Index 存在性预检，指纹同时包含目标内容与缺失状态；允许安全创建缺失父目录，拒绝链接、元数据目录及相互覆盖的端点。
 
 导入 Patch 的换行校验在 Application 区分原生 LF 包装和 LF/CRLF 正文，无末尾换行标记不计入内容 EOL。选择及写入保持原始字节。Adapter 校验整个磁盘与 Index 文本的换行一致性，并将实际写入目标的换行与对应文件 Patch 正文绑定；转换属性仍拒绝，检查和写入共享固定 autocrlf=false 的 Git 参数。
+
+按行暂存/取消暂存的请求携带显式选择模式及固定 Hunk 内的改动行 ordinal。Application 引擎按变更块配对旧、新行，保留未选行位置，重算正反方向的范围并拒绝不可表达的无换行组合。Adapter 在同一写锁内重读原生补丁、原始文本和工作区/Index 属性，经 check 与版本复核后只写 Index。UI 缓存不可变的行描述，虚拟列表只维护每个 Hunk 的勾选；不解析 Git 输出或依据编辑器差异坐标写入。
 
 二进制 Patch 通过标准库 zlib 和有界 Git base85 解码校验两方向数据，限制 literal、delta 指令、源与结果尺寸；不自行执行 delta。Adapter 使用有界原始磁盘/Blob 读取计算指纹，文本编辑器仍只接收编码补丁。文件模式保留正反两侧身份，Index only 依当前方向复核 Index 模式；Windows 明确拒绝工作区执行位变更，不能把系统无法表达的模式宣称已写入。
 
@@ -98,3 +102,7 @@ Keep Drafts and Close 通过窄异步 SaveWorkspaceSession 端口在关闭前完
 只在阶段验收、发布、定向验证不足或用户明确要求时运行仓库级检查。未执行的测试、性能和视觉验证明确标记，不用编译成功替代验收。当前执行限制和状态只维护在 [当前清单](docs/current.md)。
 
 项目说明仅维护 README、VELA_SPEC、ARCHITECTURE 和 docs/current 四份 Markdown；保留 IDEA 参考图与许可证。AGENTS.md 是本地工作规则，不纳入提交。不再新增 ADR、分批报告、计划或过程文档；必要的架构变化直接更新本文。
+
+行内 Blame 复用固定 OID 读取端口并携带精确 Blob Text。UI 的显式开关启动 Bootstrap 150ms 活动观察，后台仅排入合并的主线程 tick；View 不启动 IO。缓存身份包含仓库/导航、HEAD、工作树版本、标签、State/Buffer 版本和磁盘版本，先比对 Buffer/HEAD 原始文本，再异步确认磁盘内容及版本；光标移动复用缓存。Inlay 使用锁定版本 editor.State.SetInlays，详情独立固定 OID Log 页，不污染全局 Log 选择；实际关闭窗口取消观察与排队回调。
+
+Shelf 分组为 Application.ShelfGrouping 的有界纯元数据，以稳定 Shelf ID 映射稳定 group ID。repoView 按仓库持有，RepositorySnapshot 可选保存并在捕获/恢复/未加载仓库转存时深复制；Adapter 会话读写验证上限、命名和外键。刷新不裁剪暂不可用条目关联，删除组仅将成员移回默认组。UI 过滤保持原始条目索引及 ID/OID 命令校验，CRUD 不进入 Git 写端口。

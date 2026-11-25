@@ -307,6 +307,7 @@ func (a *Workspace) shelfPanel(c *ui.Context, p tokens) {
 	shelves, r := a.Model.Active().Repository.Shelf, a.repo()
 	heading(c, p, "Shelved Changes", fmt.Sprintf("%d entries", len(shelves)))
 	a.shelfPrompts(c)
+	ui.Row(c).FillWidth().Height(headerHeight).Padding(0, gap).Gap(gap).Children(func() { a.shelfGroupToolbar(c, p) })
 	ui.Row(c).Height(headerHeight).Padding(0, gap).Gap(2).AlignItems(ui.Center).Children(func() {
 		commitIcon(c, expandChanges, "Expand All Shelves").Tooltip("Expand All Shelves").OnClick(func() {
 			for i := range shelves {
@@ -328,7 +329,7 @@ func (a *Workspace) shelfPanel(c *ui.Context, p tokens) {
 		}
 		start := len(rows)
 		for i, entry := range shelves {
-			if entry.Deleted != deleted {
+			if entry.Deleted != deleted || !a.shelfInGroup(entry) {
 				continue
 			}
 			rows = append(rows, shelfRow{entry: i})
@@ -411,6 +412,9 @@ func (a *Workspace) shelfPanel(c *ui.Context, p tokens) {
 				treeChevron(c, p, arrow, expanded)
 			}
 			ui.Text(c, entry.Title).Grow(1).Ellipsis("…")
+			if group := r.shelfGroups.Assignments[entry.ID]; group != "" {
+				ui.Text(c, r.shelfGroups.Name(group)).SingleLine().Ellipsis("…").TextColor(p.theme.TextMuted)
+			}
 		})
 	}).Grow(1).FillWidth().Label("Shelf list").ContextMenu(func(m *ui.Menu) {
 		if r.shelfIndex >= 0 && r.shelfIndex < len(rows) {

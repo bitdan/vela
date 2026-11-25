@@ -10,6 +10,7 @@ type WorkspaceSnapshot struct {
 }
 
 type RepositorySnapshot struct {
+	ShelfGroups                       *ShelfGrouping   `json:",omitempty"`
 	Changelists                       *ChangelistState `json:",omitempty"`
 	WorkingSelection, StagedSelection []string         `json:",omitempty"`
 	Name                              string

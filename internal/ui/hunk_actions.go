@@ -8,6 +8,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -22,6 +23,11 @@ func isHunkCommand(id commandID) bool {
 }
 
 type patchDialog struct {
+	lineMode                 bool
+	lineError                string
+	lineChoices              map[int][]bool
+	lineRows                 map[int][]application.ChangedPatchLine
+	lineList                 ui.ListState
 	open, reading, busy, ack bool
 	id                       commandID
 	snapshot                 domain.Repository
@@ -123,7 +129,17 @@ func (s *patchDialog) updatePreview() {
 	if n < 0 || n >= len(s.doc.Hunks) {
 		return
 	}
-	s.preview = &editor.State{Buffer: editor.NewBuffer(s.doc.Header + s.doc.Hunks[n].Text), ReadOnly: true}
+	raw := s.doc.Header + s.doc.Hunks[n].Text
+	s.lineError = ""
+	if s.lineMode {
+		selected, err := application.SelectPatchLines(s.doc, n, s.chosenLineOrdinals(), s.id == unstageHunk)
+		if err != nil {
+			s.lineError = err.Error()
+		} else {
+			raw = selected
+		}
+	}
+	s.preview = &editor.State{Buffer: editor.NewBuffer(raw), ReadOnly: true}
 	s.shown = s.choice
 }
 
@@ -155,12 +171,16 @@ func (a *Workspace) patchDialogView(c *ui.Context, p tokens) {
 				if s.id == discardHunk {
 					detail = "Permanently discard this working-tree hunk. Other hunks, index and HEAD are kept. This cannot be undone in Vela."
 				}
+				if s.lineMode {
+					detail = "Apply only the checked changed lines to the index. Unchecked changes, working files and HEAD are kept."
+				}
 				ui.Text(c, detail).FillWidth().TextColor(p.theme.TextMuted)
 				if s.reading {
 					ui.Text(c, "Reading Git hunks…")
 				} else if len(s.choices) > 0 {
 					ui.Select(c, &s.choice, s.choices).Label("Git hunk").FillWidth().Disabled(s.busy)
 					s.updatePreview()
+					a.hunkLineControls(c, s)
 					editor.View(c, s.preview).Label("Git patch preview").FillWidth().Grow(1)
 				}
 				if s.id == discardHunk {
@@ -182,8 +202,15 @@ func (a *Workspace) patchDialogView(c *ui.Context, p tokens) {
 						s.open = false
 					}
 				})
-				disabled := s.reading || s.busy || s.doc.Version == "" || s.id == discardHunk && !s.ack || s.snapshot.Root != a.Model.Active().Repository.Root || a.repositoryWrite != ""
-				ui.PrimaryButton(c, s.label()).Label("Run " + s.label()).Disabled(disabled).OnClick(func() { a.applySelectedHunk(s) })
+				reason := a.disabledFor(applyHunkSelection, commandTarget{})
+				label := s.label()
+				if s.lineMode {
+					label = "Stage Selected Lines"
+					if s.id == unstageHunk {
+						label = "Unstage Selected Lines"
+					}
+				}
+				ui.PrimaryButton(c, label).Label("Run " + s.label()).Disabled(reason != "").Tooltip(reason).OnClick(func() { a.run(applyHunkSelection, commandTarget{}) })
 			})
 		})
 	})
@@ -218,6 +245,14 @@ func (a *Workspace) applySelectedHunk(s *patchDialog) {
 		kind = domain.DiscardHunk
 	}
 	op := domain.RepositoryOperation{Kind: kind, Path: s.doc.Path, PatchVersion: s.doc.Version, HunkIndex: n}
+	if s.lineMode {
+		op.SelectPatchLines = true
+		op.PatchLines = s.chosenLineOrdinals()
+		if _, err := application.SelectPatchLines(s.doc, n, op.PatchLines, s.id == unstageHunk); err != nil {
+			s.message = err.Error()
+			return
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	s.cancel = cancel
 	s.busy = true

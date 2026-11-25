@@ -36,6 +36,9 @@ func (a *Workspace) recentRepositoryMenu(m *ui.Menu) {
 func (a *Workspace) restoreRepositorySelections(saved application.RepositorySnapshot) {
 	s := a.Model.Active()
 	r := a.repo()
+	if saved.ShelfGroups != nil {
+		r.shelfGroups = application.CloneShelfGrouping(*saved.ShelfGroups)
+	}
 	s.Message, s.Branch = saved.Message, saved.Branch
 	if saved.Changelists != nil {
 		s.Changelists = application.CloneChangelists(*saved.Changelists)

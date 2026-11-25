@@ -61,3 +61,29 @@ func TestParseBlameRejectsMalformedOutput(t *testing.T) {
 		}
 	}
 }
+
+func TestBlameExactTextAndCanonicalHistory(t *testing.T) {
+	t.Parallel()
+	f := newWorkflow(t)
+	for _, text := range []string{"first\r\nsecond\r\n", "no final newline", ""} {
+		f.write("中文 file.txt", text)
+		f.git("-c", "core.autocrlf=false", "add", ".")
+		f.git("commit", "-m", "original")
+		head := f.git("rev-parse", "HEAD")
+		f.write("中文 file.txt", "replacement\n")
+		f.git("add", ".")
+		f.git("commit", "-m", "replacement")
+		replacement := f.git("rev-parse", "HEAD")
+		f.git("replace", head, replacement)
+		doc, err := f.g.ReadBlame(context.Background(), f.root, head, "中文 file.txt")
+		if err != nil || doc.Text != text {
+			t.Fatalf("exact canonical text %q: %+v %v", text, doc, err)
+		}
+		for _, line := range doc.Lines {
+			if line.Summary == "replacement" {
+				t.Fatal("replace ref changed attribution")
+			}
+		}
+		f.git("replace", "-d", head)
+	}
+}
