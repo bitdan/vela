@@ -79,6 +79,8 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	clearHunkLines: "Clear Changed Lines", selectAllHunkLines: "Select All Changed Lines",
+	toggleHunkLineMode: "Choose Individual Changed Lines", toggleHunkLine: "Toggle Changed Git Line", applyHunkSelection: "Apply Git Hunk Selection",
 	keepDraftsClose: "Keep Drafts and Close", discardDraftsClose: "Discard and Close", cancelDraftClose: "Cancel",
 	previewShelfHunks: "Choose Shelf Hunks", toggleShelfHunk: "Toggle Shelf Hunk", wholeShelfFile: "Restore Whole Shelved File",
 	applyComparisonFilters: "Apply Comparison Filters", clearComparisonFilters: "Clear Comparison Filters",
@@ -127,6 +129,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isHunkLineCommand(id) {
+		return a.hunkLineDisabled(id, target)
+	}
 	if id == keepDraftsClose || id == discardDraftsClose || id == cancelDraftClose {
 		return a.draftCloseDisabled(id)
 	}
@@ -367,6 +372,10 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 
 func (a *Workspace) run(id commandID, target commandTarget) {
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isHunkLineCommand(id) {
+		a.runHunkLine(id, target)
 		return
 	}
 	if id == keepDraftsClose || id == discardDraftsClose || id == cancelDraftClose {

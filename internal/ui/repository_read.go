@@ -37,6 +37,7 @@ func (a *Workspace) chooseRepository() {
 }
 
 func (a *Workspace) loadRepository(directory string, refresh bool) {
+	a.closeIdleHunkDialog()
 	if s := a.repositoryOperation; s != nil {
 		stopRead(&s.shelfHunkRead)
 	}

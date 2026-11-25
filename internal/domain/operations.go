@@ -107,6 +107,8 @@ type RepositoryOperation struct {
 	BisectVersion                  string
 	PatchVersion                   string
 	HunkIndex                      int
+	SelectPatchLines               bool
+	PatchLines                     []int
 	IncludeUntracked, RestoreIndex bool
 }
 

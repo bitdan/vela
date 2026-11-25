@@ -148,6 +148,20 @@ func (g *Executor) applyHunk(ctx context.Context, repo domain.Repository, op dom
 		}
 	}
 	patch := doc.Header + doc.Hunks[op.HunkIndex].Text
+	if op.SelectPatchLines {
+		if op.Kind != domain.StageHunk && op.Kind != domain.UnstageHunk {
+			return errors.New("individual lines support stage and unstage only")
+		}
+		if err := g.validatePartialLineText(ctx, repo, doc); err != nil {
+			return err
+		}
+		patch, err = application.SelectPatchLines(doc, op.HunkIndex, op.PatchLines, op.Kind == domain.UnstageHunk)
+		if err != nil {
+			return err
+		}
+	} else if len(op.PatchLines) != 0 {
+		return errors.New("line selection requires explicit partial-line mode")
+	}
 	args := []string{"-c", "core.autocrlf=false", "-c", "apply.ignoreWhitespace=no", "apply", "--whitespace=nowarn", "-p1"}
 	if op.Kind != domain.DiscardHunk {
 		args = append(args, "--cached")
@@ -164,6 +178,11 @@ func (g *Executor) applyHunk(ctx context.Context, repo domain.Repository, op dom
 	}
 	if latest.Version != doc.Version {
 		return ErrStalePatch
+	}
+	if op.SelectPatchLines {
+		if err := g.validatePartialLineText(ctx, repo, latest); err != nil {
+			return err
+		}
 	}
 	if err = ctx.Err(); err != nil {
 		return err

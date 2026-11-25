@@ -53,6 +53,8 @@ Git Patch 的解析、预检和写入与 MyGo Diff 显示分离。Hunk 写入重
 
 导入 Patch 的换行校验在 Application 区分原生 LF 包装和 LF/CRLF 正文，无末尾换行标记不计入内容 EOL。选择及写入保持原始字节。Adapter 校验整个磁盘与 Index 文本的换行一致性，并将实际写入目标的换行与对应文件 Patch 正文绑定；转换属性仍拒绝，检查和写入共享固定 autocrlf=false 的 Git 参数。
 
+按行暂存/取消暂存的请求携带显式选择模式及固定 Hunk 内的改动行 ordinal。Application 引擎按变更块配对旧、新行，保留未选行位置，重算正反方向的范围并拒绝不可表达的无换行组合。Adapter 在同一写锁内重读原生补丁、原始文本和工作区/Index 属性，经 check 与版本复核后只写 Index。UI 缓存不可变的行描述，虚拟列表只维护每个 Hunk 的勾选；不解析 Git 输出或依据编辑器差异坐标写入。
+
 二进制 Patch 通过标准库 zlib 和有界 Git base85 解码校验两方向数据，限制 literal、delta 指令、源与结果尺寸；不自行执行 delta。Adapter 使用有界原始磁盘/Blob 读取计算指纹，文本编辑器仍只接收编码补丁。文件模式保留正反两侧身份，Index only 依当前方向复核 Index 模式；Windows 明确拒绝工作区执行位变更，不能把系统无法表达的模式宣称已写入。
 
 Shelf 用私有引用保存 stash-compatible 对象，不复用 refs/stash。独立临时 Index 构造选中暂存/工作树，发布快照后才清理工作路径；私有引用通过 CAS 管理。Hunk 选择复用原生 Patch 读取端口，版本绑定 Shelf OID 与仓库/磁盘身份。混合恢复先从 Base 及整文件子集构造临时树，再在临时 Index 应用显式 Hunk；投影 Index 树等于 Base，完整差异必须属于所选路径。只将投影对象传给 git stash apply，原 Shelf 对象仍用于 CAS；不从原暂存树带入未选内容。部分 Unshelve 保留完整原 Shelf；投影树的完整差异必须是显式选择的子集，防止文件/目录替换带入未选路径。恢复可能影响目标侧重命名路径，须锁定相关源编辑器并刷新全部可变视图。
