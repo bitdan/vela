@@ -81,6 +81,7 @@ func (a *Workspace) exitDemo() {
 
 func (a *Workspace) selectRepository(index int) {
 	a.closeIdleHunkDialog()
+	a.closeSquashPreview()
 	if s := a.repositoryOperation; s != nil {
 		stopRead(&s.shelfHunkRead)
 	}

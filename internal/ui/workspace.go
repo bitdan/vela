@@ -32,6 +32,7 @@ type tab struct {
 }
 
 type repoView struct {
+	logChosen                                         ui.Selection[string]
 	historicalChosen                                  ui.Selection[string]
 	historicalSelectionRevision                       string
 	changelistFilter                                  string
@@ -97,6 +98,8 @@ type repoView struct {
 }
 
 type Workspace struct {
+	squash                          *squashDialog
+	PreviewRepositorySquash         func(context.Context, domain.Repository, []string, func(domain.SquashPreview, error))
 	Tasks                           velaruntime.Tasks
 	tasksOpen                       bool
 	taskList                        ui.ListState
@@ -359,6 +362,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.patchDialog != nil {
 		a.patchDialogView(c, p)
+	}
+	if a.squash != nil {
+		a.squashView(c, p)
 	}
 	if a.fileHistory != nil {
 		a.fileHistoryView(c, p)

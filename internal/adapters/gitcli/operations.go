@@ -31,6 +31,8 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return err
 	}
 	switch op.Kind {
+	case domain.SquashCommits:
+		return g.squash(ctx, repo, op)
 	case domain.CheckoutRevision, domain.RestoreRevisionFiles, domain.CherryPickSelected, domain.RevertSelected:
 		return g.historicalOperation(ctx, repo, index, op)
 	case domain.SaveShelf, domain.ApplyShelf, domain.RenameShelf, domain.DeleteShelf, domain.RestoreShelf, domain.PurgeShelf:

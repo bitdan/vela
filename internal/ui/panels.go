@@ -449,10 +449,11 @@ func (a *Workspace) commitLog(c *ui.Context, p tokens) {
 			}
 		}
 		r.log.Selected = &selected
+		r.log.Selection = &r.logChosen
 		r.log.Key = func(i int) any { return history[index(i)].Hash }
 		r.log.Label = func(i int) string { return history[index(i)].Subject }
 		list := ui.List(c, &r.log, count, func(i int) {
-			a.logRow(c, p, history[index(i)], history[0].Timestamp, i, index(i), index(i) == s.Commit, filteredView)
+			a.logRow(c, p, history[index(i)], history[0].Timestamp, i, index(i), index(i) == s.Commit || r.logChosen.Has(history[index(i)].Hash), filteredView)
 		}).Grow(1).FillWidth().ContextMenu(func(m *ui.Menu) {
 			if selected >= 0 && selected < count {
 				a.logMenu(m, index(selected), history[index(selected)])
@@ -529,7 +530,7 @@ func reachableCommits(history []domain.Commit, ref string) []bool {
 
 func (a *Workspace) logRow(c *ui.Context, p tokens, entry domain.Commit, latest time.Time, rowIndex, commitIndex int, selected, filtered bool) {
 	r := a.repo()
-	row := ui.Row(c).FillWidth().Height(rowHeight).Padding(0, gap).Gap(gap).AlignItems(ui.Center)
+	row := ui.Row(c).FillWidth().Height(rowHeight).Padding(0, gap).Gap(gap).AlignItems(ui.Center).Label("Log commit " + entry.Hash)
 	row.ContextMenu(func(m *ui.Menu) { a.logMenu(m, commitIndex, entry) })
 	if rowIndex%2 == 1 && !selected {
 		row.Background(p.stripe)

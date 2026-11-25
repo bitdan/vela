@@ -11,6 +11,22 @@ import (
 )
 
 func connectReadTasks(a *ui.Workspace, invalidate func()) {
+	if original := a.PreviewRepositorySquash; original != nil {
+		a.PreviewRepositorySquash = func(ctx context.Context, repo domain.Repository, selection []string, done func(domain.SquashPreview, error)) {
+			ctx, finish, err := trackTask(a, invalidate, ctx, repo.Root, "Preview Squash", taskKey("PreviewSquash", selection, repo.Head, repo.IndexVersion, repo.WorktreeVersion), time.Minute, nil)
+			if err != nil {
+				done(domain.SquashPreview{}, err)
+				return
+			}
+			original(ctx, repo, selection, func(plan domain.SquashPreview, err error) {
+				if err == nil {
+					err = ctx.Err()
+				}
+				finish(err, "")
+				done(plan, err)
+			})
+		}
+	}
 	originalReviewImportedPatch := a.ReviewImportedPatch
 	a.ReviewImportedPatch = func(ctx context.Context, repo domain.Repository, input domain.ImportedPatch, done func(domain.ImportedPatch, error)) {
 		ctx, finish, err := trackTask(a, invalidate, ctx, repo.Root, "Check Selected Patch", taskKey("ReviewImportedPatch", input.Text, input.Target, input.Reverse, input.Strip, input.Directory, repo.Head, repo.IndexVersion, repo.WorktreeVersion), 2*time.Minute, nil)

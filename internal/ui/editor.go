@@ -160,6 +160,14 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	if s := a.squash; s != nil && s.busy {
+		if s.cancel != nil {
+			s.cancel()
+		}
+		a.status = "Waiting for Squash and repository refresh"
+		return false
+	}
+	a.closeSquashPreview()
 	if a.sessionSave != nil {
 		return false
 	}
