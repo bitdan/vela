@@ -117,7 +117,7 @@ func (a *Workspace) squashDisabled(id commandID, t commandTarget) string {
 	if s.plan.Version == "" || !s.ack {
 		return "Preview and confirm the rewritten range"
 	}
-	if err := application.ValidateSquashMessage(s.message); err != nil {
+	if err := application.ValidateSquashMessage(s.message); s.operationKind() != domain.FixupCommits && err != nil {
 		return err.Error()
 	}
 	return ""
@@ -187,7 +187,7 @@ func (a *Workspace) previewSquash() {
 			return
 		}
 		s.plan = plan
-		if s.message == "" {
+		if s.message == "" || s.operationKind() == domain.FixupCommits {
 			s.message = plan.Message
 		}
 	}
@@ -272,7 +272,7 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 				if s.operationKind() != domain.SquashCommits {
 					messageLabel = "History rewrite message"
 				}
-				ui.TextArea(c, &s.message).Label(messageLabel).Height(150).FillWidth().Disabled(s.busy || s.request != nil)
+				ui.TextArea(c, &s.message).Label(messageLabel).Height(150).FillWidth().Disabled(s.busy || s.request != nil || s.operationKind() == domain.FixupCommits)
 				ui.Text(c, s.title()+" keeps the final file tree. Git may stop during replay; use native Rebase Continue or Abort. Cancellation does not promise rollback.").FillWidth().TextColor(p.theme.TextMuted)
 				ui.Checkbox(c, &s.ack, "Rewrite the selected range and its later commits").Disabled(s.busy || s.request != nil || s.plan.Version == "")
 				if s.problem != "" {

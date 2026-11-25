@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 	"vela/internal/application"
 	"vela/internal/domain"
 )
@@ -17,12 +18,32 @@ func (g *Executor) PreviewCommitRewrite(ctx context.Context, repo domain.Reposit
 	return g.commitRewritePreview(ctx, repo, kind, ids)
 }
 func (g *Executor) commitRewritePreview(ctx context.Context, repo domain.Repository, kind domain.RepositoryOperationKind, ids []string) (domain.CommitRewritePreview, error) {
-	if kind != domain.RewordCommit || len(ids) != 1 {
-		return domain.CommitRewritePreview{}, errors.New("select exactly one commit for message editing")
+	minimum, prefix := 1, "reword:"
+	switch kind {
+	case domain.RewordCommit:
+		if len(ids) != 1 {
+			return domain.CommitRewritePreview{}, errors.New("select exactly one commit for message editing")
+		}
+	case domain.FixupCommits:
+		minimum, prefix = 2, "fixup:"
+	default:
+		return domain.CommitRewritePreview{}, errors.New("unsupported commit rewrite operation")
 	}
-	plan, err := g.commitRangePreview(ctx, repo, ids, 1)
+	plan, err := g.commitRangePreview(ctx, repo, ids, minimum)
+	if err == nil && kind == domain.FixupCommits {
+		raw, e := g.read(ctx, repo.Root, "cat-file", "commit", plan.Selected[len(plan.Selected)-1])
+		err = e
+		if err == nil {
+			_, message, ok := strings.Cut(raw, "\n\n")
+			if !ok || len(message) > 64<<10 || !utf8.ValidString(message) || strings.ContainsRune(message, 0) {
+				err = errors.New("original message is not bounded UTF-8")
+			} else {
+				plan.Message = message
+			}
+		}
+	}
 	if err == nil {
-		plan.Version = "reword:" + plan.Version
+		plan.Version = prefix + plan.Version
 	}
 	return plan, err
 }
@@ -31,7 +52,7 @@ func (g *Executor) rewriteCommit(ctx context.Context, repo domain.Repository, op
 	if !op.ConfirmRewrite {
 		return errors.New("confirm the commit and rewritten descendants")
 	}
-	if err := application.ValidateSquashMessage(op.Message); err != nil {
+	if err := application.ValidateSquashMessage(op.Message); op.Kind == domain.RewordCommit && err != nil {
 		return err
 	}
 	plan, err := g.commitRewritePreview(ctx, repo, op.Kind, op.RewriteSelection)
@@ -46,7 +67,11 @@ func (g *Executor) rewriteCommit(ctx context.Context, repo domain.Repository, op
 	if plan.Parent != "" {
 		args = append(args, "-p", plan.Parent)
 	}
-	out, err := g.runInputWithEnv(ctx, repo.Root, op.Message+"\n", []string{"GIT_AUTHOR_NAME=" + plan.Author, "GIT_AUTHOR_EMAIL=" + plan.AuthorEmail, "GIT_AUTHOR_DATE=" + plan.AuthorDate}, args...)
+	message := op.Message + "\n"
+	if op.Kind == domain.FixupCommits {
+		message = plan.Message
+	}
+	out, err := g.runInputWithEnv(ctx, repo.Root, message, []string{"GIT_AUTHOR_NAME=" + plan.Author, "GIT_AUTHOR_EMAIL=" + plan.AuthorEmail, "GIT_AUTHOR_DATE=" + plan.AuthorDate}, args...)
 	if err != nil {
 		return operationError(ctx, out, err)
 	}

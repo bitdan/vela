@@ -63,6 +63,7 @@ const (
 	RevertSelected
 	SquashCommits
 	RewordCommit
+	FixupCommits
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.

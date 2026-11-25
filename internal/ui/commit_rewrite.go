@@ -2,6 +2,7 @@ package ui
 
 import (
 	"slices"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -18,6 +19,9 @@ func (s *squashDialog) operationKind() domain.RepositoryOperationKind {
 	return s.kind
 }
 func (s *squashDialog) title() string {
+	if s.operationKind() == domain.FixupCommits {
+		return "Fixup Selected Commits"
+	}
 	if s.operationKind() == domain.RewordCommit {
 		return "Edit Commit Message"
 	}
@@ -28,10 +32,14 @@ func (a *Workspace) openCommitRewrite(id commandID, t commandTarget) {
 	if !ok {
 		return
 	}
-	a.squash = &squashDialog{kind: domain.RewordCommit, selection: []string{commit.Hash}}
+	kind, ids := domain.RewordCommit, []string{commit.Hash}
+	if id == fixupCommit {
+		kind, ids = domain.FixupCommits, slices.Sorted(a.repo().logChosen.All())
+	}
+	a.squash = &squashDialog{kind: kind, selection: ids}
 	a.previewSquash()
 }
-func rewriteEntryCommand(id commandID) bool { return id == editCommit }
+func rewriteEntryCommand(id commandID) bool { return id == editCommit || id == fixupCommit }
 func (a *Workspace) rewriteEntryDisabled(id commandID, t commandTarget) string {
 	if a.PreviewCommitRewrite == nil {
 		return "Commit rewrite preview is unavailable"
@@ -47,6 +55,15 @@ func (a *Workspace) rewriteEntryDisabled(id commandID, t commandTarget) string {
 		return "Select one loaded commit"
 	}
 	ids := slices.Sorted(a.repo().logChosen.All())
+	if id == fixupCommit {
+		if t.source != "" && !a.repo().logChosen.Has(t.source) {
+			return "Select the continuous commit range in Log first"
+		}
+		if err := application.ValidateSquashSelection(ids); err != nil {
+			return err.Error()
+		}
+		return ""
+	}
 	if len(ids) > 1 {
 		return "Select exactly one commit"
 	}
