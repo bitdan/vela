@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -57,12 +58,8 @@ func (a *Workspace) shelfSelection(t commandTarget) []string {
 	var paths []string
 	for _, f := range files {
 		paths = append(paths, f.Path)
-		if f.OldPath != "" {
-			paths = append(paths, f.OldPath)
-		}
 	}
-	slices.Sort(paths)
-	return slices.Compact(paths)
+	return application.ShelfSavePaths(a.Model.Active().Repository, paths)
 }
 
 func (a *Workspace) realShelfDisabled(id commandID, t commandTarget) string {
@@ -90,7 +87,7 @@ func (a *Workspace) realShelfDisabled(id commandID, t commandTarget) string {
 			return "Create a commit before shelving"
 		}
 		paths := a.shelfSelection(t)
-		if len(paths) == 0 || len(paths) > 100 {
+		if len(paths) == 0 || len(paths) > application.ShelfPathLimit {
 			return "Select 1 to 100 tracked changed paths"
 		}
 		for _, path := range paths {

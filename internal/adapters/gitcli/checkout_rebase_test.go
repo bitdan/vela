@@ -53,6 +53,13 @@ func TestCheckoutRebaseDirectionAndRecovery(t *testing.T) {
 					t.Fatal("accepted changed target")
 				}
 				f.git("update-ref", op.Source, topic)
+				f.git("branch", "unselected", topic)
+				f.git("symbolic-ref", op.Source, "refs/heads/unselected")
+				if err := f.g.ExecuteRepositoryOperation(ctx, r, op); err == nil || f.git("branch", "--show-current") != base {
+					t.Fatal("accepted a symbolic replacement for the selected reference")
+				}
+				f.git("symbolic-ref", "--delete", op.Source)
+				f.git("update-ref", op.Source, topic)
 				f.write("中文 conflict.txt", "dirty\n")
 				if err := run(); err == nil || f.git("branch", "--show-current") != base {
 					t.Fatal("checked out over dirty files")

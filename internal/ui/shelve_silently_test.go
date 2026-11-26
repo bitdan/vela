@@ -69,3 +69,27 @@ func TestShelveSilentlyNativeDispatch(t *testing.T) {
 		})
 	}
 }
+
+func TestShelveSilentlyProtectsRenameSourceBuffer(t *testing.T) {
+	a := New(application.New(), application.DefaultLayout())
+	repo := sessionRepository(t.TempDir())
+	repo.IndexVersion = "index"
+	f := domain.File{Path: "new name.txt", Status: "M"}
+	repo.Working = []domain.File{f}
+	repo.Staged = []domain.File{{Path: f.Path, OldPath: "old name.txt", Status: "R"}}
+	a.Model.Switch(a.installRepository(repo))
+	a.OperateRepository = func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error)) {
+		t.Fatal("shelf began with the rename source editor dirty")
+	}
+	a.openCode("project", domain.File{Path: "old name.txt", New: "base", DiskVersion: "disk"})
+	a.activeDocument().code.Buffer.Set("unsaved")
+	target := commandTarget{source: "working", file: f}
+	for _, id := range []commandID{shelveSilently, shelve} {
+		if reason := a.disabledFor(id, target); !strings.Contains(reason, "unsaved") {
+			t.Fatalf("dirty rename source did not disable %s: %q", id, reason)
+		}
+	}
+	if got := a.shelfSelection(target); !slices.Equal(got, []string{"new name.txt", "old name.txt"}) {
+		t.Fatalf("shelf and editor refresh would miss a rename endpoint: %v", got)
+	}
+}

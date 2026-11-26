@@ -35,13 +35,35 @@ func (g *Executor) checkoutRebase(ctx context.Context, repo domain.Repository, i
 		return err
 	}
 	checkAncestry := func() error {
-		if _, err := os.Lstat(filepath.Join(repo.CommonDir, "info", "grafts")); !errors.Is(err, os.ErrNotExist) {
+		gitDir, err := g.gitDirectory(ctx, repo.Root)
+		if err != nil {
+			return err
+		}
+		common, err := g.read(ctx, repo.Root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+		if err != nil {
+			return err
+		}
+		common = filepath.Clean(strings.TrimSuffix(common, "\n"))
+		if repo.GitDir != gitDir || repo.CommonDir != common {
+			return ErrStaleIndex
+		}
+		if _, err := os.Lstat(filepath.Join(common, "info", "grafts")); !errors.Is(err, os.ErrNotExist) {
 			if err != nil {
 				return err
 			}
 			return errors.New("rebase requires history without legacy Git grafts")
 		}
-		return checkLogBoundary(repo.CommonDir, repo.LogSnapshot.Boundary)
+		return checkLogBoundary(common, repo.LogSnapshot.Boundary)
+	}
+	targetTip := func() (string, error) {
+		ref, err := g.run(ctx, repo.Root, "symbolic-ref", "--quiet", op.Source)
+		if err == nil {
+			return "", ErrStaleIndex
+		}
+		if ref.exitCode != 1 || ctx.Err() != nil {
+			return "", err
+		}
+		return g.resolveSource(ctx, repo, op.Source)
 	}
 	if err := checkAncestry(); err != nil {
 		return err
@@ -53,12 +75,15 @@ func (g *Executor) checkoutRebase(ctx context.Context, repo domain.Repository, i
 	if strings.TrimSpace(shallow) != "false" {
 		return errors.New("rebase requires complete history")
 	}
-	tip, err := g.resolveSource(ctx, repo, op.Source)
+	tip, err := targetTip()
 	if err != nil {
 		return err
 	}
-	if _, err := g.read(ctx, repo.Root, "merge-base", repo.Head, tip); err != nil {
-		return errors.New("branches must share an ancestor")
+	if out, err := g.run(ctx, repo.Root, "merge-base", repo.Head, tip); err != nil {
+		if out.exitCode == 1 && ctx.Err() == nil {
+			return errors.New("branches must share an ancestor")
+		}
+		return err
 	}
 	rangeArg := repo.Head + ".." + tip
 	merges, err := g.read(ctx, repo.Root, "rev-list", "--merges", "--max-count=1", rangeArg)
@@ -94,7 +119,7 @@ func (g *Executor) checkoutRebase(ctx context.Context, repo domain.Repository, i
 	if _, _, err := g.verifyCheckout(ctx, repo); err != nil {
 		return err
 	}
-	if _, err := g.resolveSource(ctx, repo, op.Source); err != nil {
+	if _, err := targetTip(); err != nil {
 		return err
 	}
 	if err := checkAncestry(); err != nil {
