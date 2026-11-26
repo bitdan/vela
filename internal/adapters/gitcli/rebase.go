@@ -132,19 +132,9 @@ func (g *Executor) runRebase(ctx context.Context, root string, args ...string) e
 // Git can overwrite ignored paths when switching to the new base. Inspect the
 // untracked paths without exclusions before the worktree can change.
 func (g *Executor) protectWorktreePaths(ctx context.Context, root, original, onto string) error {
-	untracked, err := g.read(ctx, root, "ls-files", "--others", "-z")
-	if err != nil || untracked == "" {
+	guard, err := g.checkoutPathGuard(ctx, root)
+	if err != nil || guard == nil {
 		return err
-	}
-	paths := make(map[string]bool)
-	parents := make(map[string]bool)
-	for _, row := range nulFields(untracked) {
-		path := rebasePathKey(strings.TrimSuffix(row, "/"))
-		paths[path] = true
-		for parent := path; strings.Contains(parent, "/"); {
-			parent = parent[:strings.LastIndexByte(parent, '/')]
-			parents[parent] = true
-		}
 	}
 	for _, args := range [][]string{
 		{"ls-tree", "-rz", "--name-only", original},
@@ -156,16 +146,39 @@ func (g *Executor) protectWorktreePaths(ctx context.Context, root, original, ont
 			return err
 		}
 		for _, path := range nulFields(affected) {
-			key := rebasePathKey(path)
-			if paths[key] || parents[key] {
-				return fmt.Errorf("move untracked or ignored files at %q before running this operation", path)
-			}
-			if err := rejectDirectoryPath(paths, key); err != nil {
-				return fmt.Errorf("move the untracked path before running this operation: %w", err)
+			if err := guard(path); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (g *Executor) checkoutPathGuard(ctx context.Context, root string) (func(string) error, error) {
+	untracked, err := g.read(ctx, root, "ls-files", "--others", "-z")
+	if err != nil || untracked == "" {
+		return nil, err
+	}
+	paths := make(map[string]bool)
+	parents := make(map[string]bool)
+	for _, row := range nulFields(untracked) {
+		path := rebasePathKey(strings.TrimSuffix(row, "/"))
+		paths[path] = true
+		for parent := path; strings.Contains(parent, "/"); {
+			parent = parent[:strings.LastIndexByte(parent, '/')]
+			parents[parent] = true
+		}
+	}
+	return func(path string) error {
+		key := rebasePathKey(path)
+		if paths[key] || parents[key] {
+			return fmt.Errorf("move untracked or ignored files at %q before running this operation", path)
+		}
+		if err := rejectDirectoryPath(paths, key); err != nil {
+			return fmt.Errorf("move the untracked path before running this operation: %w", err)
+		}
+		return nil
+	}, nil
 }
 
 func rebasePathKey(path string) string {

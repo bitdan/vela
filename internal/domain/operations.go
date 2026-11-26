@@ -80,6 +80,8 @@ type SequencerState struct {
 
 func (s SequencerState) Active() bool { return s.Kind != "" }
 
+const MaxSequenceRecovery = 100
+
 type RebaseState struct {
 	Branch, Original, Onto, Stopped, Step string
 }

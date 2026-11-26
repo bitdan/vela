@@ -61,7 +61,7 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 		return "Save or discard unsaved source documents before resetting"
 	}
 	switch id {
-	case continueMerge, abortMerge, continueRebase, skipRebase, abortRebase:
+	case continueMerge, abortMerge, continueRebase, skipRebase, abortRebase, continueSequence, skipSequence, abortSequence:
 		if a.updateDirtyBuffer(repo.Root) {
 			return "Save or discard unsaved source documents before continuing or aborting"
 		}
@@ -181,8 +181,8 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 		if !repo.Sequencer.Active() {
 			return "No cherry-pick or revert is in progress"
 		}
-		if id != abortSequence && repo.Sequencer.Remaining > 1 {
-			return "Continue or skip this multi-commit sequence using Git"
+		if id != abortSequence && repo.Sequencer.Remaining > domain.MaxSequenceRecovery {
+			return "Continue or skip sequences longer than 100 commits using Git"
 		}
 		if id == continueSequence && len(repo.Conflicts) > 0 {
 			return "Resolve all conflicted files"
@@ -470,7 +470,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		return
 	}
 	switch s.op.Kind {
-	case domain.ContinueMerge, domain.AbortMerge, domain.ContinueRebase, domain.SkipRebase, domain.AbortRebase:
+	case domain.ContinueMerge, domain.AbortMerge, domain.ContinueRebase, domain.SkipRebase, domain.AbortRebase, domain.ContinueSequence, domain.SkipSequence, domain.AbortSequence:
 		if a.updateDirtyBuffer(s.root) {
 			s.message = "Save or discard unsaved source documents before continuing or aborting"
 			return
@@ -504,7 +504,8 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		return
 	}
 	restoreEditors := func() {}
-	if s.op.Kind == domain.SaveShelf || s.op.Kind == domain.ApplyShelf || s.op.Kind == domain.CheckoutRebase || s.op.Kind == domain.CheckoutUpdate {
+	if s.op.Kind == domain.SaveShelf || s.op.Kind == domain.ApplyShelf || s.op.Kind == domain.CheckoutRebase || s.op.Kind == domain.CheckoutUpdate ||
+		s.op.Kind == domain.ContinueSequence || s.op.Kind == domain.SkipSequence || s.op.Kind == domain.AbortSequence {
 		restoreEditors = a.lockShelfEditors()
 	}
 	ctx, cancel := context.WithCancel(context.Background())

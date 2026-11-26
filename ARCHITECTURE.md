@@ -43,6 +43,8 @@ Toolbar、菜单、右键菜单、快捷键和 Actions 共用稳定 Command ID�
 
 同一仓库写操作串行化，涉及共享引用时必须考虑 CommonDir。内部锁不能阻止外部 Git；每次写前重新检查仓库身份、HEAD、Index、工作区、操作元数据和目标 ref。保护未跟踪/忽略文件、未保存 Buffer、链接及 Git 元数据，不使用 force 或 reject 静默降级。
 
+Git CLI 读取外部暂停序列时，用操作标记和 sequencer 文件内容绑定恢复快照。Continue/Skip 使用固定提交对象的有界 Git 路径查询检查余下步骤，UI 只展示原生状态，不执行或改写待办。多 URL 编辑验证配置来源，在 Git 原生 config.lock 下准备两列，遵循单次发布。
+
 Squash 以独立窄预览端口返回固定选择、后续单父链、作者及不透明版本；版本绑定当前仓库、HEAD/Index/工作区和已知远端跟踪引用。合并对象复用所选最新提交的完整 tree、最早提交的父节点与作者，再次校验后发布。末尾范围使用 update-ref CAS，中间范围使用原生 rebase --onto 并禁用自动暂存、自动更新其他引用及自动 Squash；保留原生冲突/继续/中止元数据。正常完成核对原 HEAD tree；UI 保护源文档并刷新其磁盘版本，不能把失败或取消描述为自动回滚。
 
 历史链路按固定对象读取；canonicalHistory 禁止 replace 对象改变读取语义，并检查 shallow/grafts 祖先边界。工作快照通过版本指纹拒绝过期预览，不能把旧内容当作当前磁盘事实。
