@@ -31,10 +31,18 @@ func (g *Executor) commitRewritePreview(ctx context.Context, repo domain.Reposit
 			return domain.CommitRewritePreview{}, errors.New("select exactly one commit to drop")
 		}
 		prefix = "drop:"
+	case domain.UndoCommit:
+		if len(ids) != 1 || ids[0] != repo.Head {
+			return domain.CommitRewritePreview{}, errors.New("select the latest commit on the current branch to undo")
+		}
+		prefix = "undo:"
 	default:
 		return domain.CommitRewritePreview{}, errors.New("unsupported commit rewrite operation")
 	}
 	plan, err := g.commitRangePreview(ctx, repo, ids, minimum)
+	if err == nil && kind == domain.UndoCommit && plan.Parent == "" {
+		return plan, errors.New("undo requires a commit with one parent")
+	}
 	if err == nil && kind == domain.DropCommit {
 		if plan.Parent == "" {
 			return plan, errors.New("dropping a root commit is not supported")
@@ -75,6 +83,9 @@ func (g *Executor) rewriteCommit(ctx context.Context, repo domain.Repository, op
 	}
 	if op.Kind == domain.DropCommit {
 		return g.dropSelectedCommit(ctx, repo, op, plan)
+	}
+	if op.Kind == domain.UndoCommit {
+		return g.runOperation(ctx, repo.Root, "update-ref", "-m", "vela: undo commit", "refs/heads/"+repo.CurrentBranch, plan.Parent, repo.Head)
 	}
 	application.ReportTaskProgress(ctx, "Creating rewritten commit")
 	args := []string{"commit-tree", plan.SelectedTree}
