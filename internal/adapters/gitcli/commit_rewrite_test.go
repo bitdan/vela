@@ -3,11 +3,49 @@ package gitcli
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"vela/internal/application"
 	"vela/internal/domain"
 )
+
+func TestRewordRejectsGraftedAncestry(t *testing.T) {
+	f, ids := squashFixture(t)
+	ctx := context.Background()
+	repo := f.read()
+	selection := ids[4:]
+	preview, err := f.g.PreviewCommitRewrite(ctx, repo, domain.RewordCommit, selection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grafts := filepath.Join(repo.CommonDir, "info", "grafts")
+	if err := os.WriteFile(grafts, []byte(repo.Head+" "+ids[0]+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before := f.git("write-tree")
+	if _, err := f.g.PreviewCommitRewrite(ctx, f.read(), domain.RewordCommit, selection); err == nil {
+		t.Error("accepted grafted ancestry during preview")
+	}
+	op := domain.RepositoryOperation{Kind: domain.RewordCommit, RewriteSelection: selection, RewriteVersion: preview.Version, ConfirmRewrite: true, Message: "changed"}
+	if err := f.g.ExecuteRepositoryOperation(ctx, repo, op); err == nil {
+		t.Error("accepted grafted ancestry after confirmation")
+	}
+	if f.git("rev-parse", "HEAD") != repo.Head || f.git("write-tree") != before || len(f.read().Working) != 0 {
+		t.Fatal("rejected rewrite changed HEAD, index or working files")
+	}
+}
+
+func TestRewordRejectsOptionLikeCurrentBranch(t *testing.T) {
+	f, ids := squashFixture(t)
+	f.git("update-ref", "refs/heads/-i", ids[4])
+	f.git("symbolic-ref", "HEAD", "refs/heads/-i")
+	_, err := f.g.PreviewCommitRewrite(context.Background(), f.read(), domain.RewordCommit, ids[1:2])
+	if err == nil || !strings.Contains(err.Error(), "valid branch name") {
+		t.Fatalf("preview did not reject option-like branch: %v", err)
+	}
+}
 
 func TestRewordPreservesTreeAuthorAndDescendants(t *testing.T) {
 	for _, n := range []int{0, 1, 4} {

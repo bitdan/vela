@@ -108,7 +108,7 @@ func (g *Executor) rewriteCommit(ctx context.Context, repo domain.Repository, op
 			return err
 		}
 		application.ReportTaskProgress(ctx, "Replaying later commits")
-		err = g.runRebase(ctx, repo.Root, "--merge", "--no-autostash", "--no-update-refs", "--no-autosquash", "--no-rebase-merges", "--no-fork-point", "--no-rerere-autoupdate", "--reapply-cherry-picks", "--keep-empty", "--empty=stop", "--onto", target, plan.Selected[0], repo.CurrentBranch)
+		err = g.runRebase(ctx, repo.Root, "--merge", "--no-autostash", "--no-update-refs", "--no-autosquash", "--no-rebase-merges", "--no-fork-point", "--no-rerere-autoupdate", "--reapply-cherry-picks", "--keep-empty", "--empty=stop", "--onto", target, "--", plan.Selected[0], repo.CurrentBranch)
 	}
 	if err != nil {
 		return err

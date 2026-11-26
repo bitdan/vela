@@ -20,7 +20,7 @@ func (g *Executor) dropSelectedCommit(ctx context.Context, repo domain.Repositor
 		return errors.New("Drop preview changed; no commit was removed")
 	}
 	application.ReportTaskProgress(ctx, "Dropping selected commit")
-	err = g.runRebase(ctx, repo.Root, "--merge", "--no-autostash", "--no-update-refs", "--no-autosquash", "--no-rebase-merges", "--no-fork-point", "--no-rerere-autoupdate", "--reapply-cherry-picks", "--keep-empty", "--empty=stop", "--onto", plan.Parent, plan.Selected[0], repo.CurrentBranch)
+	err = g.runRebase(ctx, repo.Root, "--merge", "--no-autostash", "--no-update-refs", "--no-autosquash", "--no-rebase-merges", "--no-fork-point", "--no-rerere-autoupdate", "--reapply-cherry-picks", "--keep-empty", "--empty=stop", "--onto", plan.Parent, "--", plan.Selected[0], repo.CurrentBranch)
 	if err != nil {
 		return err
 	}

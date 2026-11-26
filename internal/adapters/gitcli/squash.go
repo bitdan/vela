@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -40,6 +41,9 @@ func (g *Executor) commitRangePreview(ctx context.Context, repo domain.Repositor
 	if repo.Head == "" || repo.CurrentBranch == "Detached HEAD" || repo.Bisect.Active() {
 		return plan, errors.New("check out a local branch outside Bisect")
 	}
+	if err := g.checkBranchName(ctx, repo.Root, repo.CurrentBranch); err != nil {
+		return plan, err
+	}
 	_, index, err := g.verifyCheckout(ctx, repo)
 	if err != nil {
 		return plan, err
@@ -55,8 +59,21 @@ func (g *Executor) commitRangePreview(ctx context.Context, repo domain.Repositor
 	if err != nil {
 		return plan, err
 	}
-	if gitDir != repo.GitDir || filepath.Clean(strings.TrimSpace(common)) != repo.CommonDir {
-		return plan, errors.New("repository metadata changed; refresh before Squash")
+	common = filepath.Clean(strings.TrimSuffix(common, "\n"))
+	if gitDir != repo.GitDir || common != repo.CommonDir {
+		return plan, errors.New("repository metadata changed; refresh before rewriting commits")
+	}
+	checkAncestry := func() error {
+		if _, err := os.Lstat(filepath.Join(common, "info", "grafts")); !errors.Is(err, os.ErrNotExist) {
+			if err != nil {
+				return fmt.Errorf("inspect legacy Git grafts: %w", err)
+			}
+			return errors.New("commit rewrites require complete ancestry without legacy Git grafts")
+		}
+		return checkLogBoundary(common, repo.LogSnapshot.Boundary)
+	}
+	if err := checkAncestry(); err != nil {
+		return plan, err
 	}
 	if err := g.rejectHiddenIndexFlags(ctx, repo.Root); err != nil {
 		return plan, err
@@ -165,6 +182,9 @@ func (g *Executor) commitRangePreview(ctx context.Context, repo domain.Repositor
 	if _, _, err := g.verifyCheckout(ctx, repo); err != nil {
 		return plan, err
 	}
+	if err := checkAncestry(); err != nil {
+		return plan, err
+	}
 	plan.Version = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s", repo.Root, repo.Head, repo.IndexVersion, repo.WorktreeVersion, strings.Join(plan.Selected, "\x00"), strings.Join(plan.Replay, "\x00"), refs))))
 	return plan, ctx.Err()
 }
@@ -212,7 +232,7 @@ func (g *Executor) squash(ctx context.Context, repo domain.Repository, op domain
 			return err
 		}
 		application.ReportTaskProgress(ctx, "Replaying later commits")
-		err = g.runRebase(ctx, repo.Root, "--merge", "--no-autostash", "--no-update-refs", "--no-autosquash", "--no-rebase-merges", "--no-fork-point", "--no-rerere-autoupdate", "--reapply-cherry-picks", "--keep-empty", "--empty=stop", "--onto", squashed, plan.Selected[0], repo.CurrentBranch)
+		err = g.runRebase(ctx, repo.Root, "--merge", "--no-autostash", "--no-update-refs", "--no-autosquash", "--no-rebase-merges", "--no-fork-point", "--no-rerere-autoupdate", "--reapply-cherry-picks", "--keep-empty", "--empty=stop", "--onto", squashed, "--", plan.Selected[0], repo.CurrentBranch)
 	}
 	if err != nil {
 		return err

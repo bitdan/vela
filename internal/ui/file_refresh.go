@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"strings"
 	"time"
 
@@ -88,7 +90,8 @@ func (a *Workspace) refreshOpenFileViews(root, path string) {
 			}
 			delete(a.sourceRefreshes, key)
 			cancel()
-			if err != nil || file.Path != path {
+			missing := source == "project" && errors.Is(err, fs.ErrNotExist)
+			if !missing && (err != nil || file.Path != path) {
 				if err != nil {
 					message := "Could not refresh open file · " + path + " · " + err.Error()
 					for i, s := range a.Model.Sessions {
@@ -127,6 +130,14 @@ func (a *Workspace) refreshOpenFileViews(root, path string) {
 						}
 						if !matched || buffer.Modified() {
 							return
+						}
+						if missing {
+							entry.code.ReadOnly = true
+							entry.file.DiskVersion = ""
+							return
+						}
+						if entry.file.DiskVersion == "" {
+							entry.code.ReadOnly = a.SaveRepositoryFile == nil || file.DiskVersion == ""
 						}
 						if entry.document != nil {
 							entry.document.draftBase = nil
