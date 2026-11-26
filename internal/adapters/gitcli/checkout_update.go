@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"vela/internal/application"
 	"vela/internal/domain"
@@ -62,6 +64,11 @@ func (g *Executor) checkoutUpdate(ctx context.Context, repo domain.Repository, i
 	}
 	application.ReportTaskProgress(ctx, "Checking out "+op.Branch)
 	if err := g.changeBranch(ctx, repo, index, domain.RepositoryOperation{Kind: domain.CheckoutBranch, Source: ref}); err != nil {
+		inspect, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if branch, readErr := g.read(inspect, repo.Root, "symbolic-ref", "--quiet", "HEAD"); readErr == nil && strings.TrimSuffix(branch, "\n") == ref {
+			return fmt.Errorf("Checked out %s; Update stopped: %w", op.Branch, err)
+		}
 		return err
 	}
 	updated, err := g.ReadRepository(ctx, repo.Root)

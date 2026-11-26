@@ -95,11 +95,11 @@ func (g *Executor) manageRemote(ctx context.Context, repo domain.Repository, op 
 	if op.Kind == domain.EditRemoteURLs {
 		return g.editRemoteURLs(ctx, repo, op, configPath, local.stdout)
 	}
-	fetch, err := g.read(ctx, repo.Root, "config", "--null", "--get-all", "remote."+op.Remote+".fetch")
-	if err != nil {
+	fetch, err := g.run(ctx, repo.Root, "config", "--null", "--get-all", "remote."+op.Remote+".fetch")
+	if err != nil && (op.Kind != domain.RenameRemote || fetch.exitCode != 1 || ctx.Err() != nil) {
 		return err
 	}
-	for _, spec := range nulFields(fetch) {
+	for _, spec := range nulFields(fetch.stdout) {
 		if strings.TrimPrefix(spec, "+") != "refs/heads/*:refs/remotes/"+op.Remote+"/*" {
 			return errors.New("this remote has custom fetch mappings; use Git after reviewing their refs")
 		}

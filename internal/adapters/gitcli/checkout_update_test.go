@@ -40,6 +40,17 @@ func TestCheckoutUpdateFastForwardsOnlySelectedBranch(t *testing.T) {
 	}
 	git("checkout", "other")
 	git("update-ref", "refs/heads/topic", base)
+	hook := filepath.Join(read().GitDir, "hooks", "post-checkout")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.ExecuteRepositoryOperation(ctx, read(), op); err == nil || !strings.Contains(err.Error(), "Checked out topic") || git("branch", "--show-current") != "topic" {
+		t.Fatalf("checkout hook failure hid the already completed switch: %v", err)
+	}
+	if err := os.Remove(hook); err != nil {
+		t.Fatal(err)
+	}
+	git("checkout", "other")
 	if err := g.ExecuteRepositoryOperation(ctx, read(), op); err != nil {
 		t.Fatal(err)
 	}

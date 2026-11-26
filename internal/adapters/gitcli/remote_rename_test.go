@@ -25,10 +25,24 @@ func TestRemoteRenamePreservesTrackingAndRejectsStaleRefs(t *testing.T) {
 	if err := f.g.ExecuteRepositoryOperation(ctx, r, bad); err == nil {
 		t.Fatal("accepted duplicate remote")
 	}
+	bad.Target = "team."
+	if err := f.g.ExecuteRepositoryOperation(ctx, r, bad); err == nil || f.git("remote", "get-url", "origin") != "https://example.test/source.git" {
+		t.Fatal("invalid tracking namespace allowed a partial rename")
+	}
 	f.git("update-ref", "refs/remotes/origin/new", head)
 	if err := f.g.ExecuteRepositoryOperation(ctx, r, op); err == nil {
 		t.Fatal("accepted stale tracking refs")
 	}
+	f.git("symbolic-ref", "refs/remotes/team/HEAD", "refs/remotes/team/missing")
+	if err := f.g.ExecuteRepositoryOperation(ctx, f.read(), op); err == nil || f.git("remote", "get-url", "origin") != "https://example.test/source.git" {
+		t.Fatal("dangling destination reference allowed a partial rename")
+	}
+	f.git("symbolic-ref", "--delete", "refs/remotes/team/HEAD")
+	f.git("symbolic-ref", "refs/remotes/origin/foreign", "refs/heads/"+branch)
+	if err := f.g.ExecuteRepositoryOperation(ctx, f.read(), op); err == nil || f.git("remote", "get-url", "origin") != "https://example.test/source.git" {
+		t.Fatal("foreign symbolic reference allowed a partial rename")
+	}
+	f.git("symbolic-ref", "--delete", "refs/remotes/origin/foreign")
 	if err := f.g.ExecuteRepositoryOperation(ctx, f.read(), op); err != nil {
 		t.Fatal(err)
 	}

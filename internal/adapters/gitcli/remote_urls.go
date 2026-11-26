@@ -126,6 +126,11 @@ func (g *Executor) editRemoteURLs(ctx context.Context, repo domain.Repository, o
 	if err := errors.Join(fd.Sync(), fd.Close()); err != nil {
 		return err
 	}
+	if version, err := g.remoteManagementVersion(ctx, repo.Root); err != nil {
+		return err
+	} else if version != repo.RemoteManagementVersion {
+		return ErrStaleIndex
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
