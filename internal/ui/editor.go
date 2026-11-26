@@ -203,6 +203,7 @@ func (a *Workspace) RequestClose() bool {
 	stopRead(&a.sessionRestore)
 	stopRead(&a.repositoryFileRead)
 	a.stopSourceRefreshes()
+	a.closeLineHistory()
 	a.closeFileHistoryDialog()
 	a.stopPatchExports()
 	a.stopSourceDecision()
@@ -381,7 +382,9 @@ func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 				a.menu(m, saveSourceFile, commandTarget{tabID: entry.id})
 				a.menu(m, reloadProjectFile, commandTarget{tabID: entry.id})
 			}
-			m.Submenu("Git", func(g *ui.Menu) { a.editorGitMenu(g, commandTarget{source: entry.source, file: entry.file}) })
+			m.Submenu("Git", func(g *ui.Menu) {
+				a.editorGitMenu(g, commandTarget{tabID: entry.id, editorState: entry.code, source: entry.source, file: entry.file})
+			})
 		}
 		view := editor.View(c.Key(entry.id), entry.code).Label("Source editor").Grow(1).FillWidth()
 		if a.searchFocus == entry.code {

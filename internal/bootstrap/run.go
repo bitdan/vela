@@ -65,6 +65,7 @@ func run(layoutPath string) error {
 	var patchReader application.RepositoryPatchReader = git
 	var squashReader application.RepositorySquashReader = git
 	var rewriteReader application.RepositoryCommitRewriteReader = git
+	var lineReader application.RepositoryLineHistoryReader = git
 	var fileHistoryReader application.RepositoryFileHistoryReader = git
 	var patchExporter application.RepositoryPatchExporter = git
 	var patchImporter application.RepositoryPatchImporter = git
@@ -259,6 +260,12 @@ func run(layoutPath string) error {
 			go func() {
 				doc, err := patchReader.ReadPatch(ctx, repo, source, path)
 				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
+			}()
+		}
+		workspace.ReadLineHistory = func(ctx context.Context, repo domain.Repository, q domain.LineHistoryQuery, done func(domain.LineHistoryPage, error)) {
+			go func() {
+				page, err := lineReader.ReadLineHistory(ctx, repo, q)
+				mygo.RunOnMain(func() { done(page, err); window.Invalidate() })
 			}()
 		}
 		workspace.PreviewCommitRewrite = func(ctx context.Context, repo domain.Repository, kind domain.RepositoryOperationKind, selection []string, done func(domain.CommitRewritePreview, error)) {

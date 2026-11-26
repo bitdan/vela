@@ -110,3 +110,5 @@ Shelf 分组为 Application.ShelfGrouping 的有界纯元数据，以稳定 Shel
 提交消息编辑通过 RepositoryCommitRewriteReader 返回不可变 CommitRewritePreview，和 Squash 共用有界单父范围校验；操作类型进入不透明版本前缀和任务键。UI 复用原生提交范围确认/消息草稿及编辑器写保护，操作使用独立 RewordCommit 与确认字段；commit-tree 保留所选树/父/作者，后代交给原生 Rebase，完成后复核最终树与磁盘版本。
 
 DropCommit 复用提交范围预览和专属版本，附加有界 Affected 文件列表供确认。执行不创建替代 commit-tree 对象，而以选中提交父节点为 onto，先保护未跟踪/忽略路径，再复核版本并执行原生 rebase --onto（含 HEAD），保留真实继续/跳过/中止元数据；Drop 不使用最终树不变断言，HEAD 删除核对最终引用等于原父。根提交明确拒绝。
+
+行范围历史通过独立读取端口由 Git CLI 对固定 OID 执行原生 `log -L`。查询两端复核仓库身份、HEAD、祖先边界和工作文件版本。Application 将原生补丁投影为只读行片段，不参与写入用的 Patch Engine。Bootstrap 在主线程交付结果，UI 根据仓库、编辑器和读取请求身份丢弃过期结果，使用独立虚拟列表与 DiffState。

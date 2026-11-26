@@ -15,6 +15,7 @@ func (a *Workspace) beginRepositoryWrite(root, message string, cancel context.Ca
 	a.stopComparisonTabReads()
 	stopRead(&a.logRead)
 	a.stopSourceRefreshes()
+	a.closeLineHistory()
 	a.closeFileHistoryDialog()
 	a.stopPatchExports()
 	a.stopSourceDecision()
