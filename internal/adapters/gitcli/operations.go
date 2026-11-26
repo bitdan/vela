@@ -31,6 +31,8 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return err
 	}
 	switch op.Kind {
+	case domain.CheckoutUpdate:
+		return g.checkoutUpdate(ctx, repo, index, op)
 	case domain.CheckoutRebase:
 		return g.checkoutRebase(ctx, repo, index, op)
 	case domain.RewordCommit, domain.FixupCommits, domain.DropCommit, domain.UndoCommit:

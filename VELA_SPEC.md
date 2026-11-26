@@ -505,6 +505,8 @@ Commit 使用当前 Index。Amend 可修改消息或纳入暂存内容，确认�
 
 Pull 显式选择远端、分支和整合策略。Update Branch 的入口、Shelf 备份及手动恢复行为见下方 §11.2.1。Fetch 只更新远端跟踪分支，Push 只发布明确选定的分支。与目标 IDEA 的完整行为对照仍为 UNVERIFIED。
 
+Checkout and Update 从分支菜单选择另一条已配置上游的本地分支。确认框显示目标和上游。应用先安全检出目标，再 Fetch 并仅做快进；如果 Fetch、快进或取消发生在检出之后，刷新实际分支和结果，保留已完成的检出。已跟踪的本地改动或未保存编辑阻止操作，Git 保护未跟踪和忽略路径。不会自动 Shelf、Merge 或 Rebase，不支持直接检出远端分支。
+
 #### Squash 连续提交
 
 入口：Log 使用 Ctrl/Shift 多选连续提交，右键 Squash Selected Commits…；Actions 复用同一命令。确认框显示范围、后续重放数量、原作者和可编辑最终消息。
