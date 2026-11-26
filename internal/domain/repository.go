@@ -46,6 +46,7 @@ type Repository struct {
 	ProjectDirectories      []string
 	RemoteBranches          map[string]bool
 	Refs                    map[string]string
+	RemoteSymrefs           map[string]string
 	Upstreams               map[string]Upstream
 	RemoteVersion           string
 	RemoteManagementVersion string

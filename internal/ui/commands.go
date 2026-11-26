@@ -315,7 +315,7 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 			}
 			return ""
 		case newBranch, checkoutBranch, checkoutRebase, checkoutUpdate, fetch, pull, push, updateBranch, updateProject,
-			addRemote, editRemote, removeRemote,
+			addRemote, editRemote, removeRemote, renameRemote,
 			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
 			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,
@@ -535,7 +535,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 			a.loadRepository(target.source, false)
 			return
 		case newBranch, checkoutBranch, checkoutRebase, checkoutUpdate, fetch, pull, push, updateBranch, updateProject,
-			addRemote, editRemote, removeRemote,
+			addRemote, editRemote, removeRemote, renameRemote,
 			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
 			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,

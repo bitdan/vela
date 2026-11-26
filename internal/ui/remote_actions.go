@@ -6,6 +6,7 @@ const (
 	addRemote    commandID = "git.add-remote"
 	editRemote   commandID = "git.edit-remote"
 	removeRemote commandID = "git.remove-remote"
+	renameRemote commandID = "git.rename-remote"
 )
 
 func (s *repositoryOperationDialog) configureRemote(id commandID, target commandTarget) {
@@ -23,11 +24,20 @@ func (s *repositoryOperationDialog) configureRemote(id commandID, target command
 		s.label = "Remove Remote"
 		s.detail = "Remove remote " + target.source + ", its remote-tracking refs and tracking configuration. Local branches, commits and working files are kept. The remote server is unchanged."
 		s.op.Kind, s.op.Remote = domain.RemoveRemote, target.source
+	case renameRemote:
+		s.label = "Rename Remote"
+		s.detail = "Rename " + target.source + " to " + target.remote.Name + ". Git updates tracking references and local branch upstreams."
+		s.op.Kind, s.op.Remote, s.op.Target = domain.RenameRemote, target.source, target.remote.Name
 	}
 }
 
 func (a *Workspace) confirmRemote(id commandID, original string, item domain.Remote) {
 	if a.Model.Index != a.remotes.repository {
+		return
+	}
+	if repo := a.Model.Active().Repository; repo.RemoteManagementVersion != a.remotes.version {
+		a.remotes.open = false
+		a.status = "Remote settings changed; reopen Git Remotes"
 		return
 	}
 	a.remotes.open = false

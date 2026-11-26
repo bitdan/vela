@@ -18,7 +18,7 @@ func (g *Executor) manageRemote(ctx context.Context, repo domain.Repository, op 
 	if !domain.ValidRemoteName(op.Remote) {
 		return errors.New("invalid remote name")
 	}
-	if op.Kind != domain.RemoveRemote && !domain.ValidRemoteLocation(op.Target) {
+	if (op.Kind == domain.AddRemote || op.Kind == domain.EditRemote) && !domain.ValidRemoteLocation(op.Target) {
 		return errors.New("enter a supported remote URL without credentials or an absolute local path")
 	}
 	_, version, err := g.readRemoteConfig(ctx, repo.Root)
@@ -98,8 +98,11 @@ func (g *Executor) manageRemote(ctx context.Context, repo domain.Repository, op 
 	}
 	for _, spec := range nulFields(fetch) {
 		if strings.TrimPrefix(spec, "+") != "refs/heads/*:refs/remotes/"+op.Remote+"/*" {
-			return errors.New("this remote has custom fetch mappings; remove it using Git after reviewing their refs")
+			return errors.New("this remote has custom fetch mappings; use Git after reviewing their refs")
 		}
+	}
+	if op.Kind == domain.RenameRemote {
+		return g.renameRemote(ctx, repo, op, names, configPath)
 	}
 	// Removing a remote also removes its tracking refs. Validate their exact
 	// identities, including refs created or advanced after the confirmation.

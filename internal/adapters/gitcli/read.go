@@ -130,6 +130,12 @@ func (g *Executor) readRepository(ctx context.Context, directory string, previou
 	repo.Upstreams = make(map[string]domain.Upstream)
 	for _, row := range strings.Split(strings.TrimSuffix(refOutput, "\n"), "\n") {
 		fields := strings.Split(row, "\x00")
+		if len(fields) == 8 && fields[3] != "" && strings.HasPrefix(fields[0], "refs/remotes/") {
+			if repo.RemoteSymrefs == nil {
+				repo.RemoteSymrefs = make(map[string]string)
+			}
+			repo.RemoteSymrefs[fields[0]] = fields[3]
+		}
 		if len(fields) != 8 || fields[3] != "" {
 			continue
 		}

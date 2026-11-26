@@ -68,6 +68,7 @@ const (
 	UndoCommit
 	CheckoutRebase
 	CheckoutUpdate
+	RenameRemote
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.

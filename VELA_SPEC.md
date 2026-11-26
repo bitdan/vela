@@ -622,6 +622,8 @@ Git → Bisect 和 Commit 面板的 Create Candidate Worktree 命令可把当前
 
 Manage Remotes 的真实新增、fetch URL 修改和删除按单个操作确认并执行，保留独立 push URL；继承配置、多 URL 编辑及自定义 fetch 映射删除拒绝在应用内执行。删除复核所有远端/分支配置的 scope、origin、内容和目标远端跟踪引用，保留本地分支及服务端仓库。本地分支重命名不强制覆盖；删除仅针对完全合入 HEAD 且未被工作树检出的非当前本地分支。首版 Tag 创建为固定目标提交的本地轻量标签，不覆盖、不签名、不推送。
 
+Manage Remotes → Rename 显示旧名和新名，确认后使用 Git 原生远端改名，迁移远端跟踪引用和本地上游配置，不连接服务器。名称冲突、目标引用占用、继承配置、自定义 fetch 映射或快照过期时拒绝。若取消或 Git 报错，刷新实际状态；不承诺回滚部分变更。
+
 Commit 消息格式检查适用于真实 Commit/Amend；TODO 检查只检查新增的暂存行。失败时保留草稿和 Index，不创建提交。整文件暂存/取消暂存及 Commit 的 Context 可通过底栏 Cancel Task 或统一 Actions 命令取消，返回并刷新前保持写入忙碌状态，不宣称取消等于回滚。
 
 -   快捷键管理。

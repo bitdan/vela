@@ -103,6 +103,7 @@ var extraCommands = map[commandID]string{
 	showBlame:      "Show Blame",
 	cancelGitTask:  "Cancel Git Task",
 	addRemote:      "Add Remote", editRemote: "Edit Remote", removeRemote: "Remove Remote",
+	renameRemote:      "Rename Remote",
 	newScratch:        "Scratch File",
 	historyToRevision: "History Up to Here", expandHistorical: "Expand Historical Files", collapseHistorical: "Collapse Historical Files",
 	compareCurrentBranch: "Compare with Current Branch", missingBranchCommits: "Show Missing Commits",
