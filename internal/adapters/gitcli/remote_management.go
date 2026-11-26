@@ -92,6 +92,9 @@ func (g *Executor) manageRemote(ctx context.Context, repo domain.Repository, op 
 		}
 		return g.runOperation(ctx, repo.Root, "remote", "set-url", "--", op.Remote, op.Target)
 	}
+	if op.Kind == domain.EditRemoteURLs {
+		return g.editRemoteURLs(ctx, repo, op, configPath, local.stdout)
+	}
 	fetch, err := g.read(ctx, repo.Root, "config", "--null", "--get-all", "remote."+op.Remote+".fetch")
 	if err != nil {
 		return err

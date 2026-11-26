@@ -69,6 +69,7 @@ const (
 	CheckoutRebase
 	CheckoutUpdate
 	RenameRemote
+	EditRemoteURLs
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.
@@ -95,6 +96,7 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	FetchURLs, PushURLs            []string
 	RewriteSelection               []string
 	RewriteVersion                 string
 	ConfirmRewrite                 bool

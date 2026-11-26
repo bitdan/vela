@@ -1,12 +1,17 @@
 package ui
 
-import "vela/internal/domain"
+import (
+	"fmt"
+	"slices"
+	"vela/internal/domain"
+)
 
 const (
-	addRemote    commandID = "git.add-remote"
-	editRemote   commandID = "git.edit-remote"
-	removeRemote commandID = "git.remove-remote"
-	renameRemote commandID = "git.rename-remote"
+	addRemote      commandID = "git.add-remote"
+	editRemote     commandID = "git.edit-remote"
+	removeRemote   commandID = "git.remove-remote"
+	renameRemote   commandID = "git.rename-remote"
+	editRemoteURLs commandID = "git.edit-remote-urls"
 )
 
 func (s *repositoryOperationDialog) configureRemote(id commandID, target commandTarget) {
@@ -28,6 +33,10 @@ func (s *repositoryOperationDialog) configureRemote(id commandID, target command
 		s.label = "Rename Remote"
 		s.detail = "Rename " + target.source + " to " + target.remote.Name + ". Git updates tracking references and local branch upstreams."
 		s.op.Kind, s.op.Remote, s.op.Target = domain.RenameRemote, target.source, target.remote.Name
+	case editRemoteURLs:
+		s.label = "Edit Remote URLs"
+		s.detail = fmt.Sprintf("Save %d fetch URL(s) and %d explicit push URL(s) for %s, in the order entered. Empty push list uses Git's fetch URL fallback.", len(target.remote.FetchURLs), len(target.remote.PushURLs), target.source)
+		s.op = domain.RepositoryOperation{Kind: domain.EditRemoteURLs, Remote: target.source, FetchURLs: slices.Clone(target.remote.FetchURLs), PushURLs: slices.Clone(target.remote.PushURLs)}
 	}
 }
 

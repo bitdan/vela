@@ -19,9 +19,11 @@ type remoteDialogState struct {
 }
 
 type remoteEditor struct {
-	index  int
-	item   domain.Remote
-	rename bool
+	index       int
+	item        domain.Remote
+	rename      bool
+	urls        bool
+	fetch, push string
 }
 
 var remoteMinusIcon = changeIcon("M2 8h12")
@@ -69,6 +71,14 @@ func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 						ui.Button(c, "Rename…").Label("Rename remote").Disabled(s.editor != nil || !selection() || busy).OnClick(func() {
 							s.editor = &remoteEditor{index: s.selected, item: s.items[s.selected], rename: true}
 						})
+						ui.Button(c, "Edit URLs…").Label("Edit remote URLs").Disabled(s.editor != nil || !selection() || busy || selection() && s.items[s.selected].URLConfigBlocked).OnClick(func() {
+							item := s.items[s.selected]
+							fetch := item.FetchURLs
+							if len(fetch) == 0 && item.URL != "" {
+								fetch = []string{item.URL}
+							}
+							s.editor = &remoteEditor{index: s.selected, item: item, urls: true, fetch: strings.Join(fetch, "\n"), push: strings.Join(item.PushURLs, "\n")}
+						})
 					}
 				})
 				s.table.Selected = &s.selected
@@ -114,6 +124,10 @@ func remoteTool(c *ui.Context, p tokens, label string, icon *ui.SVG, disabled bo
 func (a *Workspace) remoteForm(c *ui.Context, p tokens, real, busy bool) {
 	s := &a.remotes
 	edit := s.editor
+	if edit.urls {
+		a.remoteURLsForm(c, p, edit, busy)
+		return
+	}
 	ui.Column(c.Key("remote-editor")).FillWidth().Gap(gap).Children(func() {
 		ui.Row(c).FillWidth().Gap(gap).Children(func() {
 			ui.TextInput(c, &edit.item.Name).Width(150).Placeholder("Name").Label("Remote name").AutoFocus().Disabled(busy || real && edit.index >= 0 && !edit.rename)

@@ -110,7 +110,7 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 				}
 			}
 		}
-	case addRemote, editRemote, removeRemote, renameRemote:
+	case addRemote, editRemote, removeRemote, renameRemote, editRemoteURLs:
 		if id != addRemote && !remoteConfigured(repo, target.source) {
 			return "Select a configured remote"
 		}
@@ -262,7 +262,7 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 		a.configureShelf(s, id, target)
 	case renameBranch, deleteBranch, newTag:
 		s.configureRef(repo, id, target)
-	case addRemote, editRemote, removeRemote, renameRemote:
+	case addRemote, editRemote, removeRemote, renameRemote, editRemoteURLs:
 		s.configureRemote(id, target)
 	case startBisect, bisectGood, bisectBad, bisectSkip, resetBisect, createBisectWorktree:
 		s.configureBisect(repo, id)
