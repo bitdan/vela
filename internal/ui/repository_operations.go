@@ -252,7 +252,7 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 		remoteBranch = branch
 	}
 	switch id {
-	case shelve, shelveSilently, unshelve, renameShelf, deleteShelf, restoreShelf, purgeShelf:
+	case shelve, unshelve, renameShelf, deleteShelf, restoreShelf, purgeShelf:
 		a.configureShelf(s, id, target)
 	case renameBranch, deleteBranch, newTag:
 		s.configureRef(repo, id, target)
@@ -492,7 +492,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		return
 	}
 	restoreEditors := func() {}
-	if s.op.Kind == domain.ApplyShelf || s.op.Kind == domain.CheckoutRebase {
+	if s.op.Kind == domain.SaveShelf || s.op.Kind == domain.ApplyShelf || s.op.Kind == domain.CheckoutRebase {
 		restoreEditors = a.lockShelfEditors()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
