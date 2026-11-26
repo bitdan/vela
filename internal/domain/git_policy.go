@@ -52,6 +52,8 @@ func (p RepositorySafetyPolicy) CheckOperation(repo Repository, op RepositoryOpe
 	switch op.Kind {
 	case RenameBranch, DeleteBranch:
 		branch = strings.TrimPrefix(op.Source, "refs/heads/")
+	case CheckoutRebase:
+		branch = strings.TrimPrefix(op.Source, "refs/heads/")
 	case ResetRevision, StartRebase, SquashCommits, RewordCommit, FixupCommits, DropCommit, UndoCommit:
 	case UpdateTrackedBranch:
 		if op.UpdateMethod != "Rebase" {
