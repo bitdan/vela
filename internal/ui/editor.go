@@ -83,12 +83,16 @@ func (a *Workspace) openCode(source string, f domain.File) {
 			current.code.Select(cursor, cursor)
 			current.code.SetScrollY(scroll)
 			current.file = f
+			if current.document != nil {
+				current.document.draftBase = nil
+			}
 			applyEditorFileType(current)
 			if split := a.repo().split; split != nil && split.code != nil && split.code.Buffer == buffer {
 				split.file = f
 				split.code.ReadOnly = current.code.ReadOnly
 			}
 		}
+		a.recoverPendingEditorDraft(current)
 		return
 	}
 	buffer := editor.NewBuffer(f.New)
@@ -105,6 +109,7 @@ func (a *Workspace) openCode(source string, f domain.File) {
 		r.tabs[r.active].title = "Blame · " + path.Base(f.Path)
 		r.tabs[r.active].context = "Blame · " + strings.TrimPrefix(source, "blame:")
 	}
+	a.recoverPendingEditorDraft(&r.tabs[r.active])
 }
 
 func (a *Workspace) splitTab(id string, vertical, move bool) {
@@ -130,6 +135,9 @@ func (a *Workspace) splitTab(id string, vertical, move bool) {
 
 func (a *Workspace) hasUnsavedTabs() bool {
 	for _, repo := range a.repos {
+		if repo.split != nil && repo.split.modified() {
+			return true
+		}
 		for _, tab := range repo.tabs {
 			if tab.code != nil && tab.code.Buffer.Modified() {
 				return true
@@ -152,6 +160,20 @@ func (a *Workspace) hasUnsavedMergeDrafts() bool {
 
 // RequestClose returns false while the workspace needs confirmation to exit.
 func (a *Workspace) RequestClose() bool {
+	if s := a.squash; s != nil && s.busy {
+		if s.cancel != nil {
+			s.cancel()
+		}
+		a.status = "Waiting for Squash and repository refresh"
+		return false
+	}
+	a.closeSquashPreview()
+	if a.sessionSave != nil {
+		return false
+	}
+	if s := a.repositoryOperation; s != nil {
+		stopRead(&s.shelfHunkRead)
+	}
 	if a.Tasks.ActiveCount() > 0 {
 		a.Tasks.CancelAll()
 		a.status = "Waiting for task operations and refresh callbacks; close again after they finish"
@@ -346,6 +368,7 @@ func (a *Workspace) tabContent(c *ui.Context, p tokens, entry tab) {
 				reason := a.disabledFor(saveSourceFile, commandTarget{tabID: entry.id})
 				ui.Button(c, "Save").Label("Save Source File").Height(controlHeight).Disabled(reason != "").Tooltip(reason).OnClick(func() { a.run(saveSourceFile, commandTarget{tabID: entry.id}) })
 				ui.Text(c, "Ctrl+S").TextColor(p.theme.TextMuted).FontSize(p.textSize(smallText))
+				a.inlineBlameControls(c, p)
 			})
 		}
 		entry.code.Font, entry.code.TabSize = a.editorPreferences()

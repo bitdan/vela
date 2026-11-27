@@ -41,7 +41,7 @@ func (a *Workspace) stopBackgroundTasks() {
 
 func (a *Workspace) backgroundBlocked() bool {
 	return a.repositoryWrite != "" || a.repositoryRead != nil || a.logRead != nil || a.sessionRestore != nil || a.repositoryFileRead != nil ||
-		a.repositoryOperation != nil || a.indexConfirmation != nil || a.commitConfirmation != nil || a.patchDialog != nil || a.patchExport != nil || a.patchImport != nil ||
+		a.repositoryOperation != nil || a.squash != nil || a.indexConfirmation != nil || a.commitConfirmation != nil || a.patchDialog != nil || a.patchExport != nil || a.patchImport != nil ||
 		a.projectFile != nil || a.projectSearch != nil || a.sourceDecision != nil || a.fileHistory != nil || a.branchComparison != nil || a.revisionBrowser != nil ||
 		a.repositoryInit != nil || a.repositoryClone != nil || a.settingsOpen || a.remotes.open || a.confirmExit
 }

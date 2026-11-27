@@ -61,6 +61,7 @@ const (
 	RestoreRevisionFiles
 	CherryPickSelected
 	RevertSelected
+	SquashCommits
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.
@@ -87,6 +88,10 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	SquashSelection                []string
+	SquashVersion                  string
+	ConfirmSquash                  bool
+	ShelfHunks                     []ShelfHunkSelection
 	Safety                         RepositorySafetyPolicy
 	UpdateMethod, UpdateCleanup    string
 	ConfirmUpdateCleanup           bool
@@ -106,7 +111,16 @@ type RepositoryOperation struct {
 	BisectVersion                  string
 	PatchVersion                   string
 	HunkIndex                      int
+	SelectPatchLines               bool
+	PatchLines                     []int
 	IncludeUntracked, RestoreIndex bool
+}
+
+// An absent record means whole-file restore; an explicit empty Hunk list is
+// invalid and must never expand the selection.
+type ShelfHunkSelection struct {
+	Path, Version string
+	Hunks         []int
 }
 
 // NetworkPolicy is copied at dispatch; it never reads mutable UI preferences.

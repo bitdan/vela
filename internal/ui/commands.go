@@ -79,6 +79,13 @@ type commandTarget struct {
 }
 
 var commands = map[commandID]string{
+	newShelfGroup: "New Shelf Group…", renameShelfGroup: "Rename Shelf Group…", deleteShelfGroup: "Delete Shelf Group…", moveShelfGroup: "Move Shelf to Group", filterShelfGroup: "Filter Shelf Group", applyShelfGroup: "Apply Shelf Group", cancelShelfGroup: "Cancel Shelf Group",
+	toggleInlineBlame: "Inline Blame", inlineCommitDetails: "Line Commit Details", closeInlineDetails: "Close Line Commit Details",
+	squashCommit: "Squash Selected Commits…", confirmSquash: "Squash Commits", cancelSquash: "Cancel Squash", refreshSquash: "Preview Squash",
+	clearHunkLines: "Clear Changed Lines", selectAllHunkLines: "Select All Changed Lines",
+	toggleHunkLineMode: "Choose Individual Changed Lines", toggleHunkLine: "Toggle Changed Git Line", applyHunkSelection: "Apply Git Hunk Selection",
+	keepDraftsClose: "Keep Drafts and Close", discardDraftsClose: "Discard and Close", cancelDraftClose: "Cancel",
+	previewShelfHunks: "Choose Shelf Hunks", toggleShelfHunk: "Toggle Shelf Hunk", wholeShelfFile: "Restore Whole Shelved File",
 	applyComparisonFilters: "Apply Comparison Filters", clearComparisonFilters: "Clear Comparison Filters",
 	toggleShelfFile: "Toggle Unshelve File", selectShelfAll: "Select All Unshelve Files", clearShelfSelection: "Clear Unshelve File Selection",
 	toggleImportedFile: "Toggle Imported Patch File", toggleImportedHunk: "Toggle Imported Patch Hunk", selectImportedAll: "Select All Imported Hunks", clearImportedSelection: "Clear Imported Hunk Selection", toggleImportedReverse: "Reverse Imported Patch",
@@ -125,6 +132,27 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isShelfGroupCommand(id) {
+		return a.shelfGroupDisabled(id, target)
+	}
+	if a.shelfGroupDialog != nil && id != selectRepo && id != cancelGitTask {
+		return "Close the Shelf group dialog"
+	}
+	if isInlineBlameCommand(id) {
+		return a.inlineDisabled(id)
+	}
+	if isSquashCommand(id) {
+		return a.squashDisabled(id, target)
+	}
+	if a.squash != nil && id != selectRepo && id != cancelGitTask {
+		return "Finish or close Squash first"
+	}
+	if isHunkLineCommand(id) {
+		return a.hunkLineDisabled(id, target)
+	}
+	if id == keepDraftsClose || id == discardDraftsClose || id == cancelDraftClose {
+		return a.draftCloseDisabled(id)
+	}
 	if isShelfSelectionCommand(id) {
 		return a.shelfSelectionDisabled(id, target)
 	}
@@ -361,7 +389,31 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 }
 
 func (a *Workspace) run(id commandID, target commandTarget) {
+	if isShelfGroupCommand(id) {
+		if a.disabledFor(id, target) == "" {
+			a.runShelfGroup(id, target)
+		}
+		return
+	}
+	if isInlineBlameCommand(id) {
+		if a.disabledFor(id, target) == "" {
+			a.runInlineBlame(id)
+		}
+		return
+	}
 	if a.disabledFor(id, target) != "" {
+		return
+	}
+	if isSquashCommand(id) {
+		a.runSquash(id)
+		return
+	}
+	if isHunkLineCommand(id) {
+		a.runHunkLine(id, target)
+		return
+	}
+	if id == keepDraftsClose || id == discardDraftsClose || id == cancelDraftClose {
+		a.runDraftClose(id)
 		return
 	}
 	if isShelfSelectionCommand(id) {
@@ -724,6 +776,9 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 			}
 		}
 	case selectRepo:
+		if s := a.repositoryOperation; s != nil {
+			stopRead(&s.shelfHunkRead)
+		}
 		a.selectRepository(target.index)
 	case selectBranch:
 		a.Model.Active().Branch = target.source

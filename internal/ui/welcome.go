@@ -80,6 +80,13 @@ func (a *Workspace) exitDemo() {
 }
 
 func (a *Workspace) selectRepository(index int) {
+	a.shelfGroupDialog = nil
+	a.clearInlineBlame()
+	a.closeIdleHunkDialog()
+	a.closeSquashPreview()
+	if s := a.repositoryOperation; s != nil {
+		stopRead(&s.shelfHunkRead)
+	}
 	a.stopBackgroundTasks()
 	a.closeProjectFileDialog()
 	a.closeBranchComparisonDialog()

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -62,6 +63,7 @@ func run(layoutPath string) error {
 	var blameReader application.RepositoryBlameReader = git
 	var fileWriter application.RepositoryFileWriter = git
 	var patchReader application.RepositoryPatchReader = git
+	var squashReader application.RepositorySquashReader = git
 	var fileHistoryReader application.RepositoryFileHistoryReader = git
 	var patchExporter application.RepositoryPatchExporter = git
 	var patchImporter application.RepositoryPatchImporter = git
@@ -71,6 +73,7 @@ func run(layoutPath string) error {
 	var projectReplacer application.ProjectReplacer = git
 	var background application.BackgroundRepository = git
 	monitor := &repositoryWatch{}
+	defer workspace.StopEditorActivity()
 	defer monitor.close()
 	mygo.App.WhenReady(func() {
 		window := mygo.NewWindow(mygo.WindowOptions{
@@ -257,6 +260,12 @@ func run(layoutPath string) error {
 				mygo.RunOnMain(func() { done(doc, err); window.Invalidate() })
 			}()
 		}
+		workspace.PreviewRepositorySquash = func(ctx context.Context, repo domain.Repository, selection []string, done func(domain.SquashPreview, error)) {
+			go func() {
+				plan, err := squashReader.PreviewSquash(ctx, repo, selection)
+				mygo.RunOnMain(func() { done(plan, err); window.Invalidate() })
+			}()
+		}
 		workspace.ReadRepositoryFileHistory = func(ctx context.Context, root, revision, path string, offset, limit int, done func(domain.FileHistoryPage, error)) {
 			go func() {
 				page, err := fileHistoryReader.ReadFileHistory(ctx, root, revision, path, offset, limit)
@@ -358,14 +367,57 @@ func run(layoutPath string) error {
 			}()
 		}
 		workspace.CloseWindow = func() { go mygo.RunOnMain(window.Close) }
+		workspace.SaveWorkspaceSession = func(ctx context.Context, snapshot application.WorkspaceSnapshot, done func(error)) {
+			// Snapshot and configuration errors are captured on the UI thread.
+			loadErr := sessionErr
+			go func() {
+				saveErr := ctx.Err()
+				if saveErr == nil {
+					saveErr = replaceConfig(sessionPath, loadErr, adapters.ErrInvalidSession, func() error { return adapters.SaveSession(sessionPath, snapshot) })
+				}
+				mygo.RunOnMain(func() {
+					if saveErr == nil {
+						sessionErr = nil
+						initial = snapshot
+					}
+					done(saveErr)
+					window.Invalidate()
+				})
+			}()
+		}
 		connectReadTasks(workspace, window.Invalidate)
 		connectWriteTasks(workspace, window.Invalidate)
+		workspace.WatchEditorActivity = func(ctx context.Context, tick func()) {
+			go func() {
+				var queued atomic.Bool
+				ticker := time.NewTicker(150 * time.Millisecond)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						if !queued.CompareAndSwap(false, true) {
+							continue
+						}
+						mygo.RunOnMain(func() {
+							defer queued.Store(false)
+							if ctx.Err() == nil {
+								tick()
+								window.Invalidate()
+							}
+						})
+					}
+				}
+			}()
+		}
 		workspace.StartSessionRestore()
 		window.OnClose(func(e *mygo.CloseEvent) {
 			if !workspace.RequestClose() {
 				e.PreventDefault()
 				window.Invalidate()
 			} else {
+				workspace.StopEditorActivity()
 				monitor.close()
 			}
 		})

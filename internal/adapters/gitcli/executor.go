@@ -51,6 +51,7 @@ func (g *Executor) runInputWithEnv(ctx context.Context, directory, input string,
 }
 
 var errOutputLimit = errors.New("Git output exceeded the requested limit")
+var errProcessCleanup = errors.New("Git process-tree cleanup failed")
 
 type boundedOutput struct {
 	buffer   *bytes.Buffer
@@ -94,12 +95,15 @@ func (*Executor) runInputWithEnvLimit(ctx context.Context, directory, input stri
 		capture = bounded
 	}
 	cmd.Stdout, cmd.Stderr = capture, &stderr
-	err := cmd.Run()
+	err := runGitCommand(ctx, cmd)
 	output := result{stdout: stdout.String(), stderr: stderr.String(), exitCode: -1}
 	if cmd.ProcessState != nil {
 		output.exitCode = cmd.ProcessState.ExitCode()
 	}
 	if ctx.Err() != nil {
+		if errors.Is(err, errProcessCleanup) {
+			return output, errors.Join(ctx.Err(), err)
+		}
 		return output, ctx.Err()
 	}
 	if bounded != nil && bounded.exceeded {

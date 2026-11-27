@@ -28,7 +28,7 @@ type RepositoryPatchReviewer interface {
 // metadata is rejected. ParseTextPatch checks hunk counts and newline markers.
 func ParseImportedPatch(text string) (domain.ImportedPatch, error) {
 	var result domain.ImportedPatch
-	if len(text) == 0 || len(text) > MaxImportedPatchBytes || !utf8.ValidString(text) || strings.ContainsAny(text, "\x00\r") || !strings.HasPrefix(text, "diff --git ") || !strings.HasSuffix(text, "\n") {
+	if len(text) == 0 || len(text) > MaxImportedPatchBytes || !utf8.ValidString(text) || strings.ContainsRune(text, 0) || !strings.HasPrefix(text, "diff --git ") || !strings.HasSuffix(text, "\n") {
 		return result, errors.New("choose a UTF-8 Git patch of at most 2 MiB, without an email envelope")
 	}
 	parts := strings.Split(text, "\ndiff --git ")
@@ -46,6 +46,9 @@ func ParseImportedPatch(text string) (domain.ImportedPatch, error) {
 		}
 		doc, mode, err := parseImportedFile(part)
 		if err != nil {
+			return result, err
+		}
+		if _, err := ImportedPatchLineEnding(doc); err != nil {
 			return result, err
 		}
 		paths := []string{doc.Path}

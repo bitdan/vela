@@ -37,11 +37,13 @@ Toolbar、菜单、右键菜单、快捷键和 Actions 共用稳定 Command ID�
 
 ## Git 执行与写入安全
 
-所有 Git 操作经过同一 Executor，使用 exec.CommandContext、独立参数、明确工作目录和受控环境。禁止 Shell 拼接；stdout、stderr 和退出码分别保留。设置超时及输出上限，错误保留上下文，日志不输出凭据。
+所有 Git 操作经过同一 Executor，使用 exec.CommandContext、独立参数、明确工作目录和受控环境。禁止 Shell 拼接；stdout、stderr 和退出码分别保留。设置超时及输出上限，错误保留上下文，日志不输出凭据。Windows 为每条 Git 命令创建独立 Job Object，进程以挂起状态加入后再恢复，避免子 helper 逃过绑定；优先通过 PSS_CAPTURE_THREADS 仅捕获目标进程的线程 ID，避免每条命令枚举整个系统的线程；API 或权限不可用时回退 Toolhelp。取消/超时终止本次进程树并等待退出，不按 PID/进程名扫描终止，不影响其他请求。正常完成释放 Job，不终止可合法常驻的凭据 helper。
 
 优先使用 porcelain、固定格式和 NUL 分隔解析状态、日志、路径、引用和 Worktree。不把本地化 stderr 当协议，也不假设一行就是一个文件名。路径解析覆盖中文、空格、换行、重命名、模式、二进制和冲突；超限必须报错。
 
 同一仓库写操作串行化，涉及共享引用时必须考虑 CommonDir。内部锁不能阻止外部 Git；每次写前重新检查仓库身份、HEAD、Index、工作区、操作元数据和目标 ref。保护未跟踪/忽略文件、未保存 Buffer、链接及 Git 元数据，不使用 force 或 reject 静默降级。
+
+Squash 以独立窄预览端口返回固定选择、后续单父链、作者及不透明版本；版本绑定当前仓库、HEAD/Index/工作区和已知远端跟踪引用。合并对象复用所选最新提交的完整 tree、最早提交的父节点与作者，再次校验后发布。末尾范围使用 update-ref CAS，中间范围使用原生 rebase --onto 并禁用自动暂存、自动更新其他引用及自动 Squash；保留原生冲突/继续/中止元数据。正常完成核对原 HEAD tree；UI 保护源文档并刷新其磁盘版本，不能把失败或取消描述为自动回滚。
 
 历史链路按固定对象读取；canonicalHistory 禁止 replace 对象改变读取语义，并检查 shallow/grafts 祖先边界。工作快照通过版本指纹拒绝过期预览，不能把旧内容当作当前磁盘事实。
 
@@ -51,9 +53,13 @@ Fetch、Pull、Push、Update 为独立操作。Commit 成功与 Push 失败分�
 
 Git Patch 的解析、预检和写入与 MyGo Diff 显示分离。Hunk 写入重新校验路径、HEAD、Index、磁盘指纹与 Hunk 身份；过期或不支持的类型直接拒绝。导入选择、方向、Strip 和目标目录绑定预检身份；检查与应用使用相同路径映射，拒绝越界及目标碰撞。导入的新增/删除/重命名、二进制和权限变更为不可拆分的整文件单元，普通修改保留 Hunk 选择，Stage/Unstage/Discard Hunk 的支持范围独立。解析同时核对 diff、扩展头和正文端点；重命名两端加入受保护路径集合，反向时翻转现存/缺失角色。Working tree 按磁盘存在性、Index only 按 Index 存在性预检，指纹同时包含目标内容与缺失状态；允许安全创建缺失父目录，拒绝链接、元数据目录及相互覆盖的端点。
 
+导入 Patch 的换行校验在 Application 区分原生 LF 包装和 LF/CRLF 正文，无末尾换行标记不计入内容 EOL。选择及写入保持原始字节。Adapter 校验整个磁盘与 Index 文本的换行一致性，并将实际写入目标的换行与对应文件 Patch 正文绑定；转换属性仍拒绝，检查和写入共享固定 autocrlf=false 的 Git 参数。
+
+按行暂存/取消暂存的请求携带显式选择模式及固定 Hunk 内的改动行 ordinal。Application 引擎按变更块配对旧、新行，保留未选行位置，重算正反方向的范围并拒绝不可表达的无换行组合。Adapter 在同一写锁内重读原生补丁、原始文本和工作区/Index 属性，经 check 与版本复核后只写 Index。UI 缓存不可变的行描述，虚拟列表只维护每个 Hunk 的勾选；不解析 Git 输出或依据编辑器差异坐标写入。
+
 二进制 Patch 通过标准库 zlib 和有界 Git base85 解码校验两方向数据，限制 literal、delta 指令、源与结果尺寸；不自行执行 delta。Adapter 使用有界原始磁盘/Blob 读取计算指纹，文本编辑器仍只接收编码补丁。文件模式保留正反两侧身份，Index only 依当前方向复核 Index 模式；Windows 明确拒绝工作区执行位变更，不能把系统无法表达的模式宣称已写入。
 
-Shelf 用私有引用保存 stash-compatible 对象，不复用 refs/stash。独立临时 Index 构造选中暂存/工作树，发布快照后才清理工作路径；私有引用通过 CAS 管理。部分 Unshelve 保留完整原 Shelf；投影树的完整差异必须是显式选择的子集，防止文件/目录替换带入未选路径。恢复可能影响目标侧重命名路径，须锁定相关源编辑器并刷新全部可变视图。
+Shelf 用私有引用保存 stash-compatible 对象，不复用 refs/stash。独立临时 Index 构造选中暂存/工作树，发布快照后才清理工作路径；私有引用通过 CAS 管理。Hunk 选择复用原生 Patch 读取端口，版本绑定 Shelf OID 与仓库/磁盘身份。混合恢复先从 Base 及整文件子集构造临时树，再在临时 Index 应用显式 Hunk；投影 Index 树等于 Base，完整差异必须属于所选路径。只将投影对象传给 git stash apply，原 Shelf 对象仍用于 CAS；不从原暂存树带入未选内容。部分 Unshelve 保留完整原 Shelf；投影树的完整差异必须是显式选择的子集，防止文件/目录替换带入未选路径。恢复可能影响目标侧重命名路径，须锁定相关源编辑器并刷新全部可变视图。
 
 Project 文件操作先捕获并校验源树及目标身份，拒绝覆盖目标和 Git 元数据。同仓库移动先安全复制再回收源项，删除使用回收站，不降级永久删除。写入占用统一忙碌/取消状态；更新路径时保留 Buffer 和编辑状态。
 
@@ -77,7 +83,7 @@ Commit/Amend 的可选 OpenPGP 配置只保存公开 ID/指纹，通过请求级
 
 配置及会话使用现有 JSON，新增字段保持向后兼容，写入采用原子替换或等价安全方式。损坏配置应可恢复默认值；凭据交给 Git Credential Helper、SSH Agent 或系统机制。
 
-会话保存最近仓库、草稿、选择、布局和文件标签身份，Git 状态与文件内容不是持久化事实。启动仅后台恢复上次活动真实仓库；文件按当前磁盘、Index 或固定历史 OID 重读，失败可重试。比较工具标签通过独立 ComparisonSnapshot 保存固定 OID、筛选、选择、加载范围与布局，启动后重读，文件标签与比较标签保持原顺序及活动身份；未保存内容暂不跨启动恢复，用户导航优先于恢复回调。
+会话保存最近仓库、草稿、选择、布局和文件标签身份，Git 状态与磁盘文件内容不是持久化事实。Project 的 EditorDraftSnapshot 单独保存用户输入、编辑前基准、原磁盘版本及换行方式；正文限额和身份在 Application 校验，Adapter 保存前及有界读取后再次校验。启动仅后台恢复上次活动真实仓库；文件按当前磁盘、Index 或固定历史 OID 重读，失败可重试。恢复草稿不写磁盘，当前磁盘内容与原基准分开保留，原版本继续约束 Save。比较工具标签通过独立 ComparisonSnapshot 保存固定 OID、筛选、选择、加载范围与布局，启动后重读；用户导航优先于恢复回调。
 
 缓存键包含工作树和对象版本，写入、HEAD/Index 变化及监听使相关缓存失效。没有数据量与性能证据不引入 SQLite 或复杂缓存。
 
@@ -87,6 +93,8 @@ Bootstrap 加载配置、创建 Adapter/Runtime/UI、连接后台端口和窗口
 
 退出先取消后台与活动任务，等待真实回调和必要刷新，再处理未保存文件；不得让 worker 在窗口释放后更新状态。
 
+Keep Drafts and Close 通过窄异步 SaveWorkspaceSession 端口在关闭前完成会话持久化；同目录临时文件 Sync 后原子替换。UI 等待真实回调，取消不承诺撤回已完成的替换；内容变化或保存失败保持窗口。显式放弃从最终快照移除草稿。Bootstrap 在持久保存成功后更新会话基准，避免关闭后重复替换或重复备份损坏配置。
+
 ## 验证与文档维护
 
 日常按变更范围检查相关包和调用方。Git 集成使用临时仓库和 bare remote；覆盖成功、失败、取消、冲突、特殊路径及操作前后状态。MyGo Tester 验证选择、标签、焦点、键盘、菜单和禁用状态；视觉验收记录固定窗口尺寸并检查深浅主题、调整/隐藏/恢复和空/加载/错误状态。
@@ -94,3 +102,7 @@ Bootstrap 加载配置、创建 Adapter/Runtime/UI、连接后台端口和窗口
 只在阶段验收、发布、定向验证不足或用户明确要求时运行仓库级检查。未执行的测试、性能和视觉验证明确标记，不用编译成功替代验收。当前执行限制和状态只维护在 [当前清单](docs/current.md)。
 
 项目说明仅维护 README、VELA_SPEC、ARCHITECTURE 和 docs/current 四份 Markdown；保留 IDEA 参考图与许可证。AGENTS.md 是本地工作规则，不纳入提交。不再新增 ADR、分批报告、计划或过程文档；必要的架构变化直接更新本文。
+
+行内 Blame 复用固定 OID 读取端口并携带精确 Blob Text。UI 的显式开关启动 Bootstrap 150ms 活动观察，后台仅排入合并的主线程 tick；View 不启动 IO。缓存身份包含仓库/导航、HEAD、工作树版本、标签、State/Buffer 版本和磁盘版本，先比对 Buffer/HEAD 原始文本，再异步确认磁盘内容及版本；光标移动复用缓存。Inlay 使用锁定版本 editor.State.SetInlays，详情独立固定 OID Log 页，不污染全局 Log 选择；实际关闭窗口取消观察与排队回调。
+
+Shelf 分组为 Application.ShelfGrouping 的有界纯元数据，以稳定 Shelf ID 映射稳定 group ID。repoView 按仓库持有，RepositorySnapshot 可选保存并在捕获/恢复/未加载仓库转存时深复制；Adapter 会话读写验证上限、命名和外键。刷新不裁剪暂不可用条目关联，删除组仅将成员移回默认组。UI 过滤保持原始条目索引及 ID/OID 命令校验，CRUD 不进入 Git 写端口。

@@ -5,6 +5,7 @@ import "time"
 // BlameDocument attributes the lines of one committed file version.
 type BlameDocument struct {
 	Path, Revision string
+	Text           string // Exact committed bytes, including line endings and final newline.
 	Lines          []BlameLine
 }
 

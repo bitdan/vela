@@ -23,6 +23,7 @@ const (
 // editorDocument is shared by split views of the same source Buffer. Bookmarks
 // are line numbers, not semantic anchors; edits do not move them with text.
 type editorDocument struct {
+	draftBase *string
 	bookmarks []int
 	fileType  string
 }

@@ -102,7 +102,7 @@ func (g *Executor) applyShelf(ctx context.Context, repo domain.Repository, index
 	if err != nil {
 		return err
 	}
-	if partial && op.RemoveApplied {
+	if (partial || len(op.ShelfHunks) > 0) && op.RemoveApplied {
 		return errors.New("partial unshelve retains the complete original shelf; disable moving the applied entry to Recently Deleted")
 	}
 	paths := make([]string, 0, len(files))
@@ -143,7 +143,12 @@ func (g *Executor) applyShelf(ctx context.Context, repo domain.Repository, index
 		}
 	}
 	applied := entry
-	if partial {
+	if len(op.ShelfHunks) > 0 {
+		applied, err = g.projectShelfHunks(ctx, repo, entry, files, op)
+		if err != nil {
+			return err
+		}
+	} else if partial {
 		applied, err = g.projectShelf(ctx, repo, entry, files)
 		if err != nil {
 			return err

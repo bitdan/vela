@@ -13,6 +13,9 @@ const saveSourceFile commandID = "editor.save-source-file"
 func (a *Workspace) hasUnsavedRealFiles() bool {
 	for i, s := range a.Model.Sessions {
 		if s.Repository.Root != "" {
+			if a.repos[i].split != nil && a.repos[i].split.modified() {
+				return true
+			}
 			for _, t := range a.repos[i].tabs {
 				if t.modified() {
 					return true
@@ -100,10 +103,16 @@ func (a *Workspace) saveSource(target commandTarget, after ...func(error)) {
 			for j := range r.tabs {
 				if t := &r.tabs[j]; t.code != nil && t.code.Buffer == buffer {
 					t.file = saved
+					if t.document != nil {
+						t.document.draftBase = nil
+					}
 				}
 			}
 			if r.split != nil && r.split.code != nil && r.split.code.Buffer == buffer {
 				r.split.file = saved
+				if r.split.document != nil {
+					r.split.document.draftBase = nil
+				}
 			}
 		}
 		if bufferDiskText(buffer) == text {

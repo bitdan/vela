@@ -14,6 +14,7 @@ import (
 const maxBlameLines = 20000
 
 func (g *Executor) ReadBlame(ctx context.Context, root, revision, path string) (domain.BlameDocument, error) {
+	ctx = canonicalHistory(ctx)
 	doc := domain.BlameDocument{Path: path, Revision: revision}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -34,6 +35,7 @@ func (g *Executor) ReadBlame(ctx context.Context, root, revision, path string) (
 	if err != nil {
 		return doc, err
 	}
+	doc.Text = text
 	doc.Lines, err = parseBlame(output)
 	return doc, err
 }

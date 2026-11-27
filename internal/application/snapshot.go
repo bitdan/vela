@@ -10,6 +10,7 @@ type WorkspaceSnapshot struct {
 }
 
 type RepositorySnapshot struct {
+	ShelfGroups                       *ShelfGrouping   `json:",omitempty"`
 	Changelists                       *ChangelistState `json:",omitempty"`
 	WorkingSelection, StagedSelection []string         `json:",omitempty"`
 	Name                              string
@@ -25,7 +26,8 @@ type RepositorySnapshot struct {
 }
 
 type TabSnapshot struct {
-	Comparison   *ComparisonSnapshot `json:",omitempty"`
+	Draft        *EditorDraftSnapshot `json:",omitempty"`
+	Comparison   *ComparisonSnapshot  `json:",omitempty"`
 	Source, Path string
 	ChangeKind   string `json:",omitempty"`
 	OldPath      string `json:",omitempty"`
@@ -35,6 +37,11 @@ type TabSnapshot struct {
 	Unified      bool   `json:",omitempty"`
 	Bookmarks    []int  `json:",omitempty"`
 	FileType     string `json:",omitempty"`
+}
+
+// EditorDraftSnapshot is unsaved user input, never a cached disk truth.
+type EditorDraftSnapshot struct {
+	Text, BaseText, DiskVersion, LineEnding string
 }
 
 // ComparisonSnapshot stores object identities and view state, never Git data.

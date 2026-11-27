@@ -128,6 +128,9 @@ func (a *Workspace) refreshOpenFileViews(root, path string) {
 						if !matched || buffer.Modified() {
 							return
 						}
+						if entry.document != nil {
+							entry.document.draftBase = nil
+						}
 						if bufferDiskText(buffer) != file.New {
 							selections, scroll := entry.code.Selections(), entry.code.ScrollY()
 							buffer.Reset(file.New)
