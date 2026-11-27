@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/egoist/mygo/ui"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -178,9 +179,15 @@ func (a *Workspace) menuNamed(m *ui.Menu, id commandID, target commandTarget, la
 		reason = a.disabledFor(id, target)
 	}
 	item := m.Item(label).ID(string(id) + ":" + target.source + ":" + target.file.Path + ":" + strconv.Itoa(target.index)).Disabled(reason != "").Tooltip(reason)
-	if mods, key, known := a.nativeWorkspaceShortcut(id); known {
-		if key != ui.KeyUnknown {
-			item.Shortcut(mods, key)
+	if value, known := application.EffectiveShortcutForScope(a.Layout.Keymap, a.shortcutScope, string(id)); known {
+		sequence, err := application.ParseKeySequence(value)
+		if err == nil && sequence.Chord() {
+			item.Trailing(value)
+		} else if err == nil && value != "" {
+			mods, key := nativeShortcut(sequence.First)
+			if key != ui.KeyUnknown {
+				item.Shortcut(mods, key)
+			}
 		}
 	} else {
 		switch id {

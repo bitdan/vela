@@ -31,14 +31,11 @@ func LoadLayout(path string) (application.Layout, error) {
 		}
 	}
 	if layout.Keymap != nil {
-		bindings, err := application.NormalizeKeymap(layout.Keymap.Bindings)
+		keymap, err := application.NormalizeKeymapSettings(layout.Keymap)
 		if err != nil {
 			return defaults, fmt.Errorf("%w: shortcuts: %v", ErrInvalidLayout, err)
 		}
-		layout.Keymap = nil
-		if len(bindings) > 0 {
-			layout.Keymap = &application.KeymapSettings{Bindings: bindings}
-		}
+		layout.Keymap = keymap
 	}
 	return layout, nil
 }
@@ -63,14 +60,11 @@ func BackupLayout(path string) (string, error) {
 
 func SaveLayout(path string, layout application.Layout) error {
 	if layout.Keymap != nil {
-		bindings, err := application.NormalizeKeymap(layout.Keymap.Bindings)
+		keymap, err := application.NormalizeKeymapSettings(layout.Keymap)
 		if err != nil {
 			return fmt.Errorf("save shortcuts: %w", err)
 		}
-		layout.Keymap = nil
-		if len(bindings) > 0 {
-			layout.Keymap = &application.KeymapSettings{Bindings: bindings}
-		}
+		layout.Keymap = keymap
 	}
 	if err := saveJSON(path, layout); err != nil {
 		return fmt.Errorf("save layout: %w", err)

@@ -232,7 +232,7 @@ func (a *Workspace) editor(c *ui.Context, p tokens) {
 		a.emptyEditor(c, p)
 		return
 	}
-	ui.Column(c).Fill().Background(p.editor).Children(func() {
+	panel := ui.Column(c).Fill().Background(p.editor).Children(func() {
 		ui.Row(c).FillWidth().Height(headerHeight+4).Padding(0, gap).Gap(gap).AlignItems(ui.Center).Background(p.chrome).Clip().Children(func() {
 			ui.ScrollHorizontal(c).Grow(1).FillHeight().Children(func() {
 				ui.Row(c).FillHeight().Gap(gap).AlignItems(ui.Center).Children(func() {
@@ -266,7 +266,7 @@ func (a *Workspace) editor(c *ui.Context, p tokens) {
 							target := commandTarget{tabID: entry.id}
 							reason := a.disabledFor(closeTab, target)
 							tip := "Close"
-							if keys, _ := application.EffectiveShortcut(a.Layout.Keymap, string(closeTab)); keys != "" {
+							if keys, _ := application.EffectiveShortcutForScope(a.Layout.Keymap, application.KeymapEditor, string(closeTab)); keys != "" {
 								tip += " (" + keys + ")"
 							}
 							if reason != "" {
@@ -323,6 +323,9 @@ func (a *Workspace) editor(c *ui.Context, p tokens) {
 		}
 		split(c, &r.splitSize, first, second).Grow(1).FillWidth()
 	})
+	if panel.FocusWithin() {
+		a.markShortcutScope(application.KeymapEditor)
+	}
 }
 
 func (a *Workspace) emptyEditor(c *ui.Context, p tokens) {
@@ -343,7 +346,7 @@ func (a *Workspace) emptyEditor(c *ui.Context, p tokens) {
 				{focusProject, "Alt+Home"},
 			} {
 				label := commandLabel(item.id)
-				if keys, known := application.EffectiveShortcut(a.Layout.Keymap, string(item.id)); known {
+				if keys, known := application.EffectiveShortcutForScope(a.Layout.Keymap, application.KeymapEditor, string(item.id)); known {
 					item.keys = keys
 				}
 				ui.ButtonBase(c.Key(string(item.id))).Height(headerHeight+4).Padding(0, gap).

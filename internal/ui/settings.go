@@ -24,6 +24,8 @@ type settingsDraft struct {
 	changelistRepository                        int
 	changelistRoot                              string
 	keymap                                      map[string]string
+	localKeymap                                 map[application.KeymapScope]map[string]string
+	keymapScope                                 application.KeymapScope
 	keymapRow                                   int
 	keymapList                                  ui.ListState
 	keymapCommand, keymapBinding, keymapMessage string
@@ -54,7 +56,7 @@ func (a *Workspace) openSettings() {
 	}
 	a.settings = settingsDraft{vcs: a.Layout.VersionControl, dark: a.Layout.Dark, page: page,
 		changelistRepository: a.Model.Index, changelistRoot: a.Model.Active().Repository.Root, changelists: a.Model.Active().Changelists.Policy(),
-		appearance: a.Layout.Appearance, editor: a.Layout.Editor, keymap: maps.Clone(layoutKeymap(a.Layout))}
+		appearance: a.Layout.Appearance, editor: a.Layout.Editor, keymap: maps.Clone(layoutKeymap(a.Layout)), localKeymap: cloneLocalKeymap(layoutLocalKeymap(a.Layout))}
 	a.settingsOpen = true
 }
 
@@ -63,7 +65,7 @@ func (a *Workspace) applySettings() {
 	if draft.vcs.Git.Validate() != nil {
 		return
 	}
-	bindings, err := application.NormalizeKeymap(draft.keymap)
+	keymap, err := application.NormalizeKeymapSettings(&application.KeymapSettings{Bindings: draft.keymap, LocalBindings: draft.localKeymap})
 	if err != nil {
 		a.settings.keymapMessage = err.Error()
 		return
@@ -85,8 +87,8 @@ func (a *Workspace) applySettings() {
 	a.Layout.VersionControl, a.Layout.Dark = draft.vcs, draft.dark
 	a.Layout.Appearance, a.Layout.Editor = draft.appearance, draft.editor
 	a.Layout.Keymap = nil
-	if len(bindings) > 0 {
-		a.Layout.Keymap = &application.KeymapSettings{Bindings: maps.Clone(bindings)}
+	if keymap != nil {
+		a.Layout.Keymap = &application.KeymapSettings{Bindings: maps.Clone(keymap.Bindings), LocalBindings: cloneLocalKeymap(keymap.LocalBindings)}
 	}
 }
 
@@ -135,13 +137,14 @@ func (a *Workspace) settingsDialog(c *ui.Context, p tokens) {
 			divider(c, p)
 			ui.Row(c).FillWidth().Padding(inset).Gap(gap).Children(func() {
 				ui.Box(c).Grow(1)
-				_, keymapErr := application.NormalizeKeymap(a.settings.keymap)
+				_, keymapErr := application.NormalizeKeymapSettings(&application.KeymapSettings{Bindings: a.settings.keymap, LocalBindings: a.settings.localKeymap})
 				invalid := a.settings.invalidColor() || keymapErr != nil || a.settings.vcs.Git.Validate() != nil
 				changelistsChanged := a.settings.changelistRepository >= 0 && a.settings.changelistRepository < len(a.Model.Sessions) &&
 					a.Model.Sessions[a.settings.changelistRepository].Repository.Root == a.settings.changelistRoot &&
 					a.settings.changelists != a.Model.Sessions[a.settings.changelistRepository].Changelists.Policy()
 				changed := changelistsChanged || a.settings.vcs != a.Layout.VersionControl || a.settings.dark != a.Layout.Dark ||
-					a.settings.appearance != a.Layout.Appearance || a.settings.editor != a.Layout.Editor || !maps.Equal(a.settings.keymap, layoutKeymap(a.Layout))
+					a.settings.appearance != a.Layout.Appearance || a.settings.editor != a.Layout.Editor || !maps.Equal(a.settings.keymap, layoutKeymap(a.Layout)) ||
+					!equalLocalKeymap(a.settings.localKeymap, layoutLocalKeymap(a.Layout))
 				ui.PrimaryButton(c, "OK").Width(76).Disabled(invalid).OnClick(func() { a.applySettings(); a.settingsOpen = false })
 				ui.Button(c, "Cancel").Width(76).OnClick(func() { a.settingsOpen = false })
 				ui.Button(c, "Apply").Width(76).Disabled(invalid || !changed).OnClick(a.applySettings)

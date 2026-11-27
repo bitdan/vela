@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/egoist/mygo/ui"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -76,7 +77,7 @@ func (a *Workspace) panelAction(c *ui.Context, id commandID, glyph string) {
 
 func (a *Workspace) changeTools(c *ui.Context, p tokens) {
 	page := a.repo().toolPage
-	ui.Column(c).Fill().Background(p.panel).Children(func() {
+	panel := ui.Column(c).Fill().Background(p.panel).Children(func() {
 		if page == commandLabel(openProject) {
 			a.projectPanel(c, p)
 			return
@@ -98,6 +99,9 @@ func (a *Workspace) changeTools(c *ui.Context, p tokens) {
 			a.commit(c, p)
 		}
 	})
+	if panel.FocusWithin() {
+		a.markShortcutScope(application.KeymapToolWindow)
+	}
 }
 
 func projectFiles(repo domain.Repository) []domain.File {
@@ -252,6 +256,9 @@ func (a *Workspace) projectPanel(c *ui.Context, p tokens) {
 			a.projectMenu(m, commandTarget{source: "project", file: domain.File{Path: r.project.Item(r.projectIndex)}}, true)
 		}
 	})
+	if list.FocusWithin() {
+		a.markShortcutScope(application.KeymapList)
+	}
 	if r.projectFocus {
 		if r.projectIndex < 0 {
 			r.projectIndex = 0

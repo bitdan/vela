@@ -130,6 +130,9 @@ type Workspace struct {
 	shiftTaps                       shiftGesture
 	searchFocus                     *editor.State
 	focusedEditor                   *editor.State
+	shortcutScope                   application.KeymapScope
+	viewShortcutScope               application.KeymapScope
+	chord                           shortcutChordState
 	inlineBlame                     inlineBlameState
 	WatchEditorActivity             func(context.Context, func())
 	confirmExit, exitApproved       bool
@@ -282,6 +285,7 @@ func (a *Workspace) repo() *repoView { return &a.repos[a.Model.Index] }
 
 func (a *Workspace) View(c *ui.Context) {
 	a.focusedEditor = nil
+	a.viewShortcutScope = application.KeymapGlobal
 	systemTheme := c.Theme()
 	a.systemDark = systemTheme.Dark
 	p := design(a.darkTheme())
@@ -432,7 +436,7 @@ func (a *Workspace) View(c *ui.Context) {
 	if a.search.open {
 		a.searchDialog(c, p)
 	} else if !a.settingsOpen && !a.remotes.open && a.repositoryInit == nil &&
-		(a.repo().preview != nil || a.repositoryFileRead != nil) && c.Shortcut(0, ui.KeyEscape) {
+		(a.repo().preview != nil || a.repositoryFileRead != nil) && a.chord.first.Key == "" && c.Shortcut(0, ui.KeyEscape) {
 		a.run(closePreview, commandTarget{})
 	}
 	if a.confirmExit {
@@ -621,7 +625,11 @@ func (a *Workspace) statusBar(c *ui.Context, p tokens) {
 			context += " › " + strings.ReplaceAll(entry.path, "/", " › ")
 		}
 		ui.Text(c, context).FontSize(p.textSize(smallText)).SingleLine().Ellipsis("…")
-		ui.Text(c, a.status).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		if a.chord.first.Key != "" {
+			ui.Text(c, "Waiting for second key: "+a.chord.first.String()+" · Esc to cancel").Label("Shortcut chord waiting").FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		} else {
+			ui.Text(c, a.status).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		}
 		ui.ButtonBase(c.Key("task-center")).Height(statusHeight-2).Padding(0, gap).Center().Label("Task Center").Children(func() {
 			ui.Text(c, fmt.Sprintf("Tasks (%d)", a.Tasks.ActiveCount())).FontSize(p.textSize(smallText))
 		}).OnClick(func() { a.run(showTasks, commandTarget{}) })
