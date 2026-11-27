@@ -46,6 +46,7 @@ type Repository struct {
 	ProjectDirectories      []string
 	RemoteBranches          map[string]bool
 	Refs                    map[string]string
+	RemoteSymrefs           map[string]string
 	Upstreams               map[string]Upstream
 	RemoteVersion           string
 	RemoteManagementVersion string
@@ -120,11 +121,11 @@ func MockRepositories() []Repository {
 	history[3].Files = []File{branchVersion, notes}
 	return []Repository{
 		{Name: "vela", CurrentBranch: "main", Branches: []string{"main", "feature/native-ui", "feature/editor-tabs", "origin/main", "origin/feature/native-ui", "origin/stable", "refs/tags/v0.1.0"},
-			Remotes: []Remote{{"origin", "https://github.com/egoist/mygo.git"}, {"gitee", "https://gitee.com/openharmony/docs.git"}, {"gitlab", "git@gitlab.com:gitlab-org/gitlab.git"}},
+			Remotes: []Remote{{Name: "origin", URL: "https://github.com/egoist/mygo.git"}, {Name: "gitee", URL: "https://gitee.com/openharmony/docs.git"}, {Name: "gitlab", URL: "git@gitlab.com:gitlab-org/gitlab.git"}},
 			Working: []File{main, theme, mod}, Staged: []File{notes}, History: history,
 			Shelf: []Shelf{{Title: "UI baseline changes", Files: []File{{Path: "docs/ui-notes.md", Status: "A", New: "# UI baseline\n\nMock layout notes.\n"}}}}},
 		{Name: "sandbox", CurrentBranch: "trunk", Branches: []string{"trunk", "demo/empty", "origin/trunk"},
-			Remotes: []Remote{{"origin", "https://github.com/egoist/mygo.git"}},
+			Remotes: []Remote{{Name: "origin", URL: "https://github.com/egoist/mygo.git"}},
 			History: []Commit{{Hash: "ab1500f", Subject: "Initialize sandbox", Author: "Lin", AuthorEmail: "lin@example.test", Date: "Nov 10", Timestamp: latest, Refs: []string{"trunk"}, Files: []File{notes}}}},
 	}
 }

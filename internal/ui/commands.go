@@ -314,8 +314,8 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 				return "Select an available worktree"
 			}
 			return ""
-		case newBranch, checkoutBranch, checkoutRebase, fetch, pull, push, updateBranch, updateProject,
-			addRemote, editRemote, removeRemote,
+		case newBranch, checkoutBranch, checkoutRebase, checkoutUpdate, fetch, pull, push, updateBranch, updateProject,
+			addRemote, editRemote, removeRemote, renameRemote, editRemoteURLs,
 			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
 			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,
@@ -534,8 +534,8 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		case openWorktree:
 			a.loadRepository(target.source, false)
 			return
-		case newBranch, checkoutBranch, checkoutRebase, fetch, pull, push, updateBranch, updateProject,
-			addRemote, editRemote, removeRemote,
+		case newBranch, checkoutBranch, checkoutRebase, checkoutUpdate, fetch, pull, push, updateBranch, updateProject,
+			addRemote, editRemote, removeRemote, renameRemote, editRemoteURLs,
 			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
 			cherryPick, revertCommit, continueSequence, skipSequence, abortSequence, resetRevision, stashChanges, unstashChanges, dropStash,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -130,6 +129,12 @@ func (g *Executor) readRepository(ctx context.Context, directory string, previou
 	repo.Upstreams = make(map[string]domain.Upstream)
 	for _, row := range strings.Split(strings.TrimSuffix(refOutput, "\n"), "\n") {
 		fields := strings.Split(row, "\x00")
+		if len(fields) == 8 && fields[3] != "" && strings.HasPrefix(fields[0], "refs/remotes/") {
+			if repo.RemoteSymrefs == nil {
+				repo.RemoteSymrefs = make(map[string]string)
+			}
+			repo.RemoteSymrefs[fields[0]] = fields[3]
+		}
 		if len(fields) != 8 || fields[3] != "" {
 			continue
 		}
@@ -166,17 +171,7 @@ func (g *Executor) readRepository(ctx context.Context, directory string, previou
 	if err != nil {
 		return repo, err
 	}
-	for _, row := range nulFields(remoteConfig) {
-		key, address, ok := strings.Cut(row, "\n")
-		if !ok || !strings.HasSuffix(key, ".url") {
-			continue
-		}
-		if parsed, err := url.Parse(address); err == nil && (parsed.Scheme == "https" || parsed.Scheme == "http") {
-			parsed.User, parsed.RawQuery, parsed.Fragment = nil, "", ""
-			address = parsed.String()
-		}
-		repo.Remotes = append(repo.Remotes, domain.Remote{Name: strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".url"), URL: address})
-	}
+	repo.Remotes = parseRemoteURLs(remoteConfig)
 	if repo.Head != "" {
 		repo.LogSnapshot.Tips = append(repo.LogSnapshot.Tips, repo.Head)
 		repo.HeadMessage, err = g.read(ctx, repo.Root, "show", "-s", "--format=format:%B", "--encoding=UTF-8",

@@ -15,11 +15,15 @@ type remoteDialogState struct {
 	selected   int
 	table      ui.ListState
 	editor     *remoteEditor
+	version    string
 }
 
 type remoteEditor struct {
-	index int
-	item  domain.Remote
+	index       int
+	item        domain.Remote
+	rename      bool
+	urls        bool
+	fetch, push string
 }
 
 var remoteMinusIcon = changeIcon("M2 8h12")
@@ -30,7 +34,7 @@ func (a *Workspace) openRemotes() {
 		return
 	}
 	a.remotes = remoteDialogState{open: true, repository: a.Model.Index, selected: -1,
-		items: slices.Clone(a.Model.Active().Repository.Remotes)}
+		items: slices.Clone(a.Model.Active().Repository.Remotes), version: a.Model.Active().Repository.RemoteManagementVersion}
 }
 
 func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
@@ -63,6 +67,19 @@ func (a *Workspace) remotesDialog(c *ui.Context, p tokens) {
 						s.selected = min(s.selected, len(s.items)-1)
 					})
 					remoteTool(c, p, "Edit remote", remoteEditIcon, s.editor != nil || !selection() || busy, edit)
+					if real {
+						ui.Button(c, "Rename…").Label("Rename remote").Disabled(s.editor != nil || !selection() || busy).OnClick(func() {
+							s.editor = &remoteEditor{index: s.selected, item: s.items[s.selected], rename: true}
+						})
+						ui.Button(c, "Edit URLs…").Label("Edit remote URLs").Disabled(s.editor != nil || !selection() || busy || selection() && s.items[s.selected].URLConfigBlocked).OnClick(func() {
+							item := s.items[s.selected]
+							fetch := item.FetchURLs
+							if len(fetch) == 0 && item.URL != "" {
+								fetch = []string{item.URL}
+							}
+							s.editor = &remoteEditor{index: s.selected, item: item, urls: true, fetch: strings.Join(fetch, "\n"), push: strings.Join(item.PushURLs, "\n")}
+						})
+					}
 				})
 				s.table.Selected = &s.selected
 				s.table.Key = func(i int) any { return s.items[i].Name }
@@ -107,16 +124,24 @@ func remoteTool(c *ui.Context, p tokens, label string, icon *ui.SVG, disabled bo
 func (a *Workspace) remoteForm(c *ui.Context, p tokens, real, busy bool) {
 	s := &a.remotes
 	edit := s.editor
+	if edit.urls {
+		a.remoteURLsForm(c, p, edit, busy)
+		return
+	}
 	ui.Column(c.Key("remote-editor")).FillWidth().Gap(gap).Children(func() {
 		ui.Row(c).FillWidth().Gap(gap).Children(func() {
-			ui.TextInput(c, &edit.item.Name).Width(150).Placeholder("Name").Label("Remote name").AutoFocus().Disabled(busy || real && edit.index >= 0)
-			ui.TextInput(c, &edit.item.URL).Grow(1).Placeholder("HTTPS, SSH or absolute local path").Label("Remote URL").Disabled(busy)
+			ui.TextInput(c, &edit.item.Name).Width(150).Placeholder("Name").Label("Remote name").AutoFocus().Disabled(busy || real && edit.index >= 0 && !edit.rename)
+			if !edit.rename {
+				ui.TextInput(c, &edit.item.URL).Grow(1).Placeholder("HTTPS, SSH or absolute local path").Label("Remote URL").Disabled(busy)
+			}
 		})
 		item := domain.Remote{Name: strings.TrimSpace(edit.item.Name), URL: strings.TrimSpace(edit.item.URL)}
 		var reason string
 		if !domain.ValidRemoteName(item.Name) {
 			reason = "Enter a remote name using letters, digits, dots, hyphens or underscores."
-		} else if !domain.ValidRemoteLocation(item.URL) {
+		} else if edit.rename && strings.EqualFold(item.Name, s.items[edit.index].Name) {
+			reason = "Enter a different remote name."
+		} else if !edit.rename && !domain.ValidRemoteLocation(item.URL) {
 			reason = "Enter a Git remote URL without embedded credentials or an absolute local path."
 		} else if duplicate := slices.IndexFunc(s.items, func(remote domain.Remote) bool { return remote.Name == item.Name }); duplicate >= 0 && duplicate != edit.index {
 			reason = "A remote with this name already exists."
@@ -131,6 +156,9 @@ func (a *Workspace) remoteForm(c *ui.Context, p tokens, real, busy bool) {
 					id, original := addRemote, ""
 					if edit.index >= 0 {
 						id, original = editRemote, s.items[edit.index].Name
+					}
+					if edit.rename {
+						id = renameRemote
 					}
 					a.confirmRemote(id, original, item)
 					return

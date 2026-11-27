@@ -31,6 +31,8 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return err
 	}
 	switch op.Kind {
+	case domain.CheckoutUpdate:
+		return g.checkoutUpdate(ctx, repo, index, op)
 	case domain.CheckoutRebase:
 		return g.checkoutRebase(ctx, repo, index, op)
 	case domain.RewordCommit, domain.FixupCommits, domain.DropCommit, domain.UndoCommit:
@@ -45,7 +47,7 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return g.applyHunk(ctx, repo, op)
 	case domain.RenameBranch, domain.DeleteBranch, domain.CreateTag:
 		return g.manageRef(ctx, repo, index, op)
-	case domain.AddRemote, domain.EditRemote, domain.RemoveRemote:
+	case domain.AddRemote, domain.EditRemote, domain.RemoveRemote, domain.RenameRemote, domain.EditRemoteURLs:
 		return g.manageRemote(ctx, repo, op)
 	case domain.ResetRevision:
 		return g.reset(ctx, repo, index, op)

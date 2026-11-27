@@ -72,6 +72,12 @@ func (s *repositoryOperationDialog) configureSequence(repo domain.Repository, id
 		s.op.Kind = domain.AbortSequence
 		s.detail = "Abort " + sequenceTitle(repo.Sequencer) + " and restore the state before the operation. Changes made while resolving conflicts may be lost."
 	}
+	if (id == continueSequence || id == skipSequence || id == abortSequence) && repo.Sequencer.Remaining > 1 {
+		s.detail += fmt.Sprintf("\nCurrent commit: %s · %d commits remaining (including this step).", repo.Sequencer.Commit, repo.Sequencer.Remaining)
+		if id != abortSequence {
+			s.detail += " Git may process later commits before stopping again."
+		}
+	}
 }
 
 func conflictPaneLabels(rebase domain.RebaseState, sequence domain.SequencerState) (string, string) {

@@ -67,6 +67,9 @@ const (
 	DropCommit
 	UndoCommit
 	CheckoutRebase
+	CheckoutUpdate
+	RenameRemote
+	EditRemoteURLs
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.
@@ -76,6 +79,8 @@ type SequencerState struct {
 }
 
 func (s SequencerState) Active() bool { return s.Kind != "" }
+
+const MaxSequenceRecovery = 100
 
 type RebaseState struct {
 	Branch, Original, Onto, Stopped, Step string
@@ -93,6 +98,7 @@ type Upstream struct {
 }
 
 type RepositoryOperation struct {
+	FetchURLs, PushURLs            []string
 	RewriteSelection               []string
 	RewriteVersion                 string
 	ConfirmRewrite                 bool

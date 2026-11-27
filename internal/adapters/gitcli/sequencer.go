@@ -14,6 +14,10 @@ import (
 )
 
 func sequencerAt(gitDir string) (domain.SequencerState, error) {
+	return sequencerSnapshotAt(gitDir, nil)
+}
+
+func sequencerSnapshotAt(gitDir string, pending *[]string) (domain.SequencerState, error) {
 	var state domain.SequencerState
 	hash := sha256.New()
 	for _, marker := range []struct{ name, kind string }{
@@ -57,12 +61,19 @@ func sequencerAt(gitDir string) (domain.SequencerState, error) {
 				if len(fields) < 2 || (fields[0] != "pick" && fields[0] != "revert") {
 					return state, errors.New("unsupported Git sequencer command")
 				}
+				kind := "cherry-pick"
+				if fields[0] == "revert" {
+					kind = "revert"
+				}
+				if state.Active() && state.Kind != kind {
+					return state, errors.New("mixed Git sequencer commands are unsupported")
+				}
 				state.Remaining++
+				if pending != nil && len(*pending) < domain.MaxSequenceRecovery {
+					*pending = append(*pending, fields[1])
+				}
 				if !state.Active() {
-					state.Kind, state.Commit = "cherry-pick", fields[1]
-					if fields[0] == "revert" {
-						state.Kind = "revert"
-					}
+					state.Kind, state.Commit = kind, fields[1]
 				}
 			}
 		}
@@ -74,18 +85,27 @@ func sequencerAt(gitDir string) (domain.SequencerState, error) {
 }
 
 func (g *Executor) verifySequencer(ctx context.Context, repo domain.Repository) error {
+	_, err := g.verifySequenceTodo(ctx, repo)
+	return err
+}
+
+func (g *Executor) verifySequenceTodo(ctx context.Context, repo domain.Repository) ([]string, error) {
 	dir, err := g.gitDirectory(ctx, repo.Root)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	state, err := sequencerAt(dir)
+	if dir != repo.GitDir {
+		return nil, ErrStaleIndex
+	}
+	var pending []string
+	state, err := sequencerSnapshotAt(dir, &pending)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !state.Active() || state != repo.Sequencer {
-		return ErrStaleIndex
+		return nil, ErrStaleIndex
 	}
-	return nil
+	return pending, nil
 }
 
 func (g *Executor) sequence(ctx context.Context, repo domain.Repository, index string, op domain.RepositoryOperation) error {
@@ -151,13 +171,26 @@ func (g *Executor) sequence(ctx context.Context, repo domain.Repository, index s
 		}
 		return err
 	}
-	if err := g.verifySequencer(ctx, repo); err != nil {
+	pending, err := g.verifySequenceTodo(ctx, repo)
+	if err != nil {
 		return err
 	}
-	if repo.Sequencer.Remaining > 1 && op.Kind != domain.AbortSequence {
-		return errors.New("continue or skip this multi-commit sequence using Git. Vela starts one commit at a time")
+	if op.Kind == domain.ContinueSequence && len(conflictsFromIndex(index)) != 0 {
+		return errors.New("resolve all conflicted files before continuing")
 	}
-	if err := g.protectWorktreePaths(ctx, repo.Root, repo.Head, repo.Sequencer.Commit); err != nil {
+	multiReplay := op.Kind != domain.AbortSequence && len(pending) > 1
+	var replacements string
+	if multiReplay {
+		replacements, err = g.read(ctx, repo.Root, "for-each-ref", "--format=%(refname)%00%(objectname)", "refs/replace/")
+		if err != nil {
+			return err
+		}
+	}
+	current, err := g.resolveSequenceCommits(ctx, repo.Root, []string{repo.Sequencer.Commit})
+	if err != nil {
+		return err
+	}
+	if err := g.protectWorktreePaths(ctx, repo.Root, repo.Head, current[0]); err != nil {
 		return err
 	}
 	if repo.Sequencer.Original != "" {
@@ -165,11 +198,53 @@ func (g *Executor) sequence(ctx context.Context, repo domain.Repository, index s
 			return err
 		}
 	}
+	if op.Kind != domain.AbortSequence && len(pending) > 0 {
+		if repo.Sequencer.Remaining > domain.MaxSequenceRecovery {
+			return errors.New("continue or skip sequences longer than 100 commits using Git")
+		}
+		if err := g.protectSequencePaths(ctx, repo.Root, pending); err != nil {
+			return err
+		}
+	}
+	if _, _, err := g.verifyCheckout(ctx, repo); err != nil {
+		return err
+	}
+	if err := g.verifyWorktree(ctx, repo); err != nil {
+		return err
+	}
+	if err := g.verifySequencer(ctx, repo); err != nil {
+		return err
+	}
+	if multiReplay {
+		if err := g.verifyUpdateMetadata(ctx, repo); err != nil {
+			return err
+		}
+		refs, err := g.read(ctx, repo.Root, "for-each-ref", "--format=%(refname)%00%(objectname)", "refs/replace/")
+		if err != nil {
+			return err
+		}
+		if refs != replacements {
+			return ErrStaleIndex
+		}
+		boundary, err := commitLogBoundary(repo.CommonDir)
+		if err != nil {
+			return err
+		}
+		if boundary != repo.LogSnapshot.Boundary {
+			return errors.New("repository ancestry changed; refresh before continuing the sequence")
+		}
+		// Native merge can synthesize a new path for a directory rename or
+		// file/directory conflict and overwrite ignored files at that path.
+		ignored, err := g.read(ctx, repo.Root, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
+		if err != nil {
+			return err
+		}
+		if ignored != "" {
+			return errors.New("move ignored files before continuing: directory or file conflicts in later commits can overwrite them")
+		}
+	}
 	switch op.Kind {
 	case domain.ContinueSequence:
-		if len(conflictsFromIndex(index)) != 0 {
-			return errors.New("resolve all conflicted files before continuing")
-		}
 		return g.runSequence(ctx, repo.Root, repo.Sequencer.Kind, "--continue")
 	case domain.SkipSequence:
 		return g.runSequence(ctx, repo.Root, repo.Sequencer.Kind, "--skip")

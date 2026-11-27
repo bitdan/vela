@@ -9,7 +9,23 @@ import (
 )
 
 type Remote struct {
-	Name, URL string
+	Name, URL           string
+	FetchURLs, PushURLs []string
+	URLConfigBlocked    bool
+}
+
+func ValidRemoteURLLists(fetch, push []string) bool {
+	if len(fetch) == 0 || len(fetch) > 32 || len(push) > 32 {
+		return false
+	}
+	for _, group := range [][]string{fetch, push} {
+		for _, address := range group {
+			if len(address) > 2048 || !ValidRemoteLocation(address) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 var remoteName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)

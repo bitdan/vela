@@ -116,6 +116,9 @@ func (a *Workspace) mergeControls(c *ui.Context, p tokens) {
 		actions = []commandID{continueRebase, skipRebase, abortRebase}
 	} else if repo.Sequencer.Active() {
 		title = sequenceTitle(repo.Sequencer) + " in progress"
+		if repo.Sequencer.Remaining > 1 {
+			title += fmt.Sprintf(" · %d commits remaining", repo.Sequencer.Remaining)
+		}
 		actions = []commandID{continueSequence, skipSequence, abortSequence}
 	} else if len(repo.MergeHeads) == 0 {
 		title = "Unmerged files · resolve and stage, then commit"
