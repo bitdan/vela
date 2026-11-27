@@ -81,6 +81,8 @@ type commandTarget struct {
 var commands = map[commandID]string{
 	newShelfGroup: "New Shelf Group…", renameShelfGroup: "Rename Shelf Group…", deleteShelfGroup: "Delete Shelf Group…", moveShelfGroup: "Move Shelf to Group", filterShelfGroup: "Filter Shelf Group", applyShelfGroup: "Apply Shelf Group", cancelShelfGroup: "Cancel Shelf Group",
 	toggleInlineBlame: "Inline Blame", inlineCommitDetails: "Line Commit Details", closeInlineDetails: "Close Line Commit Details",
+	closeLineHistory: "Close Line History", moreLineHistory: "Load More Line History", selectLineHistory: "Inspect Line History Commit", nextLineHistoryHunk: "Next Range Hunk", previousLineHistoryHunk: "Previous Range Hunk",
+	confirmHistoryRewrite: "Apply History Rewrite", cancelHistoryRewrite: "Cancel History Rewrite", refreshHistoryRewrite: "Preview History Rewrite",
 	squashCommit: "Squash Selected Commits…", confirmSquash: "Squash Commits", cancelSquash: "Cancel Squash", refreshSquash: "Preview Squash",
 	clearHunkLines: "Clear Changed Lines", selectAllHunkLines: "Select All Changed Lines",
 	toggleHunkLineMode: "Choose Individual Changed Lines", toggleHunkLine: "Toggle Changed Git Line", applyHunkSelection: "Apply Git Hunk Selection",
@@ -132,6 +134,9 @@ var commands = map[commandID]string{
 }
 
 func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
+	if isLineHistoryCommand(id) {
+		return a.lineHistoryDisabled(id, target)
+	}
 	if isShelfGroupCommand(id) {
 		return a.shelfGroupDisabled(id, target)
 	}
@@ -389,6 +394,12 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 }
 
 func (a *Workspace) run(id commandID, target commandTarget) {
+	if isLineHistoryCommand(id) {
+		if a.disabledFor(id, target) == "" {
+			a.runLineHistory(id, target)
+		}
+		return
+	}
 	if isShelfGroupCommand(id) {
 		if a.disabledFor(id, target) == "" {
 			a.runShelfGroup(id, target)
@@ -405,7 +416,11 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		return
 	}
 	if isSquashCommand(id) {
-		a.runSquash(id)
+		if rewriteEntryCommand(id) {
+			a.openCommitRewrite(id, target)
+		} else {
+			a.runSquash(id)
+		}
 		return
 	}
 	if isHunkLineCommand(id) {

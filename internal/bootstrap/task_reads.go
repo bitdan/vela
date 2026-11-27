@@ -11,6 +11,40 @@ import (
 )
 
 func connectReadTasks(a *ui.Workspace, invalidate func()) {
+	if original := a.ReadLineHistory; original != nil {
+		a.ReadLineHistory = func(ctx context.Context, repo domain.Repository, q domain.LineHistoryQuery, done func(domain.LineHistoryPage, error)) {
+			ctx, finish, err := trackTask(a, invalidate, ctx, repo.Root, "Read Line History", taskKey("LineHistory", q), time.Minute, nil)
+			if err != nil {
+				done(domain.LineHistoryPage{}, err)
+				return
+			}
+			original(ctx, repo, q, func(page domain.LineHistoryPage, err error) {
+				if err == nil {
+					err = ctx.Err()
+				}
+				finish(err, "")
+				done(page, err)
+			})
+		}
+	}
+
+	if original := a.PreviewCommitRewrite; original != nil {
+		a.PreviewCommitRewrite = func(ctx context.Context, repo domain.Repository, kind domain.RepositoryOperationKind, selection []string, done func(domain.CommitRewritePreview, error)) {
+			ctx, finish, err := trackTask(a, invalidate, ctx, repo.Root, "Preview History Rewrite", taskKey("HistoryRewrite", kind, selection, repo.Head, repo.IndexVersion, repo.WorktreeVersion), time.Minute, nil)
+			if err != nil {
+				done(domain.CommitRewritePreview{}, err)
+				return
+			}
+			original(ctx, repo, kind, selection, func(plan domain.CommitRewritePreview, err error) {
+				if err == nil {
+					err = ctx.Err()
+				}
+				finish(err, "")
+				done(plan, err)
+			})
+		}
+	}
+
 	if original := a.PreviewRepositorySquash; original != nil {
 		a.PreviewRepositorySquash = func(ctx context.Context, repo domain.Repository, selection []string, done func(domain.SquashPreview, error)) {
 			ctx, finish, err := trackTask(a, invalidate, ctx, repo.Root, "Preview Squash", taskKey("PreviewSquash", selection, repo.Head, repo.IndexVersion, repo.WorktreeVersion), time.Minute, nil)

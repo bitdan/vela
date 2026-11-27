@@ -101,6 +101,7 @@ type repoView struct {
 type Workspace struct {
 	squash                          *squashDialog
 	PreviewRepositorySquash         func(context.Context, domain.Repository, []string, func(domain.SquashPreview, error))
+	PreviewCommitRewrite            func(context.Context, domain.Repository, domain.RepositoryOperationKind, []string, func(domain.CommitRewritePreview, error))
 	Tasks                           velaruntime.Tasks
 	tasksOpen                       bool
 	taskList                        ui.ListState
@@ -148,6 +149,8 @@ type Workspace struct {
 	repositoryClone                 *repositoryCloneDialog
 	patchDialog                     *patchDialog
 	fileHistory                     *fileHistoryDialog
+	lineHistory                     *lineHistoryDialog
+	ReadLineHistory                 func(context.Context, domain.Repository, domain.LineHistoryQuery, func(domain.LineHistoryPage, error))
 	patchExport                     *patchExportDialog
 	patchImport                     *patchImportDialog
 	PickPatchSource                 func(func(string, error))
@@ -375,6 +378,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.inlineBlame.detailsOpen {
 		a.inlineDetailsView(c, p)
+	}
+	if a.lineHistory != nil {
+		a.lineHistoryView(c, p)
 	}
 	if a.fileHistory != nil {
 		a.fileHistoryView(c, p)

@@ -56,6 +56,7 @@ func (a *Workspace) loadRepository(directory string, refresh bool) {
 	stopRead(&a.logRead)
 	a.stopSourceDecision()
 	a.stopPatchExports()
+	a.closeLineHistory()
 	a.closeFileHistoryDialog()
 	a.repositoryNavigation++
 	stopRead(&a.sessionRestore)

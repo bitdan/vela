@@ -102,6 +102,7 @@ func (a *Workspace) selectRepository(index int) {
 	stopRead(&a.logRead)
 	a.stopSourceDecision()
 	a.stopPatchExports()
+	a.closeLineHistory()
 	a.closeFileHistoryDialog()
 	a.repositoryNavigation++
 	stopRead(&a.sessionRestore)

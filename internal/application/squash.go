@@ -15,8 +15,12 @@ type RepositorySquashReader interface {
 }
 
 func ValidateSquashSelection(ids []string) error {
-	if len(ids) < 2 || len(ids) > 1000 {
-		return errors.New("select 2–1000 consecutive private commits")
+	return ValidateCommitRangeSelection(ids, 2)
+}
+
+func ValidateCommitRangeSelection(ids []string, minimum int) error {
+	if len(ids) < minimum || len(ids) > 1000 {
+		return errors.New("select the required number of consecutive private commits (at most 1000)")
 	}
 	seen := make(map[string]bool, len(ids))
 	for _, id := range ids {

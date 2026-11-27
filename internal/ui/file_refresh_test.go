@@ -2,11 +2,42 @@ package ui
 
 import (
 	"context"
+	"io/fs"
 	"testing"
 
 	"vela/internal/application"
 	"vela/internal/domain"
 )
+
+func TestDropRefreshMakesDeletedProjectFileReadOnly(t *testing.T) {
+	for _, edited := range []bool{false, true} {
+		a := New(application.New(), application.DefaultLayout())
+		repo := sessionRepository(t.TempDir())
+		a.Model.Switch(a.installRepository(repo))
+		a.SaveRepositoryFile = func(context.Context, domain.Repository, domain.File, string, func(domain.Repository, domain.File, error, error)) {
+		}
+		file := domain.File{Path: "introduced.txt", New: "previous text", DiskVersion: "before"}
+		a.openCode("project", file)
+		entry := a.activeDocument()
+		a.splitTab(entry.id, false, false)
+		var finish func(domain.File, error)
+		a.ReadRepositoryFile = func(_ context.Context, _, _ string, _ domain.File, done func(domain.File, error)) {
+			finish = done
+		}
+		a.refreshHistoricalWriteViews(repo.Root, domain.RepositoryOperation{Kind: domain.DropCommit})
+		wantText := file.New
+		if edited {
+			wantText = "new typing"
+			entry.code.Buffer.Set(wantText)
+		}
+		finish(file, fs.ErrNotExist)
+		for _, view := range []*tab{entry, a.repo().split} {
+			if view.code.ReadOnly == edited || view.code.Buffer.String() != wantText || (view.file.DiskVersion == "") == edited {
+				t.Fatalf("edited=%t: readOnly=%t, text=%q, disk version=%q", edited, view.code.ReadOnly, view.code.Buffer.String(), view.file.DiskVersion)
+			}
+		}
+	}
+}
 
 func TestFileRefreshUpdatesCleanSharedViewsAndKeepsNewerTyping(t *testing.T) {
 	a := New(application.New(), application.DefaultLayout())
