@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -86,36 +87,25 @@ func (g *Executor) saveShelf(ctx context.Context, repo domain.Repository, index 
 	if !validShelfName(op.Message) || len(shelves) >= 200 || repo.Head == "" {
 		return errors.New("shelving requires HEAD, a single-line name up to 200 bytes, and fewer than 200 stored entries")
 	}
-	paths := slices.Clone(op.Paths)
-	slices.Sort(paths)
-	paths = slices.Compact(paths)
-	if len(paths) == 0 || len(paths) > 100 {
+	paths := application.ShelfSavePaths(repo, op.Paths)
+	if len(paths) == 0 || len(paths) > application.ShelfPathLimit {
 		return errors.New("select 1 to 100 tracked changed paths")
 	}
 	changed := slices.Concat(repo.Working, repo.Staged)
-	for i := 0; i < len(paths); i++ {
+	for _, path := range paths {
 		found := false
 		for _, f := range changed {
-			if f.Path != paths[i] && f.OldPath != paths[i] {
+			if f.Path != path && f.OldPath != path {
 				continue
 			}
 			if f.Status == "?" || f.Status == "U" {
 				return errors.New("stage untracked files and resolve conflicts before shelving")
 			}
 			found = true
-			if f.OldPath != "" && !slices.Contains(paths, f.OldPath) {
-				paths = append(paths, f.OldPath)
-			}
-			if !slices.Contains(paths, f.Path) {
-				paths = append(paths, f.Path)
-			}
 		}
 		if !found {
 			return ErrStaleIndex
 		}
-	}
-	if len(paths) > 100 {
-		return errors.New("rename-expanded shelf selection exceeds 100 paths")
 	}
 	if err := g.rejectHiddenIndexFlags(ctx, repo.Root); err != nil {
 		return err

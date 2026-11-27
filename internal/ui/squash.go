@@ -118,7 +118,7 @@ func (a *Workspace) squashDisabled(id commandID, t commandTarget) string {
 	if s.plan.Version == "" || !s.ack {
 		return "Preview and confirm the rewritten range"
 	}
-	if err := application.ValidateSquashMessage(s.message); s.operationKind() != domain.FixupCommits && s.operationKind() != domain.DropCommit && err != nil {
+	if err := application.ValidateSquashMessage(s.message); (s.operationKind() == domain.SquashCommits || s.operationKind() == domain.RewordCommit) && err != nil {
 		return err.Error()
 	}
 	return ""
@@ -261,6 +261,9 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 					if s.operationKind() == domain.DropCommit {
 						summary = fmt.Sprintf("Remove %s · %d later commits will be replayed", s.plan.Selected[0], len(s.plan.Replay))
 					}
+					if s.operationKind() == domain.UndoCommit {
+						summary = "Move the branch to " + s.plan.Parent
+					}
 					ui.Text(c, summary).FillWidth()
 					s.list.Key = func(i int) any { return s.plan.Selected[i] }
 					ui.List(c, &s.list, len(s.plan.Selected), func(i int) {
@@ -271,9 +274,9 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 						}
 						ui.Text(c, label).FillWidth().SingleLine().Ellipsis("…").Tooltip(label)
 					}).FillWidth().Height(min(float32(len(s.plan.Selected))*rowHeight, 5*rowHeight)).Label("Squash selected commit range")
-					if s.operationKind() != domain.DropCommit {
+					if s.operationKind() != domain.DropCommit && s.operationKind() != domain.UndoCommit {
 						ui.Text(c, "Author kept from oldest selected commit: "+s.plan.Author).FillWidth()
-					} else {
+					} else if s.operationKind() == domain.DropCommit {
 						ui.Text(c, "Changes introduced by this commit:").FillWidth()
 						s.affected.Key = func(i int) any { return s.plan.Affected[i].Path }
 						ui.List(c, &s.affected, len(s.plan.Affected), func(i int) {
@@ -286,7 +289,7 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 				if s.operationKind() != domain.SquashCommits {
 					messageLabel = "History rewrite message"
 				}
-				if s.operationKind() != domain.DropCommit {
+				if s.operationKind() != domain.DropCommit && s.operationKind() != domain.UndoCommit {
 					ui.TextArea(c, &s.message).Label(messageLabel).Height(150).FillWidth().Disabled(s.busy || s.request != nil || s.operationKind() == domain.FixupCommits)
 				}
 				warning := s.title() + " keeps the final file tree. Git may stop during replay; use native Rebase Continue or Abort. Cancellation does not promise rollback."
@@ -294,6 +297,10 @@ func (a *Workspace) squashView(c *ui.Context, p tokens) {
 				if s.operationKind() == domain.DropCommit {
 					warning = "Drop removes the selected commit and its changes. Dependent later commits may conflict; use native Rebase Continue, Skip or Abort. Cancellation does not promise rollback."
 					confirmation = "Remove the selected commit and its changes; replay later commits"
+				}
+				if s.operationKind() == domain.UndoCommit {
+					warning = "Move the branch to the parent commit. Files stay unchanged and the undone changes remain staged."
+					confirmation = "Undo the latest commit and keep its changes staged"
 				}
 				ui.Text(c, warning).FillWidth().TextColor(p.theme.TextMuted)
 				ui.Checkbox(c, &s.ack, confirmation).Disabled(s.busy || s.request != nil || s.plan.Version == "")

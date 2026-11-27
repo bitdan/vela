@@ -15,6 +15,10 @@ func (a *Workspace) TaskOperationName(op domain.RepositoryOperation) string {
 		return s.label
 	}
 	switch op.Kind {
+	case domain.UndoCommit:
+		return "Undo Commit"
+	case domain.SaveShelf:
+		return "Shelve Silently"
 	case domain.DropCommit:
 		return "Drop Commit"
 	case domain.FixupCommits:

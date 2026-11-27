@@ -172,7 +172,7 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 			a.run(editChangelist, target)
 		}
 		if working && state.Shortcut(c, ui.Ctrl|ui.Shift, ui.KeyH) {
-			a.run(shelve, target)
+			a.run(shelveSilently, target)
 		}
 		if working && state.Shortcut(c, ui.Ctrl|ui.Alt, ui.KeyP) {
 			a.run(groupDirectory, commandTarget{})

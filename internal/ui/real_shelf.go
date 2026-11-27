@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -57,12 +58,8 @@ func (a *Workspace) shelfSelection(t commandTarget) []string {
 	var paths []string
 	for _, f := range files {
 		paths = append(paths, f.Path)
-		if f.OldPath != "" {
-			paths = append(paths, f.OldPath)
-		}
 	}
-	slices.Sort(paths)
-	return slices.Compact(paths)
+	return application.ShelfSavePaths(a.Model.Active().Repository, paths)
 }
 
 func (a *Workspace) realShelfDisabled(id commandID, t commandTarget) string {
@@ -90,7 +87,7 @@ func (a *Workspace) realShelfDisabled(id commandID, t commandTarget) string {
 			return "Create a commit before shelving"
 		}
 		paths := a.shelfSelection(t)
-		if len(paths) == 0 || len(paths) > 100 {
+		if len(paths) == 0 || len(paths) > application.ShelfPathLimit {
 			return "Select 1 to 100 tracked changed paths"
 		}
 		for _, path := range paths {
@@ -137,6 +134,15 @@ func (a *Workspace) realShelfDisabled(id commandID, t commandTarget) string {
 }
 
 func (a *Workspace) runRealShelf(id commandID, t commandTarget) {
+	if id == shelveSilently {
+		repo := a.Model.Active().Repository
+		paths := a.shelfSelection(t)
+		a.applyRepositoryOperation(&repositoryOperationDialog{
+			root: repo.Root, snapshot: repo, label: "Shelve Silently",
+			op: domain.RepositoryOperation{Kind: domain.SaveShelf, Message: a.silentShelfName(paths), Paths: paths},
+		})
+		return
+	}
 	if id == previewShelfIndex {
 		entry, _ := a.realShelfEntry(t)
 		t.source = "shelf-index:" + entry.ID
@@ -146,9 +152,30 @@ func (a *Workspace) runRealShelf(id commandID, t commandTarget) {
 	a.openRepositoryOperation(id, t)
 }
 
+func (a *Workspace) silentShelfName(paths []string) string {
+	state := &a.Model.Active().Changelists
+	owner := ""
+	for _, path := range paths {
+		id := state.Owner(path)
+		if id == "" {
+			continue // Rename source paths do not have their own membership.
+		}
+		if owner != "" && owner != id {
+			return "Shelved changes"
+		}
+		owner = id
+	}
+	for _, list := range state.Lists {
+		if list.ID == owner {
+			return list.Name
+		}
+	}
+	return "Shelved changes"
+}
+
 func (a *Workspace) configureShelf(s *repositoryOperationDialog, id commandID, t commandTarget) {
 	switch id {
-	case shelve, shelveSilently:
+	case shelve:
 		s.label = "Shelve"
 		s.detail = "Save both staged and working versions of the selected paths, then restore those paths to HEAD. Unselected changes and Git Stash are kept."
 		s.op = domain.RepositoryOperation{Kind: domain.SaveShelf, Message: "Shelved changes", Paths: a.shelfSelection(t)}

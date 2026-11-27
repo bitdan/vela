@@ -65,6 +65,8 @@ const (
 	RewordCommit
 	FixupCommits
 	DropCommit
+	UndoCommit
+	CheckoutRebase
 )
 
 // SequencerState identifies the paused cherry-pick or revert and its recovery metadata.

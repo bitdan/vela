@@ -80,7 +80,7 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 	}
 	if repo.Bisect.Active() {
 		switch id {
-		case resetRevision, stashChanges, unstashChanges, dropStash, newBranch, checkoutBranch, pull, updateBranch, updateProject, mergeBranch, rebaseBranch, cherryPick, revertCommit, renameBranch, deleteBranch, newTag:
+		case resetRevision, stashChanges, unstashChanges, dropStash, newBranch, checkoutBranch, checkoutRebase, pull, updateBranch, updateProject, mergeBranch, rebaseBranch, cherryPick, revertCommit, renameBranch, deleteBranch, newTag:
 			return "End Bisect before running this operation"
 		}
 	}
@@ -196,6 +196,19 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 		if branch == repo.CurrentBranch || (!strings.HasPrefix(ref, "refs/heads/") && !strings.HasPrefix(ref, "refs/remotes/")) {
 			return "Select a different local or remote-tracking branch"
 		}
+	case checkoutRebase:
+		ref := localBranchRef(repo, target.source)
+		if ref == "" || ref == "refs/heads/"+repo.CurrentBranch || repo.Head == "" || repo.CurrentBranch == "Detached HEAD" {
+			return "Select a different local branch and check out a base branch"
+		}
+		if repo.ResolvingConflicts() || len(repo.Staged) > 0 || slices.ContainsFunc(repo.Working, func(f domain.File) bool { return f.Status != "?" }) || a.updateDirtyBuffer(repo.Root) {
+			return "Finish the current operation and save or shelve changes before rebasing"
+		}
+		for _, worktree := range repo.Worktrees {
+			if worktree.Branch == ref {
+				return "The selected branch is checked out in a worktree"
+			}
+		}
 	case updateBranch, updateProject:
 		upstream := repo.Upstreams[branch]
 		if !remoteConfigured(repo, upstream.Remote) || repo.Refs["refs/heads/"+branch] == "" {
@@ -239,7 +252,7 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 		remoteBranch = branch
 	}
 	switch id {
-	case shelve, shelveSilently, unshelve, renameShelf, deleteShelf, restoreShelf, purgeShelf:
+	case shelve, unshelve, renameShelf, deleteShelf, restoreShelf, purgeShelf:
 		a.configureShelf(s, id, target)
 	case renameBranch, deleteBranch, newTag:
 		s.configureRef(repo, id, target)
@@ -279,6 +292,11 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 			s.op.Branch = strings.TrimPrefix(branch, remoteName+"/")
 			s.detail = "Create a local tracking branch from " + branch + " and check it out."
 		}
+	case checkoutRebase:
+		ref := localBranchRef(repo, target.source)
+		s.label = "Checkout and Rebase"
+		s.detail = "Check out " + strings.TrimPrefix(ref, "refs/heads/") + " and rebase it onto " + repo.CurrentBranch + " (" + repo.Head + "). The base branch stays unchanged."
+		s.op = domain.RepositoryOperation{Kind: domain.CheckoutRebase, Source: ref}
 	case fetch:
 		s.label, s.detail = "Fetch", "Refresh remote-tracking branches."
 		s.op = domain.RepositoryOperation{Kind: domain.FetchRemote, Remote: remote}
@@ -419,6 +437,10 @@ func (a *Workspace) repositoryOperationView(c *ui.Context, p tokens) {
 }
 
 func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
+	if s.op.Kind == domain.CheckoutRebase && (a.Model.Active().Repository.Root != s.root || a.updateDirtyBuffer(s.root)) {
+		s.message = "Return to the original repository and save unsaved source documents before rebasing"
+		return
+	}
 	if s.op.Kind == domain.ResetRevision && a.updateDirtyBuffer(s.root) {
 		s.message = "Save or discard unsaved source documents before resetting"
 		return
@@ -470,12 +492,15 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		return
 	}
 	restoreEditors := func() {}
-	if s.op.Kind == domain.ApplyShelf {
+	if s.op.Kind == domain.SaveShelf || s.op.Kind == domain.ApplyShelf || s.op.Kind == domain.CheckoutRebase {
 		restoreEditors = a.lockShelfEditors()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel, s.message = cancel, ""
 	op := s.op
+	if op.Kind == domain.CheckoutRebase {
+		op.ConfirmRewrite = true
+	}
 	if op.Kind == domain.RemoveWorktree {
 		entry, _ := s.selectedWorktree()
 		op.Path = entry.Path
@@ -504,7 +529,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		s.cancel = nil
 		message := s.label + " completed"
 		paused := op.Kind == domain.StartMerge && refreshErr == nil && len(repo.MergeHeads) > 0
-		rebasePaused := (op.Kind == domain.StartRebase || op.Kind == domain.ContinueRebase || op.Kind == domain.SkipRebase) &&
+		rebasePaused := (op.Kind == domain.StartRebase || op.Kind == domain.CheckoutRebase || op.Kind == domain.ContinueRebase || op.Kind == domain.SkipRebase) &&
 			refreshErr == nil && repo.Rebase.Active() && repo.Rebase != snapshot.Rebase
 		sequencePaused := (op.Kind == domain.StartCherryPick || op.Kind == domain.StartRevert || op.Kind == domain.CherryPickSelected || op.Kind == domain.RevertSelected || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence) &&
 			refreshErr == nil && repo.Sequencer.Active() && repo.Sequencer != snapshot.Sequencer
@@ -553,7 +578,7 @@ func (a *Workspace) applyRepositoryOperation(s *repositoryOperationDialog) {
 		}
 		a.finishRepositoryWrite(s.root, repo, refreshErr, message)
 		switch op.Kind {
-		case domain.StartMerge, domain.ContinueMerge, domain.AbortMerge, domain.StartRebase, domain.ContinueRebase, domain.SkipRebase, domain.AbortRebase:
+		case domain.StartMerge, domain.ContinueMerge, domain.AbortMerge, domain.StartRebase, domain.CheckoutRebase, domain.ContinueRebase, domain.SkipRebase, domain.AbortRebase:
 			a.refreshHistoricalWriteViews(s.root, op)
 		}
 		if refreshErr == nil && (isHistoryWrite(op.Kind) || op.Kind == domain.ContinueSequence || op.Kind == domain.SkipSequence || op.Kind == domain.AbortSequence) {

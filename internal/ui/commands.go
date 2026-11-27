@@ -314,7 +314,7 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 				return "Select an available worktree"
 			}
 			return ""
-		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
+		case newBranch, checkoutBranch, checkoutRebase, fetch, pull, push, updateBranch, updateProject,
 			addRemote, editRemote, removeRemote,
 			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
@@ -534,7 +534,7 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		case openWorktree:
 			a.loadRepository(target.source, false)
 			return
-		case newBranch, checkoutBranch, fetch, pull, push, updateBranch, updateProject,
+		case newBranch, checkoutBranch, checkoutRebase, fetch, pull, push, updateBranch, updateProject,
 			addRemote, editRemote, removeRemote,
 			renameBranch, deleteBranch, newTag,
 			mergeBranch, continueMerge, abortMerge, rebaseBranch, continueRebase, skipRebase, abortRebase, acceptCurrent, acceptIncoming, markResolved,
