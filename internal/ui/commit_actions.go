@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -15,9 +16,17 @@ type commitChange struct {
 	warnings       *application.CommitWarnings
 	warningConsent string
 	repo           domain.Repository
+	repository     int
+	changelists    application.ChangelistState
 	message        string
 	amend          bool
 	push           bool
+}
+
+type emptyChangelistConfirmation struct {
+	repository int
+	ids        []string
+	names      []string
 }
 
 func (a *Workspace) commitForm(c *ui.Context, p tokens) {
@@ -94,7 +103,9 @@ func (a *Workspace) commitDisabled() string {
 
 func (a *Workspace) requestCommit(push bool) {
 	s := a.Model.Active()
-	change := &commitChange{repo: s.Repository, message: s.Message, amend: s.Amend, push: push}
+	lists := application.CloneChangelists(s.Changelists)
+	lists.Normalize(s.Repository)
+	change := &commitChange{repo: s.Repository, repository: a.Model.Index, changelists: lists, message: s.Message, amend: s.Amend, push: push}
 	if change.amend {
 		a.commitConfirmation = change
 		return
@@ -158,6 +169,9 @@ func (a *Workspace) applyCommit(change *commitChange) {
 			message += " on " + change.repo.CurrentBranch
 		}
 		a.finishRepositoryWrite(root, repo, refreshErr, message)
+		if err == nil && refreshErr == nil && repo.Root == root {
+			a.reconcileCommittedChangelists(change, repo)
+		}
 		if change.push && !wasCanceled && err == nil && refreshErr == nil && a.Model.Active().Repository.Root == root && repo.CurrentBranch == change.repo.CurrentBranch &&
 			a.disabledFor(push, commandTarget{}) == "" {
 			a.openRepositoryOperation(push, commandTarget{})
@@ -169,4 +183,35 @@ func (a *Workspace) applyCommit(change *commitChange) {
 			}
 		}
 	})
+}
+
+func (a *Workspace) reconcileCommittedChangelists(change *commitChange, repo domain.Repository) {
+	if change.repository < 0 || change.repository >= len(a.Model.Sessions) {
+		return
+	}
+	session := &a.Model.Sessions[change.repository]
+	if session.Repository.Root != change.repo.Root {
+		return
+	}
+	// The request-time snapshot only identifies which lists the commit used;
+	// policies apply to the current state so later list edits are not lost.
+	affected := change.changelists.CommitOwners(change.repo)
+	empty := session.Changelists.ApplyCommit(affected, repo)
+	if len(empty) == 0 {
+		return
+	}
+	switch session.Changelists.Policy().EmptyInactive {
+	case "Remove":
+		a.removeEmptyChangelists(change.repository, empty)
+	case "Show options":
+		confirmation := &emptyChangelistConfirmation{repository: change.repository, ids: slices.Clone(empty)}
+		for _, id := range empty {
+			for _, list := range session.Changelists.Lists {
+				if list.ID == id {
+					confirmation.names = append(confirmation.names, list.Name)
+				}
+			}
+		}
+		a.emptyChangelists = confirmation
+	}
 }

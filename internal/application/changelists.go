@@ -15,16 +15,40 @@ type Changelist struct {
 	Paths    []string `json:",omitempty"`
 }
 type ChangelistState struct {
-	Active string
-	Lists  []Changelist
+	Active   string
+	Lists    []Changelist
+	Settings *ChangelistSettings `json:",omitempty"`
 }
 
 func CloneChangelists(s ChangelistState) ChangelistState {
+	if s.Settings != nil {
+		settings := *s.Settings
+		s.Settings = &settings
+	}
 	s.Lists = slices.Clone(s.Lists)
 	for i := range s.Lists {
 		s.Lists[i].Paths = slices.Clone(s.Lists[i].Paths)
 	}
 	return s
+}
+
+func (s ChangelistState) Policy() ChangelistSettings {
+	settings := DefaultChangelistSettings()
+	if s.Settings != nil {
+		settings = *s.Settings
+	}
+	switch settings.EmptyInactive {
+	case "Show options", "Keep", "Remove":
+	default:
+		settings.EmptyInactive = "Show options"
+	}
+	return settings
+}
+
+func (s *ChangelistState) SetPolicy(settings ChangelistSettings) {
+	s.Settings = &settings
+	settings = s.Policy()
+	s.Settings = &settings
 }
 
 func validChangelistName(name string) bool {
@@ -34,6 +58,7 @@ func validChangelistName(name string) bool {
 // Normalize reconciles whole-file membership after a refresh. Renames carry
 // the old path's list; newly changed paths join the active list exactly once.
 func (s *ChangelistState) Normalize(repo domain.Repository) {
+	s.SetPolicy(s.Policy())
 	old := CloneChangelists(*s)
 	s.Lists = []Changelist{{ID: "default", Name: "Default"}}
 	for _, list := range old.Lists {
@@ -83,6 +108,74 @@ func (s *ChangelistState) Normalize(repo domain.Repository) {
 	for i := range s.Lists {
 		slices.Sort(s.Lists[i].Paths)
 	}
+}
+
+func (s *ChangelistState) ReconcileCommit(before, after domain.Repository) []string {
+	s.Normalize(before)
+	return s.ApplyCommit(s.CommitOwners(before), after)
+}
+
+// CommitOwners returns the changelists that owned the staged files of the
+// pre-commit repository. It reads a normalized copy and never mutates s.
+func (s ChangelistState) CommitOwners(before domain.Repository) map[string]bool {
+	lists := CloneChangelists(s)
+	lists.Normalize(before)
+	affected := map[string]bool{}
+	for _, file := range before.Staged {
+		id := lists.Owner(file.Path)
+		if id == "" && file.OldPath != "" {
+			id = lists.Owner(file.OldPath)
+		}
+		if id != "" {
+			affected[id] = true
+		}
+	}
+	return affected
+}
+
+// ApplyCommit applies the post-commit policies to the current state, so list
+// edits made while the commit ran are kept. It returns the affected
+// non-default changelists that are now empty.
+func (s *ChangelistState) ApplyCommit(affected map[string]bool, after domain.Repository) []string {
+	s.Normalize(after)
+	if !s.Policy().KeepRemaining && len(affected) > 0 {
+		var paths []string
+		for _, file := range slices.Concat(after.Working, after.Staged) {
+			id := s.Owner(file.Path)
+			if affected[id] && id != s.Active && !slices.Contains(paths, file.Path) {
+				paths = append(paths, file.Path)
+			}
+		}
+		if len(paths) > 0 {
+			_ = s.Move(paths, s.Active)
+		}
+	}
+	var empty []string
+	for _, list := range s.Lists {
+		if list.ID != "default" && affected[list.ID] && len(list.Paths) == 0 {
+			empty = append(empty, list.ID)
+		}
+	}
+	return empty
+}
+
+func (s *ChangelistState) RemoveEmpty(ids []string) error {
+	seen := map[string]bool{}
+	for _, id := range ids {
+		index := slices.IndexFunc(s.Lists, func(c Changelist) bool { return c.ID == id })
+		if seen[id] || index < 0 || id == "default" || len(s.Lists[index].Paths) != 0 {
+			return errors.New("only empty non-default changelists can be removed")
+		}
+		seen[id] = true
+	}
+	for _, id := range ids {
+		index := slices.IndexFunc(s.Lists, func(c Changelist) bool { return c.ID == id })
+		s.Lists = slices.Delete(s.Lists, index, index+1)
+		if s.Active == id {
+			s.Active = "default"
+		}
+	}
+	return nil
 }
 
 func (s *ChangelistState) Owner(path string) string {

@@ -201,6 +201,7 @@ type Workspace struct {
 	repositoryCancelRequested       bool
 	indexConfirmation               *indexChange
 	commitConfirmation              *commitChange
+	emptyChangelists                *emptyChangelistConfirmation
 	UpdateRepositoryIndex           func(context.Context, domain.Repository, bool, []domain.File, func(domain.Repository, error, error))
 	CommitRepository                func(context.Context, domain.Repository, string, bool, func(domain.Repository, error, error))
 	OperateRepository               func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error))
@@ -415,6 +416,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.changelistDialog != nil {
 		a.changelistView(c, p)
+	}
+	if a.emptyChangelists != nil {
+		a.confirmEmptyChangelists(c)
 	}
 	if a.indexConfirmation != nil {
 		a.confirmIndexChange(c)

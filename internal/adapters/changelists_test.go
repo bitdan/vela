@@ -9,7 +9,10 @@ import (
 
 func TestChangelistsJSONRoundtrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "workspace.json")
-	want := application.WorkspaceSnapshot{Repositories: []application.RepositorySnapshot{{Root: "repo", Changelists: &application.ChangelistState{Active: "feature", Lists: []application.Changelist{{ID: "default", Name: "Default"}, {ID: "feature", Name: "中文", Paths: []string{"a b.go"}}}}}}}
+	policy := application.DefaultChangelistSettings()
+	policy.EmptyInactive = "Remove"
+	policy.KeepRemaining = false
+	want := application.WorkspaceSnapshot{Repositories: []application.RepositorySnapshot{{Root: "repo", Changelists: &application.ChangelistState{Active: "feature", Settings: &policy, Lists: []application.Changelist{{ID: "default", Name: "Default"}, {ID: "feature", Name: "中文", Paths: []string{"a b.go"}}}}}}}
 	if err := SaveSession(path, want); err != nil {
 		t.Fatal(err)
 	}

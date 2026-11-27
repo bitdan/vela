@@ -12,7 +12,6 @@ import (
 // VersionControlSettings contains local preferences. Operational Git settings
 // are stored here without configuring or invoking Git.
 type VersionControlSettings struct {
-	Changelists  ChangelistSettings
 	Commit       CommitSettings
 	Confirmation ConfirmationSettings
 	Colors       FileColors
@@ -23,7 +22,12 @@ type VersionControlSettings struct {
 
 type ChangelistSettings struct {
 	AutoCreate, SplitFileChanges, HighlightInactive, WarnInactive bool
+	KeepRemaining                                                 bool
 	EmptyInactive                                                 string
+}
+
+func DefaultChangelistSettings() ChangelistSettings {
+	return ChangelistSettings{AutoCreate: true, SplitFileChanges: true, KeepRemaining: true, EmptyInactive: "Show options"}
 }
 
 type CommitSettings struct {
@@ -104,7 +108,6 @@ func (g GitSettings) Validate() error {
 
 func DefaultVersionControlSettings() VersionControlSettings {
 	return VersionControlSettings{
-		Changelists:  ChangelistSettings{AutoCreate: true, SplitFileChanges: true, EmptyInactive: "Show options"},
 		Commit:       CommitSettings{SubjectLength: 72, BodyLength: 100},
 		Confirmation: ConfirmationSettings{CreatedFiles: "Ask", DeletedFiles: "Ask", PatchCreated: "Ask", Checkout: true, Update: true, HistoryRows: 1000},
 		Shelf:        ShelfSettings{StoreBase: true},
