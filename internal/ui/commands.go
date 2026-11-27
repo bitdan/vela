@@ -84,6 +84,7 @@ var commands = map[commandID]string{
 	closeLineHistory: "Close Line History", moreLineHistory: "Load More Line History", selectLineHistory: "Inspect Line History Commit", nextLineHistoryHunk: "Next Range Hunk", previousLineHistoryHunk: "Previous Range Hunk",
 	confirmHistoryRewrite: "Apply History Rewrite", cancelHistoryRewrite: "Cancel History Rewrite", refreshHistoryRewrite: "Preview History Rewrite",
 	squashCommit: "Squash Selected Commits…", confirmSquash: "Squash Commits", cancelSquash: "Cancel Squash", refreshSquash: "Preview Squash",
+	rebaseFrom:     "Interactively Rebase Selected Commits…",
 	clearHunkLines: "Clear Changed Lines", selectAllHunkLines: "Select All Changed Lines",
 	toggleHunkLineMode: "Choose Individual Changed Lines", toggleHunkLine: "Toggle Changed Git Line", applyHunkSelection: "Apply Git Hunk Selection",
 	keepDraftsClose: "Keep Drafts and Close", discardDraftsClose: "Discard and Close", cancelDraftClose: "Cancel",
@@ -148,6 +149,12 @@ func (a *Workspace) disabledFor(id commandID, target commandTarget) string {
 	}
 	if isSquashCommand(id) {
 		return a.squashDisabled(id, target)
+	}
+	if isInteractiveRebaseCommand(id) {
+		return a.interactiveRebaseDisabled(id, target)
+	}
+	if a.interactiveRebase != nil && id != selectRepo && id != cancelGitTask {
+		return "Finish or close Interactive Rebase first"
 	}
 	if a.squash != nil && id != selectRepo && id != cancelGitTask {
 		return "Finish or close Squash first"
@@ -421,6 +428,10 @@ func (a *Workspace) run(id commandID, target commandTarget) {
 		} else {
 			a.runSquash(id)
 		}
+		return
+	}
+	if isInteractiveRebaseCommand(id) {
+		a.runInteractiveRebase(id, target)
 		return
 	}
 	if isHunkLineCommand(id) {

@@ -143,7 +143,7 @@ var deferredCommands = map[commandID]string{
 	cherryPick: "Cherry-Pick", checkoutRevision: "Checkout Revision", showRepositoryRevision: "Show Repository at Revision",
 	resetRevision: "Reset Current Branch to Here…", revertCommit: "Revert Commit", undoCommit: "Undo Commit…",
 	editCommit: "Edit Commit Message…", fixupCommit: "Fixup…", squashCommit: "Squash Into…",
-	dropCommit: "Drop Commit", rebaseFrom: "Interactively Rebase from Here…", pushUpTo: "Push All up to Here…",
+	dropCommit: "Drop Commit", pushUpTo: "Push All up to Here…",
 	newTag: "New Tag…", browseRevision: "View in browser", revertChanges: "Revert Selected Changes",
 	cherryPickChanges: "Cherry-Pick Selected Changes", extractChanges: "Extract Selected Changes to Separate Commit…",
 	dropChanges: "Drop Selected Changes", getRevision: "Get from Revision",

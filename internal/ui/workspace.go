@@ -99,6 +99,7 @@ type repoView struct {
 }
 
 type Workspace struct {
+	interactiveRebase               *interactiveRebaseDialog
 	squash                          *squashDialog
 	PreviewRepositorySquash         func(context.Context, domain.Repository, []string, func(domain.SquashPreview, error))
 	PreviewCommitRewrite            func(context.Context, domain.Repository, domain.RepositoryOperationKind, []string, func(domain.CommitRewritePreview, error))
@@ -375,6 +376,9 @@ func (a *Workspace) View(c *ui.Context) {
 	}
 	if a.squash != nil {
 		a.squashView(c, p)
+	}
+	if a.interactiveRebase != nil {
+		a.interactiveRebaseView(c, p)
 	}
 	if a.inlineBlame.detailsOpen {
 		a.inlineDetailsView(c, p)

@@ -66,6 +66,7 @@ const (
 	FixupCommits
 	DropCommit
 	UndoCommit
+	InteractiveRebase
 	CheckoutRebase
 	CheckoutUpdate
 	RenameRemote
@@ -102,6 +103,8 @@ type RepositoryOperation struct {
 	RewriteSelection               []string
 	RewriteVersion                 string
 	ConfirmRewrite                 bool
+	RebaseSteps                    []InteractiveRebaseStep
+	RebaseVersion                  string
 	SquashSelection                []string
 	SquashVersion                  string
 	ConfirmSquash                  bool
@@ -128,6 +131,22 @@ type RepositoryOperation struct {
 	SelectPatchLines               bool
 	PatchLines                     []int
 	IncludeUntracked, RestoreIndex bool
+}
+
+type InteractiveRebaseAction string
+
+const (
+	RebasePick   InteractiveRebaseAction = "Pick"
+	RebaseReword InteractiveRebaseAction = "Reword"
+	RebaseSquash InteractiveRebaseAction = "Squash"
+	RebaseFixup  InteractiveRebaseAction = "Fixup"
+	RebaseDrop   InteractiveRebaseAction = "Drop"
+)
+
+type InteractiveRebaseStep struct {
+	Commit  string
+	Action  InteractiveRebaseAction
+	Message string
 }
 
 // An absent record means whole-file restore; an explicit empty Hunk list is
