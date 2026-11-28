@@ -8,10 +8,18 @@ import (
 	"os"
 	"os/signal"
 
+	"vela/internal/adapters/gitcli"
 	"vela/internal/bootstrap"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "internal-rebase-editor" {
+		if err := gitcli.RunInteractiveRebaseEditor(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "init" {
 		runInit(os.Args[2:])
 		return

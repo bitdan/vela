@@ -114,6 +114,16 @@ func (g *Executor) rebase(ctx context.Context, repo domain.Repository, index str
 		if len(conflictsFromIndex(index)) != 0 {
 			return errors.New("resolve all conflicted files before continuing")
 		}
+		gitDir, err := g.gitDirectory(ctx, repo.Root)
+		if err != nil {
+			return err
+		}
+		planPath := filepath.Join(gitDir, "rebase-merge", "vela-interactive-rebase.json")
+		if _, err := os.Lstat(planPath); err == nil {
+			return g.runInteractiveRebaseRecovery(ctx, repo.Root, planPath)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 		return g.runRebase(ctx, repo.Root, "--continue")
 	case domain.SkipRebase:
 		return g.runRebase(ctx, repo.Root, "--skip")

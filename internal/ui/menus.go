@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/egoist/mygo/ui"
+	"vela/internal/application"
 	"vela/internal/domain"
 )
 
@@ -143,7 +144,7 @@ var deferredCommands = map[commandID]string{
 	cherryPick: "Cherry-Pick", checkoutRevision: "Checkout Revision", showRepositoryRevision: "Show Repository at Revision",
 	resetRevision: "Reset Current Branch to Here…", revertCommit: "Revert Commit", undoCommit: "Undo Commit…",
 	editCommit: "Edit Commit Message…", fixupCommit: "Fixup…", squashCommit: "Squash Into…",
-	dropCommit: "Drop Commit", rebaseFrom: "Interactively Rebase from Here…", pushUpTo: "Push All up to Here…",
+	dropCommit: "Drop Commit", pushUpTo: "Push All up to Here…",
 	newTag: "New Tag…", browseRevision: "View in browser", revertChanges: "Revert Selected Changes",
 	cherryPickChanges: "Cherry-Pick Selected Changes", extractChanges: "Extract Selected Changes to Separate Commit…",
 	dropChanges: "Drop Selected Changes", getRevision: "Get from Revision",
@@ -178,9 +179,15 @@ func (a *Workspace) menuNamed(m *ui.Menu, id commandID, target commandTarget, la
 		reason = a.disabledFor(id, target)
 	}
 	item := m.Item(label).ID(string(id) + ":" + target.source + ":" + target.file.Path + ":" + strconv.Itoa(target.index)).Disabled(reason != "").Tooltip(reason)
-	if mods, key, known := a.nativeWorkspaceShortcut(id); known {
-		if key != ui.KeyUnknown {
-			item.Shortcut(mods, key)
+	if value, known := application.EffectiveShortcutForScope(a.Layout.Keymap, a.shortcutScope, string(id)); known {
+		sequence, err := application.ParseKeySequence(value)
+		if err == nil && sequence.Chord() {
+			item.Trailing(value)
+		} else if err == nil && value != "" {
+			mods, key := nativeShortcut(sequence.First)
+			if key != ui.KeyUnknown {
+				item.Shortcut(mods, key)
+			}
 		}
 	} else {
 		switch id {

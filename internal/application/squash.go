@@ -41,3 +41,50 @@ func ValidateSquashMessage(message string) error {
 	}
 	return nil
 }
+
+func ValidateInteractiveRebasePlan(preview domain.CommitRewritePreview, steps []domain.InteractiveRebaseStep) error {
+	if len(preview.RebaseCommits) != len(preview.Selected) || len(steps) != len(preview.Selected) || len(steps) == 0 {
+		return errors.New("preview the complete interactive Rebase commit range")
+	}
+	original := make(map[string]bool, len(preview.RebaseCommits))
+	for _, commit := range preview.RebaseCommits {
+		original[commit.Commit] = true
+	}
+	kept := 0
+	for index, step := range steps {
+		found := original[step.Commit]
+		if !found {
+			return errors.New("interactive Rebase plan contains an unknown or repeated commit")
+		}
+		delete(original, step.Commit)
+		switch step.Action {
+		case domain.RebasePick, domain.RebaseSquash, domain.RebaseFixup:
+			if step.Message != "" {
+				return errors.New("only Reword steps may carry a replacement message")
+			}
+		case domain.RebaseReword:
+			if err := ValidateSquashMessage(step.Message); err != nil {
+				return err
+			}
+		case domain.RebaseDrop:
+			if step.Message != "" {
+				return errors.New("Drop steps cannot carry a replacement message")
+			}
+		default:
+			return errors.New("unknown interactive Rebase action")
+		}
+		if index == 0 && (step.Action == domain.RebaseSquash || step.Action == domain.RebaseFixup) {
+			return errors.New("the first commit cannot be Squash or Fixup")
+		}
+		if step.Action != domain.RebaseDrop {
+			kept++
+		}
+	}
+	if len(original) != 0 {
+		return errors.New("interactive Rebase plan omits a selected commit")
+	}
+	if kept == 0 && len(preview.Replay) == 0 && preview.Parent == "" {
+		return errors.New("keep at least one commit; interactive Rebase cannot delete the entire branch")
+	}
+	return nil
+}

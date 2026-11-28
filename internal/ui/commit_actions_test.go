@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -54,6 +55,19 @@ func TestCommitFormAndAmendConfirmation(t *testing.T) {
 	layout.Dark = false
 	a := New(application.New(), layout)
 	a.Model.Switch(a.installRepository(repo))
+	lists := &a.Model.Active().Changelists
+	listID, err := lists.Create("Commit policy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lists.Move([]string{repo.Staged[0].Path}, listID); err != nil {
+		t.Fatal(err)
+	}
+	policy := lists.Policy()
+	policy.EmptyInactive = "Keep"
+	lists.SetPolicy(policy)
+	beforeFailure := application.CloneChangelists(*lists)
+	beforeFailure.Normalize(repo)
 	failNext := true
 	a.CommitRepository = func(ctx context.Context, repo domain.Repository, message string, amend bool, done func(domain.Repository, error, error)) {
 		if failNext {
@@ -81,10 +95,16 @@ func TestCommitFormAndAmendConfirmation(t *testing.T) {
 	if s := a.Model.Active(); s.Message != "Initial commit" || s.Repository.Head != "" || !strings.Contains(a.status, "fixture commit error") {
 		t.Fatal("failure lost the draft or failed to report the error")
 	}
+	if !reflect.DeepEqual(a.Model.Active().Changelists, beforeFailure) {
+		t.Fatal("failed real commit changed changelists")
+	}
 	click("Create Commit")
 	s := a.Model.Active()
 	if s.Repository.Head == "" || s.Message != "" || len(s.Repository.Staged) != 0 {
 		t.Fatal("successful commit did not refresh the index and clear the draft")
+	}
+	if len(s.Changelists.Lists) != 2 || len(s.Changelists.Lists[1].Paths) != 0 {
+		t.Fatalf("Keep policy removed an empty list: %+v", s.Changelists)
 	}
 	first := s.Repository.Head
 	click("Amend last commit")

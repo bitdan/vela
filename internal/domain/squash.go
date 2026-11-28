@@ -4,9 +4,15 @@ package domain
 // fresh repository/ref identity. Git objects remain immutable; Version is opaque.
 type CommitRewritePreview struct {
 	Affected                                 []File
+	RebaseCommits                            []InteractiveRebaseCommit
+	RebaseMessages                           map[string]string
 	Version, Parent, HeadTree, SelectedTree  string
 	Author, AuthorEmail, AuthorDate, Message string
 	Selected, Replay                         []string
+}
+
+type InteractiveRebaseCommit struct {
+	Commit, Message string
 }
 
 // SquashPreview is the same immutable commit-range preview used by Squash.

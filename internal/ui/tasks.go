@@ -27,6 +27,8 @@ func (a *Workspace) TaskOperationName(op domain.RepositoryOperation) string {
 		return "Edit Commit Message"
 	case domain.SquashCommits:
 		return "Squash Commits"
+	case domain.InteractiveRebase:
+		return "Interactive Rebase"
 	case domain.StageHunk:
 		return "Stage Hunk"
 	case domain.UnstageHunk:

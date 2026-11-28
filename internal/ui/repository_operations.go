@@ -52,6 +52,27 @@ func operationRef(repo domain.Repository, source string) string {
 	return ""
 }
 
+func checkoutRebaseOperation(repo domain.Repository, source string) domain.RepositoryOperation {
+	op := domain.RepositoryOperation{Kind: domain.CheckoutRebase, Source: localBranchRef(repo, source)}
+	if !repo.RemoteBranches[source] {
+		return op
+	}
+	op.Source = "refs/remotes/" + strings.TrimPrefix(source, "refs/remotes/")
+	if repo.Refs[op.Source] == "" {
+		op.Source = ""
+		return op
+	}
+	display := displayBranch(op.Source)
+	for _, remote := range repo.Remotes {
+		if strings.HasPrefix(display, remote.Name+"/") && len(remote.Name) > len(op.Remote) {
+			op.Remote = remote.Name
+		}
+	}
+	op.Target = strings.TrimPrefix(display, op.Remote+"/")
+	op.Branch = op.Target
+	return op
+}
+
 func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarget) string {
 	repo := a.Model.Active().Repository
 	if reason := a.protectedCommandReason(id, target); reason != "" {
@@ -198,8 +219,18 @@ func (a *Workspace) repositoryOperationDisabled(id commandID, target commandTarg
 		}
 	case checkoutRebase, checkoutUpdate:
 		ref := localBranchRef(repo, target.source)
+		if id == checkoutRebase {
+			op := checkoutRebaseOperation(repo, target.source)
+			ref = op.Source
+			if strings.HasPrefix(op.Source, "refs/remotes/") {
+				ref = "refs/heads/" + op.Branch
+				if repo.Refs[ref] != "" && repo.Upstreams[op.Branch] != (domain.Upstream{Remote: op.Remote, Branch: op.Target}) {
+					return "Local branch " + op.Branch + " must have upstream " + op.Remote + "/" + op.Target + "; select its tracking " + op.Remote + "/" + op.Target + " branch after fixing the upstream"
+				}
+			}
+		}
 		if ref == "" || ref == "refs/heads/"+repo.CurrentBranch || repo.Head == "" || repo.CurrentBranch == "Detached HEAD" {
-			return "Select a different local branch and check out a base branch"
+			return "Select a different local or remote-tracking branch and check out a base branch"
 		}
 		if repo.ResolvingConflicts() || len(repo.Staged) > 0 || slices.ContainsFunc(repo.Working, func(f domain.File) bool { return f.Status != "?" }) || a.updateDirtyBuffer(repo.Root) {
 			return "Finish the current operation and save or shelve changes before switching branches"
@@ -299,10 +330,18 @@ func (a *Workspace) openRepositoryOperation(id commandID, target commandTarget) 
 			s.detail = "Create a local tracking branch from " + branch + " and check it out."
 		}
 	case checkoutRebase:
-		ref := localBranchRef(repo, target.source)
+		op := checkoutRebaseOperation(repo, target.source)
 		s.label = "Checkout and Rebase"
-		s.detail = "Check out " + strings.TrimPrefix(ref, "refs/heads/") + " and rebase it onto " + repo.CurrentBranch + " (" + repo.Head + "). The base branch stays unchanged."
-		s.op = domain.RepositoryOperation{Kind: domain.CheckoutRebase, Source: ref}
+		s.op = op
+		if strings.HasPrefix(op.Source, "refs/remotes/") {
+			action := "Create local branch " + op.Branch + " with upstream " + op.Remote + "/" + op.Target + "."
+			if repo.Refs["refs/heads/"+op.Branch] != "" {
+				action = "Reuse local branch " + op.Branch + " with upstream " + op.Remote + "/" + op.Target + "."
+			}
+			s.detail = action + " Check out " + op.Branch + " and replay commits from local branch " + op.Branch + " onto " + repo.CurrentBranch + " (" + repo.Head + "). The base branch and remote-tracking ref stay unchanged."
+		} else {
+			s.detail = "Check out " + strings.TrimPrefix(op.Source, "refs/heads/") + " and rebase it onto " + repo.CurrentBranch + " (" + repo.Head + "). The base branch stays unchanged."
+		}
 	case checkoutUpdate:
 		name := strings.TrimPrefix(localBranchRef(repo, target.source), "refs/heads/")
 		upstream := repo.Upstreams[name]

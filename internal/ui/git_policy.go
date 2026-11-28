@@ -12,9 +12,7 @@ func (a *Workspace) protectedCommandReason(id commandID, target commandTarget) s
 	case rebaseBranch:
 		op.Kind = domain.StartRebase
 	case checkoutRebase:
-		if ref := localBranchRef(repo, target.source); ref != "" {
-			op.Kind, op.Source = domain.CheckoutRebase, ref
-		}
+		op = checkoutRebaseOperation(repo, target.source)
 	case resetRevision:
 		op.Kind = domain.ResetRevision
 		if commit, ok := a.operationCommit(target); ok {

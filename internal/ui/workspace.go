@@ -99,6 +99,7 @@ type repoView struct {
 }
 
 type Workspace struct {
+	interactiveRebase               *interactiveRebaseDialog
 	squash                          *squashDialog
 	PreviewRepositorySquash         func(context.Context, domain.Repository, []string, func(domain.SquashPreview, error))
 	PreviewCommitRewrite            func(context.Context, domain.Repository, domain.RepositoryOperationKind, []string, func(domain.CommitRewritePreview, error))
@@ -129,6 +130,9 @@ type Workspace struct {
 	shiftTaps                       shiftGesture
 	searchFocus                     *editor.State
 	focusedEditor                   *editor.State
+	shortcutScope                   application.KeymapScope
+	viewShortcutScope               application.KeymapScope
+	chord                           shortcutChordState
 	inlineBlame                     inlineBlameState
 	WatchEditorActivity             func(context.Context, func())
 	confirmExit, exitApproved       bool
@@ -200,6 +204,7 @@ type Workspace struct {
 	repositoryCancelRequested       bool
 	indexConfirmation               *indexChange
 	commitConfirmation              *commitChange
+	emptyChangelists                *emptyChangelistConfirmation
 	UpdateRepositoryIndex           func(context.Context, domain.Repository, bool, []domain.File, func(domain.Repository, error, error))
 	CommitRepository                func(context.Context, domain.Repository, string, bool, func(domain.Repository, error, error))
 	OperateRepository               func(context.Context, domain.Repository, domain.RepositoryOperation, func(domain.Repository, error, error))
@@ -280,6 +285,7 @@ func (a *Workspace) repo() *repoView { return &a.repos[a.Model.Index] }
 
 func (a *Workspace) View(c *ui.Context) {
 	a.focusedEditor = nil
+	a.viewShortcutScope = application.KeymapGlobal
 	systemTheme := c.Theme()
 	a.systemDark = systemTheme.Dark
 	p := design(a.darkTheme())
@@ -376,6 +382,9 @@ func (a *Workspace) View(c *ui.Context) {
 	if a.squash != nil {
 		a.squashView(c, p)
 	}
+	if a.interactiveRebase != nil {
+		a.interactiveRebaseView(c, p)
+	}
 	if a.inlineBlame.detailsOpen {
 		a.inlineDetailsView(c, p)
 	}
@@ -412,6 +421,9 @@ func (a *Workspace) View(c *ui.Context) {
 	if a.changelistDialog != nil {
 		a.changelistView(c, p)
 	}
+	if a.emptyChangelists != nil {
+		a.confirmEmptyChangelists(c)
+	}
 	if a.indexConfirmation != nil {
 		a.confirmIndexChange(c)
 	}
@@ -424,7 +436,7 @@ func (a *Workspace) View(c *ui.Context) {
 	if a.search.open {
 		a.searchDialog(c, p)
 	} else if !a.settingsOpen && !a.remotes.open && a.repositoryInit == nil &&
-		(a.repo().preview != nil || a.repositoryFileRead != nil) && c.Shortcut(0, ui.KeyEscape) {
+		(a.repo().preview != nil || a.repositoryFileRead != nil) && a.chord.first.Key == "" && c.Shortcut(0, ui.KeyEscape) {
 		a.run(closePreview, commandTarget{})
 	}
 	if a.confirmExit {
@@ -613,7 +625,11 @@ func (a *Workspace) statusBar(c *ui.Context, p tokens) {
 			context += " › " + strings.ReplaceAll(entry.path, "/", " › ")
 		}
 		ui.Text(c, context).FontSize(p.textSize(smallText)).SingleLine().Ellipsis("…")
-		ui.Text(c, a.status).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		if a.chord.first.Key != "" {
+			ui.Text(c, "Waiting for second key: "+a.chord.first.String()+" · Esc to cancel").Label("Shortcut chord waiting").FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		} else {
+			ui.Text(c, a.status).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
+		}
 		ui.ButtonBase(c.Key("task-center")).Height(statusHeight-2).Padding(0, gap).Center().Label("Task Center").Children(func() {
 			ui.Text(c, fmt.Sprintf("Tasks (%d)", a.Tasks.ActiveCount())).FontSize(p.textSize(smallText))
 		}).OnClick(func() { a.run(showTasks, commandTarget{}) })

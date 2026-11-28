@@ -3,6 +3,7 @@ package gitcli
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -36,6 +37,8 @@ func (g *Executor) commitRewritePreview(ctx context.Context, repo domain.Reposit
 			return domain.CommitRewritePreview{}, errors.New("select the latest commit on the current branch to undo")
 		}
 		prefix = "undo:"
+	case domain.InteractiveRebase:
+		prefix = "interactive-rebase:"
 	default:
 		return domain.CommitRewritePreview{}, errors.New("unsupported commit rewrite operation")
 	}
@@ -58,6 +61,23 @@ func (g *Executor) commitRewritePreview(ctx context.Context, repo domain.Reposit
 				err = errors.New("original message is not bounded UTF-8")
 			} else {
 				plan.Message = message
+			}
+		}
+	}
+	if err == nil && kind == domain.InteractiveRebase {
+		plan.RebaseMessages = make(map[string]string, len(plan.Selected)+len(plan.Replay))
+		for _, id := range append(slices.Clone(plan.Selected), plan.Replay...) {
+			raw, readErr := g.read(ctx, repo.Root, "cat-file", "commit", id)
+			if readErr != nil {
+				return domain.CommitRewritePreview{}, readErr
+			}
+			_, message, ok := strings.Cut(raw, "\n\n")
+			if !ok || len(message) > 64<<10 || !utf8.ValidString(message) || strings.ContainsRune(message, 0) {
+				return domain.CommitRewritePreview{}, errors.New("original message is not bounded UTF-8")
+			}
+			plan.RebaseMessages[id] = message
+			if slices.Contains(plan.Selected, id) {
+				plan.RebaseCommits = append(plan.RebaseCommits, domain.InteractiveRebaseCommit{Commit: id, Message: message})
 			}
 		}
 	}

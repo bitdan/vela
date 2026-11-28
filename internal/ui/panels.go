@@ -121,11 +121,14 @@ func (a *Workspace) fileList(c *ui.Context, p tokens, title, source, empty strin
 				ui.Text(c, dir).FontSize(p.textSize(smallText)).TextColor(p.theme.TextMuted).Grow(1).SingleLine().Ellipsis("…")
 			}
 		})
-	}).Grow(1).FillWidth().Label(title).ContextMenu(func(m *ui.Menu) {
+	}).Grow(1).FillWidth().Label(title + " list").ContextMenu(func(m *ui.Menu) {
 		if f, ok := currentFile(); ok {
 			a.fileMenu(m, source, f)
 		}
 	})
+	if list.FocusWithin() {
+		a.markShortcutScope(application.KeymapList)
+	}
 	if len(files) == 0 {
 		list.Children(func() { ui.Text(c, empty).Padding(inset).TextColor(p.theme.TextMuted) })
 	}
@@ -194,7 +197,7 @@ func fileCount(count int) string {
 }
 
 func (a *Workspace) git(c *ui.Context, p tokens) {
-	ui.Column(c).Fill().Background(p.panel).Children(func() {
+	panel := ui.Column(c).Fill().Background(p.panel).Children(func() {
 		r := a.repo()
 		ui.Row(c).Height(headerHeight+4).FillWidth().Padding(0, inset).Gap(gap).AlignItems(ui.Center).Background(p.chrome).Children(func() {
 			ui.Text(c, "Git").Bold()
@@ -241,6 +244,9 @@ func (a *Workspace) git(c *ui.Context, p tokens) {
 			a.branchList(c, p)
 		}, logAndDetails).SplitReset(22).Grow(1).FillWidth()
 	})
+	if panel.FocusWithin() {
+		a.markShortcutScope(application.KeymapToolWindow)
+	}
 }
 
 func displayBranch(name string) string {
@@ -454,11 +460,14 @@ func (a *Workspace) commitLog(c *ui.Context, p tokens) {
 		r.log.Label = func(i int) string { return history[index(i)].Subject }
 		list := ui.List(c, &r.log, count, func(i int) {
 			a.logRow(c, p, history[index(i)], history[0].Timestamp, i, index(i), index(i) == s.Commit || r.logChosen.Has(history[index(i)].Hash), filteredView)
-		}).Grow(1).FillWidth().ContextMenu(func(m *ui.Menu) {
+		}).Grow(1).FillWidth().Label("Commit log").ContextMenu(func(m *ui.Menu) {
 			if selected >= 0 && selected < count {
 				a.logMenu(m, index(selected), history[index(selected)])
 			}
 		})
+		if list.FocusWithin() {
+			a.markShortcutScope(application.KeymapList)
+		}
 		if list.Changed() && selected >= 0 && selected < count {
 			a.run(selectCommit, commandTarget{index: index(selected)})
 		}

@@ -37,6 +37,8 @@ func (g *Executor) ExecuteRepositoryOperation(ctx context.Context, repo domain.R
 		return g.checkoutRebase(ctx, repo, index, op)
 	case domain.RewordCommit, domain.FixupCommits, domain.DropCommit, domain.UndoCommit:
 		return g.rewriteCommit(ctx, repo, op)
+	case domain.InteractiveRebase:
+		return g.interactiveRebase(ctx, repo, op)
 	case domain.SquashCommits:
 		return g.squash(ctx, repo, op)
 	case domain.CheckoutRevision, domain.RestoreRevisionFiles, domain.CherryPickSelected, domain.RevertSelected:

@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	native "github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -151,5 +153,195 @@ func TestWorkspaceKeymapProtectsLockedEditorBindings(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestChordShortcutDispatchTimeoutAndEscape(t *testing.T) {
+	layout := application.DefaultLayout()
+	layout.Keymap = &application.KeymapSettings{Bindings: map[string]string{
+		string(toggleGit): "Ctrl+Alt+J Ctrl+Alt+C",
+	}}
+	a := New(application.New(), layout)
+	a.repo().preview = nil
+	tt := native.NewTester(a.View, 1440, 900)
+	tt.Key(native.Ctrl|native.Alt, native.KeyJ)
+	if a.chord.first.String() != "Ctrl+Alt+J" {
+		t.Fatalf("first stroke did not create a chord: %+v; scope=%q; focusedEditor=%p", a.chord, a.shortcutScope, a.focusedEditor)
+	}
+	tt.Frame()
+	if !tt.HasText("Shortcut chord waiting") {
+		t.Fatal("first stroke did not publish the chord waiting status")
+	}
+	tt.Key(native.Ctrl|native.Alt, native.KeyC)
+	if !a.Layout.HideGit || a.chord.first.Key != "" {
+		t.Fatal("second stroke did not dispatch the registered command and clear the chord")
+	}
+	a.Layout.HideGit = false
+	tt.Frame()
+	tt.Key(native.Ctrl|native.Alt, native.KeyJ)
+	tt.Advance(shortcutChordTimeout + time.Millisecond)
+	if a.chord.first.Key != "" {
+		t.Fatal("chord did not expire")
+	}
+	tt.Key(native.Ctrl|native.Alt, native.KeyC)
+	if a.Layout.HideGit {
+		t.Fatal("expired chord dispatched its command")
+	}
+	tt.Key(native.Ctrl|native.Alt, native.KeyJ)
+	tt.Key(0, native.KeyEscape)
+	if a.chord.first.Key != "" {
+		t.Fatal("Escape did not cancel the chord")
+	}
+	tt.Key(native.Ctrl|native.Alt, native.KeyC)
+	if a.Layout.HideGit {
+		t.Fatal("canceled chord dispatched its command")
+	}
+}
+
+func TestScopedShortcutPriorityAndTextInput(t *testing.T) {
+	layout := application.DefaultLayout()
+	layout.Keymap = &application.KeymapSettings{
+		Bindings: map[string]string{string(toggleGit): "Ctrl+Alt+G"},
+		LocalBindings: map[application.KeymapScope]map[string]string{
+			application.KeymapEditor:     {string(toggleTheme): "Ctrl+Alt+G"},
+			application.KeymapList:       {string(toggleCommit): "Ctrl+Alt+G"},
+			application.KeymapToolWindow: {string(toggleTheme): "Ctrl+Alt+G"},
+		},
+	}
+	a := New(application.New(), layout)
+	tt := native.NewTester(a.View, 1440, 900)
+	tt.Key(native.Ctrl|native.Alt, native.KeyG)
+	if !a.Layout.HideGit {
+		t.Fatal("global shortcut did not run without a local focus scope")
+	}
+	a.Layout.HideGit = false
+	a.run(openCode, commandTarget{source: "working", file: a.Model.Active().Repository.Working[0]})
+	tt.Frame()
+	if err := tt.Click("Source editor"); err != nil {
+		t.Fatal(err)
+	}
+	if a.shortcutScope != application.KeymapEditor {
+		t.Fatalf("source editor scope = %q", a.shortcutScope)
+	}
+	dark := a.Layout.Dark
+	tt.Key(native.Ctrl|native.Alt, native.KeyG)
+	if a.Layout.Dark == dark || a.Layout.HideGit {
+		t.Fatal("editor-local shortcut did not override the global command")
+	}
+	listBounds, ok := tt.Find("Working Changes list")
+	if !ok {
+		t.Fatal("working changes list not found")
+	}
+	tt.ClickAt(listBounds.X+listBounds.W/2, listBounds.Y+listBounds.H/2)
+	if a.shortcutScope != application.KeymapList {
+		t.Fatalf("working list scope = %q", a.shortcutScope)
+	}
+	tt.Key(native.Ctrl|native.Alt, native.KeyG)
+	if !a.Layout.HideCommit || a.Layout.HideGit {
+		t.Fatal("list-local shortcut did not override the global command")
+	}
+	a.Layout.HideCommit = false
+	tt.Frame()
+	if err := tt.Click("Amend last commit"); err != nil {
+		t.Fatal(err)
+	}
+	if a.shortcutScope != application.KeymapToolWindow {
+		t.Fatalf("tool window scope = %q", a.shortcutScope)
+	}
+	dark = a.Layout.Dark
+	tt.Key(native.Ctrl|native.Alt, native.KeyG)
+	if a.Layout.Dark == dark || a.Layout.HideGit {
+		t.Fatal("tool-window shortcut did not override the global command")
+	}
+}
+
+func TestChordDoesNotInterceptTextInput(t *testing.T) {
+	layout := application.DefaultLayout()
+	layout.Keymap = &application.KeymapSettings{Bindings: map[string]string{
+		string(toggleGit): "Ctrl+Alt+J Ctrl+Alt+C",
+	}}
+	a := New(application.New(), layout)
+	tt := native.NewTester(a.View, 1440, 900)
+	if err := tt.Click("Commit message"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(native.Ctrl|native.Alt, native.KeyJ)
+	tt.TypeKey(native.Ctrl, native.KeyC, "c")
+	if a.Layout.HideGit || a.chord.first.Key != "" {
+		t.Fatal("text input triggered a workspace chord")
+	}
+	if !strings.Contains(a.Model.Active().Message, "c") {
+		t.Fatal("text input was intercepted")
+	}
+}
+
+func TestEffectiveChordHintsInMenusAndEditor(t *testing.T) {
+	layout := application.DefaultLayout()
+	pushChord := "Ctrl+Alt+J Ctrl+Alt+C"
+	fileChord := "Ctrl+Alt+U Ctrl+Alt+I"
+	layout.Keymap = &application.KeymapSettings{Bindings: map[string]string{
+		string(push):     pushChord,
+		string(goToFile): fileChord,
+	}}
+	a := New(application.New(), layout)
+	a.repo().tabs = nil
+	a.repo().preview = nil
+	tt := native.NewTester(a.View, 1440, 900)
+	tt.Frame()
+	if !tt.HasText(fileChord) {
+		t.Fatal("editor hint did not use the effective chord")
+	}
+	if err := tt.Click("Main menu"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Git menu"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText(pushChord) {
+		t.Fatal("menu hint did not use the effective chord")
+	}
+	tt.CloseMenu()
+}
+
+func TestKeymapChordScopeScreenshots(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		t.Run(map[bool]string{false: "light", true: "dark"}[dark], func(t *testing.T) {
+			layout := application.DefaultLayout()
+			layout.Dark = dark
+			a := New(application.New(), layout)
+			tt := native.NewTester(a.View, 1440, 900)
+			for _, label := range []string{"Settings", "Settings Shortcuts", "Shortcut scope"} {
+				if err := tt.Click(label); err != nil {
+					t.Fatal(err)
+				}
+			}
+			tt.Key(0, native.KeyDown)
+			tt.Key(0, native.KeyDown)
+			tt.Key(0, native.KeyEnter)
+			chord := "Ctrl+Alt+J Ctrl+Alt+C"
+			if a.settings.keymapScope != application.KeymapList {
+				t.Fatalf("keyboard scope selection = %q, want list", a.settings.keymapScope)
+			}
+			if err := tt.Click("Shortcut binding"); err != nil {
+				t.Fatal(err)
+			}
+			tt.Key(native.Ctrl, native.KeyA)
+			tt.Type(chord)
+			if err := tt.Click("Assign Shortcut"); err != nil {
+				t.Fatal(err)
+			}
+			if !tt.HasText(chord) {
+				t.Fatal("assigned chord is not visible in the scoped settings")
+			}
+			exportSessionScreenshot(t, tt, "keymap-chord-scope-"+map[bool]string{false: "light", true: "dark"}[dark])
+			for _, label := range []string{"Apply", "Cancel"} {
+				if err := tt.Click(label); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := a.Layout.Keymap.LocalBindings[application.KeymapList][string(toggleGit)]; got != chord {
+				t.Fatalf("scoped chord setting = %q", got)
+			}
+		})
 	}
 }

@@ -3,10 +3,47 @@ package ui
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"vela/internal/application"
 )
+
+func (a *Workspace) confirmEmptyChangelists(c *ui.Context) {
+	confirmation := a.emptyChangelists
+	if confirmation.repository != a.Model.Index {
+		return
+	}
+	open := true
+	result := ui.AlertDialog(c, &open, "Remove empty changelists?",
+		"Commit left these changelists empty: "+strings.Join(confirmation.names, ", ")+".",
+		"Keep Empty Changelists", "Remove Empty Changelists")
+	if !open && result != 1 {
+		a.emptyChangelists = nil
+		return
+	}
+	if result == 1 {
+		a.removeEmptyChangelists(confirmation.repository, confirmation.ids)
+		a.emptyChangelists = nil
+	}
+}
+
+func (a *Workspace) removeEmptyChangelists(repository int, ids []string) {
+	if repository < 0 || repository >= len(a.Model.Sessions) || repository >= len(a.repos) {
+		return
+	}
+	if err := a.Model.Sessions[repository].Changelists.RemoveEmpty(ids); err != nil {
+		a.record("Could not remove empty changelists · " + err.Error())
+		return
+	}
+	view := &a.repos[repository]
+	if slices.Contains(ids, view.changelistFilter) {
+		view.changelistFilter = ""
+		view.workingChosen.Clear()
+		view.workingIndex = -1
+		a.Model.Sessions[repository].Working = ""
+	}
+}
 
 const (
 	setActiveChangelist commandID = "changes.set-active-changelist"
